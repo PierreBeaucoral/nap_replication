@@ -1,0 +1,30 @@
+\begin{table}[H]
+\centering
+\caption{Minimum detectable differences for the heterogeneity and falsification contrasts}
+\label{tab:het_mde}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:21:18 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{llccccc}
+  \toprule
+Split & Contrast & Estimated difference & SE & MDE (80\% power) & $|$Diff$| \geq$ MDE & Inference \\ 
+  \midrule
+LDC status & LDC $-$ Non-LDC & -0.0979 & 0.2799 & 0.7840 & No & Independent subsamples \\ 
+  Governance (WGI GE, median split) & Low governance $-$ High governance & 0.0037 & 0.2724 & 0.7631 & No & Independent subsamples \\ 
+  Income group & Low income $-$ Upper middle income & -0.0356 & 0.4099 & 1.1483 & No & Independent subsamples \\ 
+  Income group & Lower middle income $-$ Upper middle income & 0.0930 & 0.4455 & 1.2480 & No & Independent subsamples \\ 
+  Donor type (H3) & DAC bilateral $-$ multilateral & -0.2419 & 0.3206 & 0.8982 & No & Aligned influence functions \\ 
+  Donor type (H3) & DAC bilateral $-$ other donors & 0.2967 & 0.1631 & 0.4570 & No & Aligned influence functions \\ 
+  Donor type (H3) & Multilateral $-$ other donors & 0.5386 & 0.3092 & 0.8662 & No & Aligned influence functions \\ 
+  Falsification & Adaptation $-$ mitigation commitments & 0.1161 & 0.1381 & 0.3870 & No & Aligned influence functions \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: MDE $= (z_{0.975}+z_{0.80}) \times se = 2.8016 \times se$, for the contrasts of Table~\ref{tab:het_difftests} (not re-estimated). ``No'' means the null is uninformative about smaller differences, not equality. Last column: independence (disjoint subsamples) or aligned unit-level IFs (same recipient-years). Outcome: log(adaptation commitments); donor-type rows use the donor-group commitments.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central; WGI; World Bank income classification.
+\end{minipage}
+\end{table}

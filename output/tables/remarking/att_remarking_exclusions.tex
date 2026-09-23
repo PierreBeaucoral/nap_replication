@@ -1,0 +1,31 @@
+\begin{table}[H]
+\centering
+\caption{Re-estimating the headline effect excluding NAP-support, readiness, and climate-fund activity}
+\label{tab:remarking_exclusions}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:23:33 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lcccccc}
+  \toprule
+  & Headline (all marked) & Excl. title-flagged & Excl. purpose-flagged & Excl. fund-flagged & Excl. all three & Multilateral cell, excl. fund-flagged \\ 
+  \midrule
+ATT & 0.2928** & 0.2882** & 0.3132** & 0.3710*** & 0.3612** & 0.3037* \\ 
+  SE & (0.1241) & (0.1226) & (0.1447) & (0.1436) & (0.1617) & (0.1585) \\ 
+  $t$-statistic & 2.360 & 2.351 & 2.165 & 2.583 & 2.234 & 1.916 \\ 
+  Mean (pre-treat., USD M) & 101.06 & 100.86 & 94.68 & 98.09 & 92.53 & 7.31 \\ 
+  Observations & 2,030 & 2,030 & 2,030 & 2,030 & 2,030 & 2,030 \\ 
+  Countries & 127 & 127 & 127 & 127 & 127 & 127 \\ 
+  Pre-trend $\chi^2$ & 1.993 & 2.013 & 1.473 & 2.870 & 2.679 & 8.459 \\ 
+  Pre-trend $p$ & 0.737 & 0.733 & 0.831 & 0.580 & 0.613 & 0.076 \\ 
+  \texttt{did} pre-test $p$ & 0.000 & 0.000 & 0.000 & 0.000 & 0.000 & 0.000 \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: CS\,(2021) DR, same specification as Table~\ref{tab:remarking_margins}. SE: multiplier-bootstrap (999 reps, seed 1242; \texttt{did} 2.5.0; CRS Apr.\ 2026). Title/purpose/fund-flag definitions: see notes to Table~\ref{tab:remarking_flag_shares_by_year}. ``Multilateral cell, excl.\ fund-flagged'' recomputes log\_commits\_multi dropping fund-flagged activities. Flag coverage: Tables~\ref{tab:remarking_flag_shares_by_year}--\ref{tab:remarking_flag_shares_by_group}. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Source: OECD CRS activity-level microdata (Rio adaptation marker 1 or 2); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

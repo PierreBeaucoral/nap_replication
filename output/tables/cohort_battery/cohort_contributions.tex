@@ -1,0 +1,31 @@
+\begin{table}[H]
+\centering
+\caption{Cohorts contributing to each event time in the headline event study}
+\label{tab:cohort_contributions}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:21:23 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{llll}
+  \toprule
+Event time $e$ & Contributing cohorts & Cohorts & Treated recipients \\ 
+  \midrule
+-5 & 2021, 2022, 2023, 2024 & 4 & 40 \\ 
+  -4 & 2021, 2022, 2023, 2024 & 4 & 40 \\ 
+  -3 & 2021, 2022, 2023, 2024 & 4 & 40 \\ 
+  -2 & 2021, 2022, 2023, 2024 & 4 & 40 \\ 
+  -1 & --- & 0 & 0 \\ 
+  0 & 2021, 2022, 2023, 2024 & 4 & 40 \\ 
+  1 & 2021, 2022, 2023 & 3 & 32 \\ 
+  2 & 2021, 2022 & 2 & 21 \\ 
+  3 & 2021 & 1 & 11 \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: Composition of the dynamic aggregation used by Figure~\ref{fig:did_combined_es} and the HonestDiD analysis. A cohort contributes to event time $e$ when its $ATT(g, g+e)$ cell is estimable in the stored headline fit (non-missing, $se > 0$); $e = -1$ is the base period and contributes none. Counts are treated recipients of the contributing cohorts.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

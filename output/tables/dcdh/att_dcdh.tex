@@ -1,0 +1,31 @@
+\begin{table}[H]
+\centering
+\caption{Robustness: de Chaisemartin and D'Haultfoeuille (2024) estimator}
+\label{tab:dcdh}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:21:11 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lcccc}
+  \toprule
+  & Estimate & SE & 95\% CI & N \\ 
+  \midrule
+Av. total effect & 0.299 & (0.122) & [0.061, 0.537] & 508 \\ 
+  Effect $+1$ & 0.390 & (0.139) & [0.118, 0.663] & 444 \\ 
+  Effect $+2$ & 0.228 & (0.158) & [-0.082, 0.537] & 320 \\ 
+  Effect $+3$ & 0.095 & (0.178) & [-0.253, 0.443] & 203 \\ 
+  Effect $+4$ & 0.562 & (0.265) & [0.042, 1.081] &  98 \\ 
+  Placebo $-1$ & 0.125 & (0.158) & [-0.185, 0.434] & 444 \\ 
+  Placebo $-2$ & 0.141 & (0.189) & [-0.229, 0.511] & 320 \\ 
+  Placebo $-3$ & 0.381 & (0.215) & [-0.040, 0.801] & 203 \\ 
+  \midrule Joint placebo test ($3$ placebos) & --- & --- & $p$ = 0.367 & --- \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: de Chaisemartin--D'Haultfoeuille (2024) estimator, current-treatment dummy; never- and not-yet-treated controls; same controls as the CS main specification. Last row: package's own joint test that all 3 placebo estimates are zero (statistic in Estimate, $p$-value in the CI column), accounting for the covariance across placebo horizons; $p$-value taken from field \texttt{p\_jointplacebo} of \texttt{did\_multiplegt\_dyn}'s results object (v2.3.3), which returns no accompanying statistic (Estimate column blank).\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

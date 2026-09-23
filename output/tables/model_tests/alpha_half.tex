@@ -1,0 +1,47 @@
+\begin{table}[H]
+\centering
+\caption{Recipient adaptation share and the sign of the envelope response (test of the $\mathrm{sign}(\alpha_i-1/2)$ condition)}
+\label{tab:alpha_half}
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lc}
+\toprule
+Quantity & Value \\
+\midrule
+Mean $s_i$ (2009--2012 mean, $N=145$) & 0.0309 \\
+Median $s_i$ & 0.0210 \\
+$p_{90}$ $s_i$ & 0.0647 \\
+$p_{99}$ $s_i$ & 0.1848 \\
+Max $s_i$ & 0.2800 \\
+$N$ countries with $s_i \geq 0.5$ & 0 \\
+\midrule
+Mean $s_i$ at $g-1$ (adopters, $N=56$) & 0.0783 \\
+Median $s_i$ at $g-1$ & 0.0551 \\
+Max $s_i$ at $g-1$ & 0.4108 \\
+$N$ adopters with $s_i(g-1) \geq 0.5$ & 0 \\
+\midrule
+\multicolumn{2}{l}{\textit{ATT: log(Total commitments) --- main spec}} \\
+ATT & 0.0971 \\
+SE & (0.0654) \\
+$t$-statistic & 1.484 \\
+One-sided $p$ ($H_1$: ATT $>0$) & 0.069 \\
+Pre-trend $\chi^2$ & 10.286 \\
+Pre-trend $p$ & 0.036 \\
+\midrule
+\multicolumn{2}{l}{\textit{ATT: log(Non-adaptation commitments) --- main spec (crowd-out check)}} \\
+ATT & 0.0665 \\
+SE & (0.0656) \\
+$t$-statistic & 1.015 \\
+Two-sided $p$ & 0.310 \\
+Pre-trend $\chi^2$ & 9.534 \\
+Pre-trend $p$ & 0.049 \\
+\midrule
+Observations / Countries & 2,030 / 127 \\
+\bottomrule
+\end{tabular}
+}
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: $s_i = $ \texttt{commitments}/\texttt{commitments\_all}, proxy for $\alpha_i$ via $s_i^*=q_i/(1+q_i)$ (Lemma~\ref{lem:monotone_s}); $\alpha_i \geq 0.5 \iff s_i^* \geq 0.5$. Pre-treatment $s_i$ is far below 0.5 for every recipient (max 0.411), so under gross substitutes the model predicts ATT $\leq 0$ (sign chain: see text, Lemma~\ref{lem:envelope_elast}). One-sided test: $H_0$: ATT $\leq 0$ vs.\ $H_1$: ATT $>0$. CS\,(2021) DR, never-treated controls, headline specification; SE: multiplier-bootstrap (999 reps, seed 1242; \texttt{did} 2.5.0; CRS Apr.\ 2026) for the ATT, analytical fit for the pre-trend Wald. Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-5 \leq e \leq -2$; 4 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular. \texttt{did} pre-test $p$: \texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

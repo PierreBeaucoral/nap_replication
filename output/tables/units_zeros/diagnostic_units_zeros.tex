@@ -1,0 +1,28 @@
+\begin{table}[H]
+\centering
+\caption{Sensitivity of the headline ATT to outcome units and the treatment of zeros}
+\label{tab:units_zeros}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:14:36 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lccccccc}
+  \toprule
+Specification & ATT & SE & $t$ & Pre-trend $\chi^2$ & Pre-trend $p$ & \texttt{did} pre-test $p$ & N \\ 
+  \midrule
+log1p (USD millions) & 0.2928** & (0.1241) & 2.360 & 1.993 & 0.737 & 0.000 & 2,030 \\ 
+  log1p (raw USD) & 0.2752 & (0.1732) & 1.589 & 2.731 & 0.604 & 0.000 & 2,030 \\ 
+  asinh (USD millions) & 0.2944** & (0.1201) & 2.452 & 2.435 & 0.656 & 0.000 & 2,030 \\ 
+  asinh (raw USD) & 0.2746 & (0.1784) & 1.539 & 2.670 & 0.615 & 0.000 & 2,030 \\ 
+  Pure log, zeros dropped & 0.3298** & (0.1394) & 2.366 & 3.519 & 0.475 & 0.000 & 1,799 \\ 
+  PPML, levels (Poisson) & 0.3704*** & (0.1246) & 2.974 & --- & --- & --- & 2,030 \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: Outcome: adaptation commitments. Specs 1--4: CS\,(2021) DR, boot SE (999 reps, seed 1242); 5: OR, boot SE, positive subsample. Row 1: headline fit, not re-estimated. Row 6: Sun--Abraham (2021) PPML, levels, country+year FE, clustered SE; retains zeros; no comparable pre-trend statistic. Never-treated controls; WGI GE + log population. Commitments in USD millions (raw USD $= \times 10^6$). Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-5 \leq e \leq -2$; 4 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular. \texttt{did} pre-test $p$: \texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year (54 restrictions, 127 recipients): aggregate $p = 0.737$, \texttt{did} $p = 0.000$. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

@@ -1,0 +1,38 @@
+\begin{table}[H]
+\centering
+\caption{Extensive margin: effect of NAP adoption on the probability of receiving any adaptation-marked commitment}
+\label{tab:extensive_margin}
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lcc}
+\toprule
+ & ATT & SE \\
+\midrule
+\multicolumn{3}{l}{\textit{Panel A: pooled}} \\
+Simple ATT & -0.0009 & (0.0089) \\
+$t$-statistic & -0.099 & \\
+Pre-treatment mean of $1\{Y>0\}$ (treated) & 0.8933 & \\
+\midrule
+\multicolumn{3}{l}{\textit{Panel B: dynamic (event time)}} \\
+\quad $e = -5$ & 0.0228 & (0.0347) \\
+\quad $e = -4$ & 0.0221 & (0.0357) \\
+\quad $e = -3$ & 0.0015 & (0.0079) \\
+\quad $e = -2$ & -0.0013 & (0.0039) \\
+\quad $e = 0$ & -0.0003 & (0.0050) \\
+\quad $e = 1$ & -0.0008 & (0.0081) \\
+\quad $e = 2$ & 0.0001 & (0.0135) \\
+\quad $e = 3$ & -0.0052 & (0.0197) \\
+\midrule
+Observations & 2,030 & \\
+Countries & 127 & \\
+Pre-trend $\chi^2$ & 1.347 & \\
+Pre-trend $p$ & 0.853 & \\
+\texttt{did} pre-test $p$ & 0.000 & \\
+\bottomrule
+\end{tabular}
+}
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: Outcome: $1\{$adaptation commitments $>0\}$. CS\,(2021) DR; WGI GE + log population; headline specification; boot SE (999 reps, seed 1242). Panel B: dynamic aggregation, $e \in [-5, 3]$ ($e=-1$ omitted, base period). Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-5 \leq e \leq -2$; 4 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular. \texttt{did} pre-test $p$: \texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year (54 restrictions, 127 recipients): aggregate $p = 0.853$, \texttt{did} $p = 0.000$. Outcome $=1$ for any positive marked amount, however small. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

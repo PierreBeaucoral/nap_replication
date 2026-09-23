@@ -1,0 +1,25 @@
+\begin{table}[H]
+\centering
+\caption{NAP effect on log adaptation commitments with EM-DAT hazard-realisation controls}
+\label{tab:hazard_controls}
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{llccccccc}
+\toprule
+Specification & Hazard set & ATT & SE & $N$ & $N_{treated}$ & $\Delta$ vs.\ reference & SE($\Delta$) & $p(\Delta)$ \\
+\midrule
+Headline (full main panel) & -- & 0.2928** & (0.1241) & 2,030 & 40 & -- & (--) & -- \\
+Baseline, hazard sample (no hazard control) & -- & 0.3121 & (0.2195) & 1,925 & 40 & -0.0193 & (0.2521) & 0.939 \\
+(a) Affected, $g-1$ & Climate-related & 0.2615 & (0.2261) & 1,925 & 40 & 0.0506 & (0.0711) & 0.476 \\
+(a) Damage, $g-1$ & Climate-related & 0.3869 & (0.4481) & 1,182 & 19 & -0.0747 & (0.4990) & 0.881 \\
+(b) Residualised outcome & Climate-related & 0.3131 & (0.2182) & 1,925 & 40 & -0.0010 & (0.0108) & 0.925 \\
+(c) 3-yr moving avg., affected & Climate-related & 0.1331 & (0.2335) & 1,569 & 40 & 0.1790 & (0.3204) & 0.576 \\
+Variant: affected, $g-1$ & All natural & 0.2157 & (0.2016) & 1,922 & 40 & 0.0964 & (0.2980) & 0.746 \\
+\bottomrule
+\end{tabular}
+}
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: CS\,(2021) DR, never-treated controls, WGI GE + log population, cohorts $\geq 5$, multiplier-bootstrap SE (999 reps, seed 1242), \texttt{did} 2.5.0. Row 1: headline fit ($\Delta$ reference). Row 2: hazard sample (missing EM-DAT lag dropped). Hazard set CLIMATE-RELATED unless noted (last row ALL-NATURAL). (a) adds the lagged hazard measure to \texttt{xformla}; (b) residualises the outcome on it via never-treated FE, re-estimates on the residual; (c) uses a 3-yr moving average. $N_{treated}$: recipients in cohorts with an estimable post-treatment cell. $p(\Delta)$: independence-approximation upper bound.\par
+Source: OECD CRS (April 2026, DATA\_AVAILABILITY.md); UNFCCC NAP Central; World Bank WGI/WDI; EM-DAT v2026-09-11 (CRED/UCLouvain public custom request, downloaded 2026-09-15), EM-DAT, CRED / UCLouvain, Brussels, Belgium -- www.emdat.be.
+\end{minipage}
+\end{table}

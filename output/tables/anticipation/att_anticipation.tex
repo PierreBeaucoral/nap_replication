@@ -1,0 +1,41 @@
+\begin{table}[H]
+\centering
+\caption{Anticipation: pooled and dynamic ATTs allowing donors to respond before submission}
+\label{tab:att_anticipation}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:21:23 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{llllllllll}
+  \toprule
+Specification & ATT & SE & $t$ & Pre-trend $p$ & $N$ & Recipients & Treated & ATT, $e \geq 0$ & Pre-trend leads \\ 
+  \midrule
+Anticipation = 0 (baseline, headline specification) & 0.2928** & (0.1241) & 2.360 & 0.737 & 2,030 & 127 & 40 & 0.2998** (0.1374) & $-5 \leq e \leq -2$ (4) \\ 
+  Anticipation = 1 year & 0.1937 & (0.1670) & 1.160 & 0.913 & 2,030 & 127 & 40 & 0.1606 (0.1717) & $-6 \leq e \leq -3$ (4) \\ 
+  Anticipation = 2 years & 0.0733 & (0.1785) & 0.410 & 0.888 & 2,030 & 127 & 40 & -0.0167 (0.1697) & $-7 \leq e \leq -4$ (4) \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{6pt}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:21:23 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{llllllll}
+  \toprule
+Specification & $e = -3$ & $e = -2$ & $e = -1$ & $e = 0$ & $e = 1$ & $e = 2$ & $e = 3$ \\ 
+  \midrule
+Anticipation = 0 years & 0.077 (0.183) & 0.112 (0.152) & --- & 0.426 (0.153) & 0.226 (0.178) & 0.016 (0.165) & 0.531 (0.266) \\ 
+  Anticipation = 1 year & -0.032 (0.160) & --- & -0.112$^{\dagger}$ (0.158) & 0.305 (0.197) & 0.201 (0.186) & 0.001 (0.236) & 0.135 (0.282) \\ 
+  Anticipation = 2 years & --- & 0.032$^{\dagger}$ (0.161) & -0.077$^{\dagger}$ (0.182) & 0.347 (0.194) & 0.082 (0.183) & -0.343 (0.214) & -0.153 (0.285) \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: Upper panel: pooled ATT and the $e \geq 0$ average (see main text). Lower panel: dynamic ATTs by event time, SE in parentheses. \texttt{anticipation} $= k$ shifts the base period to $g-k-1$. $^{\dagger}$ marks event times treated as TREATED under that row's $k$, not leads. Anticipation-0 row is read from the stored headline fit. Unless noted: headline specification (CS\,(2021) DR, never-treated controls, WGI GE + log population, cohorts $\geq$ 5), multiplier-bootstrap SE (999 reps, seed 1242). Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-5 \leq e \leq -2$; 4 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular (analytical twin fit).\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

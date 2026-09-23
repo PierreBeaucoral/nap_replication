@@ -1,0 +1,26 @@
+\begin{table}[H]
+\centering
+\caption{Goodman-Bacon decomposition of the two-way fixed-effects estimator}
+\label{tab:bacon}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:21:12 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lcc}
+  \toprule
+Comparison & Weight & Avg. estimate \\ 
+  \midrule
+Treated vs Untreated & 0.8974 & 0.1861 \\ 
+  Earlier vs Later Treated & 0.0911 & 0.0022 \\ 
+  Later vs Earlier Treated & 0.0115 & 0.4105 \\ 
+  Overall (TWFE) & 1.0000 & 0.1719 \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: Decomposition of the static two-way fixed-effects estimate of \texttt{post\_nap} (an indicator for years after NAP adoption) on log adaptation commitments into $2\times2$ comparison groups (Goodman-Bacon 2021); the weights sum to one. The ``Later vs Earlier Treated'' group is the problematic forbidden comparison that uses already-treated units as controls. Estimated on the balanced-panel subsample.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

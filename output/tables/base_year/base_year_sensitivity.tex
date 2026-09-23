@@ -1,0 +1,39 @@
+\begin{table}[H]
+\centering
+\caption{Sensitivity of the headline estimate to the 2021 cohort's base year}
+\label{tab:base_year_sensitivity}
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lcccccc}
+\toprule
+Specification & ATT & SE & $t$ & $N$ treated & Wald $p$ (leads $\geq -5$) & Wald $p$ (full window) \\
+\midrule
+\multicolumn{7}{l}{\textit{Panel A: log(Adaptation commitments)}} \\
+\midrule
+Main spec & 0.2928** & (0.1241) & 2.360 & 40 & 0.737 & 0.001 \\
+Drop 2021 cohort & 0.1480 & (0.1654) & 0.895 & 29 & 0.227 & 0.000 \\
+Drop 2022 cohort & 0.4327*** & (0.1498) & 2.888 & 30 & 0.477 & 0.010 \\
+Drop 2023 cohort & 0.3433*** & (0.1223) & 2.807 & 29 & 0.707 & 0.000 \\
+Drop 2024 cohort & 0.2492** & (0.1256) & 1.984 & 32 & 0.480 & 0.000 \\
+Anticipation = 1 (base $g-2$) & 0.1937 & (0.1670) & 1.160 & 40 & 0.715 & 0.010 \\
+Anticipation = 2 (base $g-3$) & 0.0733 & (0.1785) & 0.410 & 40 & 0.735 & 0.002 \\
+Drop calendar year 2020 & 0.1249 & (0.1245) & 1.004 & 40 & 0.642 & 0.013 \\
+\\[0.5em]
+\multicolumn{7}{l}{\textit{Panel B: Adaptation share (\% of global)}} \\
+\midrule
+Main spec & 0.3185** & (0.1430) & 2.228 & 40 & 0.582 & 0.125 \\
+Drop 2021 cohort & 0.3408 & (0.2385) & 1.429 & 29 & 0.294 & 0.101 \\
+Drop 2022 cohort & 0.4112** & (0.2033) & 2.023 & 30 & 0.488 & 0.239 \\
+Drop 2023 cohort & 0.2635*** & (0.1002) & 2.630 & 29 & 0.992 & 0.575 \\
+Drop 2024 cohort & 0.2813* & (0.1516) & 1.855 & 32 & 0.425 & 0.421 \\
+Anticipation = 1 (base $g-2$) & 0.2159* & (0.1245) & 1.735 & 40 & 0.608 & 0.151 \\
+Anticipation = 2 (base $g-3$) & 0.2899** & (0.1290) & 2.248 & 40 & 0.596 & 0.112 \\
+Drop calendar year 2020 & 0.2255 & (0.1434) & 1.572 & 40 & 0.679 & 0.151 \\
+\bottomrule
+\end{tabular}
+}
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: CS(2021) DR, never-treated controls, WGI GE + log population, cohorts $\geq 5$. ATT/SE from the multiplier-bootstrap fit (999 reps, seed 1242; \texttt{did} 2.5.0); Wald $p$ from the analytical fit's dynamic aggregation (as in the pre-trend table). ``Anticipation $=k$'' resets the base period to $g-1-k$ ($k=1$ moves the 2021 cohort's base year to 2019). * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

@@ -1,0 +1,27 @@
+\begin{table}[H]
+\centering
+\caption{Alternative treatment dates: submission month and the $e \geq 1$ aggregation}
+\label{tab:att_eventdate}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:21:24 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lllllllll}
+  \toprule
+Specification & ATT & SE & $t$ & Pre-trend $p$ & $N$ & Recipients & Treated & Contributing cohorts \\ 
+  \midrule
+Baseline: treatment dated by submission YEAR (headline specification) & 0.2928** & (0.1241) & 2.360 & 0.737 & 2,030 & 127 & 40 / 40 & 2021, 2022, 2023, 2024 \\ 
+  (a1) Re-dated, main treated set, $\geq 5$ rule re-applied & 0.1011 & (0.1351) & 0.748 & 0.600 & 1,966 & 123 & 36 / 36 & 2022, 2023, 2024 \\ 
+  (a2) Re-dated, main treated set, all re-dated cohorts retained & 0.1011 & (0.1394) & 0.725 & 0.600 & 1,982 & 124 & 36 / 37 & 2022, 2023, 2024 \\ 
+  (b) Re-dated, full adopter sample, $\geq 5$ rule re-applied & -0.2759 & (0.2548) & -1.083 & 0.384 & 2,046 & 128 & 41 / 41 & 2020, 2022, 2023, 2024 \\ 
+  Dynamic average over $e \geq 1$ (impact year excluded) & 0.2578 & (0.1611) & 1.600 & 0.737 & 2,030 & 127 & 40 / 40 & 2021, 2022, 2023, 2024 \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: Outcome: log(adaptation commitments). Rows re-date treatment by posting month (post-June $\to$ next year); see Table~\ref{tab:cohort_redating}. (a1)/(a2): main treated set, $\geq 5$ rule re-applied vs.\ retained. (b): full sample re-dated. Contributing/Treated: estimable-cell counts. Last row: headline fit over $e \geq 1$. Unless noted: headline specification (CS\,(2021) DR, never-treated controls, WGI GE + log population, cohorts $\geq$ 5), multiplier-bootstrap SE (999 reps, seed 1242). Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-5 \leq e \leq -2$; 4 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular (analytical twin fit).\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

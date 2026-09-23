@@ -1,0 +1,36 @@
+\begin{table}[H]
+\centering
+\caption{Heterogeneity by World Bank income group: ATT on log(adaptation commitments)}
+\label{tab:het_income_wide}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:21:18 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lccc}
+  \toprule
+  & Low income & Lower middle income & Upper middle income \\ 
+  \midrule
+ATT & 0.2701 & 0.3987 & 0.3058 \\ 
+  SE & (0.1700) & (0.2436) & (0.3730) \\ 
+  $t$-statistic & 1.589 & 1.637 & 0.820 \\ 
+  Mean (pre-treat., USD M) & 122.7 & 111.7 & 65.9 \\ 
+  Implied effect (USD M, exp(ATT)$-$1 $\times$ pre-treat.\ mean) & --- & --- & --- \\ 
+  Observations & 512 & 750 & 656 \\ 
+  Countries & 32 & 47 & 41 \\ 
+  N treated countries & 15 & 14 & 10 \\ 
+  Pre-trend $\chi^2$ & 1.110 & 0.506 & 4.784 \\ 
+  Pre-trend $p$ & 0.893 & 0.973 & 0.310 \\ 
+  \texttt{did} pre-test $p$ & --- & --- & --- \\ 
+  \midrule Estimator & CS (2021) regression adjustment & CS (2021) regression adjustment & CS (2021) regression adjustment \\ 
+  Control group & Not-yet-treated & Not-yet-treated & Not-yet-treated \\ 
+  Bootstrap SE & Yes (multiplier, 999 reps) & Yes (multiplier, 999 reps) & Yes (multiplier, 999 reps) \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: Heterogeneity by World Bank income group: ATT on log(adaptation commitments). CS (2021), not-yet-treated controls. Income groups: World Bank FY2013 (July 2012) analytical classification, OGHIST.xlsx, held fixed. ATT/SE: multiplier-bootstrap (999 reps, seed 1242); pre-trend: separate analytical fit. Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-5 \leq e \leq -2$; 4 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular. \texttt{did} pre-test $p$: \texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year (54 restrictions, 32--47 recipients) not computed: pre-treatment covariance singular (54 cells; rank Low income 30, Lower middle income 45, Upper middle income 39). Implied effects: back-transform on pre-treatment mean; suppressed if insig.\ at 5\%. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

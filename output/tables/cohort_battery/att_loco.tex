@@ -1,0 +1,27 @@
+\begin{table}[H]
+\centering
+\caption{Leave-one-cohort-out: headline ATT dropping each adoption cohort in turn}
+\label{tab:att_loco}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:21:21 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{llllllll}
+  \toprule
+Specification & ATT & SE & $t$ & Pre-trend $p$ & $N$ & Recipients & Treated \\ 
+  \midrule
+Baseline: all 4 cohorts (headline specification) & 0.2928** & (0.1241) & 2.360 & 0.737 & 2,030 & 127 & 40 \\ 
+  Drop cohort 2021 (11 recipients) & 0.1480 & (0.1654) & 0.895 & 0.227 & 1,856 & 116 & 29 \\ 
+  Drop cohort 2022 (10 recipients) & 0.4327*** & (0.1498) & 2.888 & 0.477 & 1,870 & 117 & 30 \\ 
+  Drop cohort 2023 (11 recipients) & 0.3433*** & (0.1223) & 2.807 & 0.707 & 1,854 & 116 & 29 \\ 
+  Drop cohort 2024 (8 recipients) & 0.2492** & (0.1256) & 1.984 & 0.480 & 1,902 & 119 & 32 \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: Outcome: log(adaptation commitments). Each row removes all recipients of one adoption cohort; controls untouched. Baseline row read from the stored headline fit (Table~\ref{tab:combined_wide_main}). Unless noted: headline specification (CS\,(2021) DR, never-treated controls, WGI GE + log population, cohorts $\geq$ 5), multiplier-bootstrap SE (999 reps, seed 1242). Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-5 \leq e \leq -2$; 4 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular (analytical twin fit).\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

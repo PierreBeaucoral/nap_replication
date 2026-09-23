@@ -1,0 +1,35 @@
+\begin{table}[H]
+\centering
+\caption{Effect of NAP adoption on climate finance: simple ATT across outcomes (not-yet-treated controls, multiplier-bootstrap SE)}
+\label{tab:combined_wide_notyettreated}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:14:34 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lccccc}
+  \toprule
+  & log(Adaptation commitments) & Adaptation share (\% of global) & log(Total commitments) & log(Non-adaptation commitments) & log(Adaptation disbursements) \\ 
+  \midrule
+ATT & 0.2794** & 0.3209** & 0.0869 & 0.0569 & 0.1327 \\ 
+  SE & (0.1245) & (0.1449) & (0.0640) & (0.0629) & (0.1075) \\ 
+  $t$-statistic & 2.244 & 2.215 & 1.359 & 0.905 & 1.234 \\ 
+  Mean (pre-treat., USD M) & 101.1 & 0.77 pp & 1850.7 & 1749.6 & 68.7 \\ 
+  Implied effect (USD M, exp(ATT)$-$1 $\times$ pre-treat.\ mean) & 32.6 & --- & --- & --- & --- \\ 
+  Observations & 2,030 & 2,030 & 2,030 & 2,030 & 2,030 \\ 
+  Countries & 127 & 127 & 127 & 127 & 127 \\ 
+  Pre-trend $\chi^2$ & 2.297 & 2.891 & 9.063 & 8.338 & 5.023 \\ 
+  Pre-trend $p$ & 0.681 & 0.576 & 0.060 & 0.080 & 0.285 \\ 
+  \texttt{did} pre-test $p$ & 0.000 & 0.000 & 0.000 & 0.000 & 0.000 \\ 
+  \midrule Estimator & CS (2021) & CS (2021) & CS (2021) & CS (2021) & CS (2021) \\ 
+  Control group & Not-yet-treated & Not-yet-treated & Not-yet-treated & Not-yet-treated & Not-yet-treated \\ 
+  Bootstrap SE & Yes (multiplier, 999 reps) & Yes (multiplier, 999 reps) & Yes (multiplier, 999 reps) & Yes (multiplier, 999 reps) & Yes (multiplier, 999 reps) \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: CS\,(2021) DR; WGI gov.\ effectiveness + log population; not-yet-treated control group; multiplier-bootstrap SE (999 reps, seed 1242; \texttt{did} 2.5.0; CRS Apr.\ 2026). Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-5 \leq e \leq -2$; 4 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular. \texttt{did} pre-test $p$: \texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year (54 restrictions, 127 recipients): aggregate rejects (5\%) in no column; \texttt{did} rejects in every column. Implied effects: naive back-transforms on the pre-treatment mean, not additive; suppressed if insignificant at 5\%. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

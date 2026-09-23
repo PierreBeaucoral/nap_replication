@@ -1,0 +1,25 @@
+\begin{table}[H]
+\centering
+\caption{Pre-trend tests: aggregated leads, full window, and did's built-in test}
+\label{tab:pretrend_tests_full}
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lccccccccc}
+\toprule
+ & \multicolumn{3}{c}{Leads $\geq -5$} & \multicolumn{3}{c}{Full window} & \multicolumn{3}{c}{did built-in pre-test} \\
+\cmidrule(lr){2-4} \cmidrule(lr){5-7} \cmidrule(lr){8-10}
+Outcome & $\chi^2$ & df & $p$ & $\chi^2$ & df & $p$ & $W$ & df & $p$ \\
+\midrule
+log(Adaptation commitments) & 1.993 & 4 & 0.737 & 36.912 & 14 & 0.001 & 506.099 & 50 & 0.000 \\
+Adaptation share (\% of global) & 2.855 & 4 & 0.582 & 20.158 & 14 & 0.125 & 307.898 & 50 & 0.000 \\
+log(Total commitments) & 10.286 & 4 & 0.036 & 31.204 & 14 & 0.005 & 336.807 & 50 & 0.000 \\
+log(Non-adaptation commitments) & 9.534 & 4 & 0.049 & 26.592 & 14 & 0.022 & 283.696 & 50 & 0.000 \\
+log(Adaptation disbursements) & 4.877 & 4 & 0.300 & 21.569 & 14 & 0.088 & 733.353 & 50 & 0.000 \\
+\bottomrule
+\end{tabular}
+}
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: Headline specification (CS 2021, DR, never-treated controls, WGI GE + log population, universal base period, cohorts $\geq 5$); analytical (non-bootstrap) fit throughout. ``Leads $\geq -5$'' and ``full window'' report the joint Wald $\chi^2$/$p$ test on the aggregated pre-treatment event-time coefficients, using the influence-function covariance of the dynamic aggregation from the analytical fit (Table~\ref{tab:combined_wide_main}'s window vs.\ every available pre-period respectively; restriction counts are the df columns); a generalized inverse is used if a block is singular. \texttt{did} pre-test $p$: \texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year, pooling each cohort's pre-treatment $ATT(g,t)$ cells against its own base year and excluding the zero-variance base-year cell.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

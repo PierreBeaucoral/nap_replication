@@ -1,0 +1,35 @@
+\begin{table}[H]
+\centering
+\caption{Effect of NAP adoption on climate finance: simple ATT across outcomes (all cohorts retained, asymptotic SE)}
+\label{tab:combined_wide_robust}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:14:32 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lccccc}
+  \toprule
+  & log(Adaptation commitments) & Adaptation share (\% of global) & log(Total commitments) & log(Non-adaptation commitments) & log(Adaptation disbursements) \\ 
+  \midrule
+ATT & 0.1163 & 0.1721* & -0.0032 & -0.0167 & -0.0567 \\ 
+  SE & (0.1279) & (0.0913) & (0.2120) & (0.2097) & (0.0961) \\ 
+  $t$-statistic & 0.910 & 1.886 & -0.015 & -0.080 & -0.590 \\ 
+  Mean (pre-treat., USD M) & 95.6 & 0.79 pp & 1812.5 & 1716.9 & 65.9 \\ 
+  Implied effect (USD M, exp(ATT)$-$1 $\times$ pre-treat.\ mean) & --- & --- & --- & --- & --- \\ 
+  Observations & 2,318 & 2,318 & 2,318 & 2,318 & 2,318 \\ 
+  Countries & 145 & 145 & 145 & 145 & 145 \\ 
+  Pre-trend $\chi^2$ & 5.081 & 2.053 & 2.245 & 2.078 & 5.948 \\ 
+  Pre-trend $p$ & 0.279 & 0.726 & 0.691 & 0.721 & 0.203 \\ 
+  \texttt{did} pre-test $p$ & --- & --- & --- & --- & --- \\ 
+  \midrule Estimator & CS (2021) & CS (2021) & CS (2021) & CS (2021) & CS (2021) \\ 
+  Control group & Never-treated & Never-treated & Never-treated & Never-treated & Never-treated \\ 
+  Bootstrap SE & No (analytical SE) & No (analytical SE) & No (analytical SE) & No (analytical SE) & No (analytical SE) \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: CS\,(2021) OR; WGI gov.\ effectiveness + log population; never-treated control group; analytical (IF) SE; \texttt{did} 2.5.0; CRS Apr.\ 2026. Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-5 \leq e \leq -2$; 4 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular. \texttt{did} pre-test $p$: \texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year (105 restrictions, 145 recipients) not computed: pre-treatment covariance singular (105 cells, numerical rank 90). Implied effects: naive back-transforms on the pre-treatment mean, not additive; suppressed if insignificant at 5\%. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

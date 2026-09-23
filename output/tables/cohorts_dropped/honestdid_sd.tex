@@ -1,0 +1,27 @@
+\begin{table}[H]
+\centering
+\caption{HonestDiD robust 95\% CI under the smoothness restriction $\Delta^{SD}(M)$}
+\label{tab:honestdid_sd}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:21:09 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{llllll}
+  \toprule
+$M$ & log(Adapt.) & Share (pp) & log(Total) & log(Non-adapt.) & log(Disb.) \\ 
+  \midrule
+$M = 0.00$ & [-0.029, 0.703] & [-0.057, 0.571] & [-0.272, 0.122] & [-0.292, 0.096] & [-0.129, 0.367] \\ 
+  $M = 0.01$ & [-0.052, 0.727] & [-0.098, 0.588] & [-0.334, 0.108] & [-0.348, 0.089] & [-0.160, 0.390] \\ 
+  $M = 0.02$ & [-0.068, 0.814] & [-0.164, 0.639] & [-0.388, 0.137] & [-0.422, 0.102] & [-0.217, 0.436] \\ 
+  $M = 0.05$ & [-0.182, 1.037] & [-0.356, 0.786] & [-0.508, 0.286] & [-0.548, 0.244] & [-0.361, 0.577] \\ 
+  Breakdown $M$ & $0.000$ & $0.000$ & $0.000$ & $0.000$ & $0.000$ \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: Smoothness restriction $\Delta^{SD}(M)$ of \citet{rambachan_roth_2023}: the differential trend's slope changes by at most $M$ between periods; $M = 0$ still allows an exactly linear violation (not the conventional CI). Confidence sets: FLCI method, 5\% level. Estimator, stored fit, covariance and target weights as Table~\ref{tab:honestdid}; four pre-treatment leads ($e = -5,\dots,-2$). ``Breakdown $M$'' = smallest grid value at which the robust CI contains zero. $M$ is in outcome units per period, not comparable across the log and share columns.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

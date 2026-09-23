@@ -1,0 +1,27 @@
+\begin{table}[H]
+\centering
+\caption{NAP submission timing and lagged emergency-response aid}
+\label{tab:nap_timing_humanitarian_aid}
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lccccc}
+\toprule
+ & Two-lag (LPM) & Lag-1 only (LPM) & Lag-2 only (LPM) & Two-lag, drop 2020--22 (LPM) & Two-lag (cloglog) \\
+\midrule
+Lag-1 & 0.0072 & 0.0036 & -- & 0.0026 & -- \\
+ & (0.0046) & (0.0045) &  & (0.0040) & (--) \\
+Lag-2 & -0.0120*** & -- & -0.0098** & -0.0080* & -- \\
+ & (0.0043) &  & (0.0041) & (0.0046) & (--) \\
+\midrule
+Joint Wald $p$ (both lags) & 0.015 & -- & -- & 0.214 & -- \\
+$N$ & 1,994 & 1,994 & 1,994 & 1,622 & -- \\
+NAP-submission events & 58 & 58 & 58 & 58 & 58 \\
+Country + year FE & \multicolumn{5}{c}{Yes} \\
+\bottomrule
+\end{tabular}
+}
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: LPM (cols 1--4), cloglog hazard (col 5); DV $= 1$ in the NAP-submission year, else 0; post-adoption years excluded, never-treated countries censored. Country + year FE, SE clustered by recipient. Regressor: one- and two-year-lagged log(1+CRS emergency-response aid), purpose codes 72010/72040/72050/73010/74020; a humanitarian-aid-flow proxy, not a hazard measure. Col.\ 4 drops 2020--2022. Joint Wald tests both lags jointly nonzero. Base rate 2.9\% per country-year (58 events, 145 countries). 144 rows lacking a valid two-year lag dropped. Full cohort set (not $\geq 5$). \texttt{did} 2.5.0; col.\ 5 not estimable (fixed-effects singleton), shown as ``--''.\par
+Source: OECD CRS (April 2026, DATA\_AVAILABILITY.md); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

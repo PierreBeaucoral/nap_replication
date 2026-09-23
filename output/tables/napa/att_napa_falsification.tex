@@ -1,0 +1,19 @@
+\begin{table}[H]
+\centering
+\caption{NAPA submission as a low-power falsification check}
+\label{tab:napa_falsification}
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lccccc}
+\toprule
+Falsification treatment & ATT & SE & 95\% CI & $p$-value & $N$ cohorts \\
+\midrule
+NAPA submission ($G_i$ = napa\_year) & 0.4612 & (0.3012) & [-0.1292, 1.0516] & 0.126 & 3 \\
+\bottomrule
+\end{tabular}
+}
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: CS\,(2021), OR (analytical SE) fallback, never-treated controls; low-power falsification, not a placebo (see main text for the point estimate, cohort composition, and MDE). $G_i$ = NAPA-submission year; panel restricted to 2009--2014, verified free of real-NAP treatment; out-of-window NAPAs are pseudo-never-treated. NAPA list: UNFCCC `NAPAs received' page (51 NAPAs, latest South Sudan, Feb.\ 2017), transcribed by the authors 2026-09-15, cross-checked 51/51 against the archived page PDF; data/raw/napa/napa\_list\_unfccc.csv. \texttt{did} 2.5.0.\par
+Source: UNFCCC `NAPAs received' list (transcribed by the authors, verified -- see Notes); OECD CRS (April 2026, DATA\_AVAILABILITY.md).
+\end{minipage}
+\end{table}

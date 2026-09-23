@@ -1,0 +1,26 @@
+\begin{table}[H]
+\centering
+\caption{Listwise-deletion losses in the cohort, anticipation and conditioning specifications}
+\label{tab:listwise_losses_13}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:21:25 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lllllll}
+  \toprule
+Specification & Recipient-years (raw) & Dropped: outcome & Dropped: controls & Recipient-years (used) & Recipients (raw) & Recipients (used) \\ 
+  \midrule
+Main specification & 2,030 & 0 & 0 & 2,030 & 127 & 127 \\ 
+  $+$ baseline outcome level & 2,030 & 0 & 0 & 2,030 & 127 & 127 \\ 
+  Common support (trimmed) & 2,030 & 0 & 0 & 2,030 & 127 & 127 \\ 
+  All cohorts retained & 2,318 & 0 & 0 & 2,318 & 145 & 145 \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: Recipient-years and recipients lost to a missing outcome or a missing control in each specification. \texttt{did::att\_gt} drops those cells silently, so the ``used'' columns are the samples on which the reported ATTs are computed. The baseline-outcome specification loses additional observations for recipients with no usable 2009--2012 window.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central; WGI; World Bank WDI.
+\end{minipage}
+\end{table}

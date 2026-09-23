@@ -1,0 +1,35 @@
+\begin{table}[H]
+\centering
+\caption{Effect of NAP adoption on climate finance: simple ATT across outcomes (heterogeneity by donor type; cohorts $\geq 5$ units, DR estimator)}
+\label{tab:het_donor_wide}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:21:16 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lccc}
+  \toprule
+  & DAC bilateral & Multilateral & Other donors \\ 
+  \midrule
+ATT & 0.3078** & 0.5498** & 0.0111 \\ 
+  SE & (0.1491) & (0.2530) & (0.1199) \\ 
+  $t$-statistic & 2.065 & 2.173 & 0.093 \\ 
+  Mean (pre-treat., USD M) & 90.5 & 10.3 & 0.3 \\ 
+  Implied effect (USD M, exp(ATT)$-$1 $\times$ pre-treat.\ mean) & 32.6 & 7.5 & --- \\ 
+  Observations & 2,030 & 2,030 & 2,030 \\ 
+  Countries & 127 & 127 & 127 \\ 
+  Pre-trend $\chi^2$ & 1.914 & 5.188 & 6.988 \\ 
+  Pre-trend $p$ & 0.752 & 0.269 & 0.137 \\ 
+  \texttt{did} pre-test $p$ & 0.000 & 0.000 & 0.000 \\ 
+  \midrule Estimator & CS (2021) & CS (2021) & CS (2021) \\ 
+  Control group & Never-treated & Never-treated & Never-treated \\ 
+  Bootstrap SE & Yes (multiplier, 999 reps) & Yes (multiplier, 999 reps) & Yes (multiplier, 999 reps) \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: CS\,(2021) DR, never-treated controls; multiplier-bootstrap SE (999 reps), seed 1242. Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-5 \leq e \leq -2$; 4 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular. \texttt{did} pre-test $p$: \texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year (54 restrictions, 127 recipients): aggregate rejects (5\%) in no column; \texttt{did} rejects in every column. Implied effects: back-transform on pre-treatment mean; suppressed if insig.\ at 5\%. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

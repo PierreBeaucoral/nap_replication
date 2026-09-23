@@ -1,0 +1,22 @@
+\begin{table}[H]
+\centering
+\caption{NAP effect by prior NAPA submission status}
+\label{tab:prior_napa_split}
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lccccc}
+\toprule
+Group & ATT & SE & $p$-value & $N$ units & $N_{treated}$ \\
+\midrule
+Prior NAPA & 0.1350 & (0.1189) & 0.256 & 106 & 19 \\
+No prior NAPA & 0.4771** & (0.2108) & 0.024 & 108 & 21 \\
+\midrule
+Difference (Prior $-$ No prior) & -0.3422 & (0.2420) & 0.157 & & \\
+\bottomrule
+\end{tabular}
+}
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: CS\,(2021) DR, never-treated controls, WGI GE + log population, cohorts $\geq 5$, analytical (IF) SE, \texttt{did} 2.5.0. ``Prior NAPA'': submitted a NAPA to the UNFCCC before the NAP; NAPA list: UNFCCC `NAPAs received' page (51 NAPAs, latest South Sudan, Feb.\ 2017), transcribed by the authors 2026-09-15, cross-checked 51/51 against the archived page PDF; data/raw/napa/napa\_list\_unfccc.csv. Difference row: independence approximation (the subgroups share all never-treated controls, so aligned-IF is not meaningful; conservative, $p$ is an upper bound). Sample: 2009--2024.\par
+Source: OECD CRS (April 2026, DATA\_AVAILABILITY.md); UNFCCC NAP Central; UNFCCC `NAPAs received' list (transcribed by the authors, verified -- see Notes).
+\end{minipage}
+\end{table}

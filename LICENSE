@@ -1,0 +1,57 @@
+This replication package is released under two licences.
+
+1. Code: MIT License
+   Applies to run_all.R and every file in code/.
+
+2. Data compiled by the authors: Creative Commons Attribution 4.0
+   International (CC BY 4.0), https://creativecommons.org/licenses/by/4.0/
+   Applies to data/raw/shared_nap_data/nap_information.csv,
+   data/raw/napa/napa_list_unfccc.csv, the processed panels in
+   data/processed/, and the tables and figures in output/.
+   Excluded from this grant: the FERDI PVCCI values (data/raw/PVCCI.csv and
+   the pvcci-derived columns of the processed panels), which remain under
+   FERDI's terms.
+
+Third-party inputs keep their own terms (see README.md, "Data availability"):
+OECD CRS (OECD terms, reuse with attribution), World Bank WDI/WGI and OGHIST
+(CC BY 4.0), FERDI PVCCI (research use with attribution), UNFCCC public
+information. The processed panels are derived from OECD CRS data and must be
+cited as such. EM-DAT data are not included and may not be redistributed.
+
+-------------------------------------------------------------------------------
+MIT License
+
+Copyright (c) 2026 Pierre Beaucoral, Michaël Goujon and Sébastien Marchand
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+-------------------------------------------------------------------------------
+Creative Commons Attribution 4.0 International (CC BY 4.0)
+
+Copyright (c) 2026 Pierre Beaucoral, Michaël Goujon and Sébastien Marchand
+
+You are free to share (copy and redistribute the material in any medium or
+format) and adapt (remix, transform, and build upon the material) for any
+purpose, even commercially, under the following terms: Attribution — you must
+give appropriate credit, provide a link to the licence, and indicate if
+changes were made. No additional restrictions — you may not apply legal terms
+or technological measures that legally restrict others from doing anything the
+licence permits.
+
+Full legal code: https://creativecommons.org/licenses/by/4.0/legalcode

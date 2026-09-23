@@ -1,0 +1,25 @@
+\begin{table}[H]
+\centering
+\caption{HonestDiD breakdown value $\bar{M}$ by the number of pre-treatment periods used}
+\label{tab:honestdid_prepriods}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:21:09 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{llllll}
+  \toprule
+Pre-treatment window & log(Adapt.) & Share (pp) & log(Total) & log(Non-adapt.) & log(Disb.) \\ 
+  \midrule
+4 pre-treatment periods ($e \in [-5, -2]$) & $0.25$ & $0.25$ & $0.00$ & $0.00$ & $0.00$ \\ 
+  6 pre-treatment periods ($e \in [-7, -2]$) & $0.25$ & $0.25$ & --- & --- & --- \\ 
+  8 pre-treatment periods ($e \in [-9, -2]$) & $0.25$ & $0.25$ & --- & --- & --- \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: Each cell: breakdown value $\bar{M}$, disciplined by 4, 6 or 8 pre-treatment event times. Estimator/covariance as Table~\ref{tab:honestdid}; only \texttt{min\_e} changes ($-5$, $-7$, $-9$). 4-lead row: stored aggregation behind Table~\ref{tab:combined_wide_main}. 6-/8-lead rows: re-aggregated from the same stored fit (seed 1242), two primary outcomes only; point estimates unchanged, SEs a fresh bootstrap draw. Three aggregate outcomes already break at $\bar{M} = 0$ with four leads, so those cells are left blank.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

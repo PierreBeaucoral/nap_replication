@@ -1,0 +1,31 @@
+\begin{table}[H]
+\centering
+\caption{Sensitivity of the exclusion ATTs to the title/purpose flag regex fix}
+\label{tab:remarking_exclusions_regex_comparison}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:23:33 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lcccccc}
+  \toprule
+  & Excl. title-flagged [old regex] & Excl. title-flagged [new regex] & Excl. purpose-flagged [old codes] & Excl. purpose-flagged [new codes] & Excl. all three [old] & Excl. all three [new] \\ 
+  \midrule
+ATT & 0.2864** & 0.2882** & 0.3377** & 0.3132** & 0.3868** & 0.3612** \\ 
+  SE & (0.1225) & (0.1226) & (0.1426) & (0.1447) & (0.1538) & (0.1617) \\ 
+  $t$-statistic & 2.337 & 2.351 & 2.368 & 2.165 & 2.515 & 2.234 \\ 
+  Mean (pre-treat., USD M) & 100.55 & 100.86 & 91.58 & 94.68 & 89.16 & 92.53 \\ 
+  Observations & 2,030 & 2,030 & 2,030 & 2,030 & 2,030 & 2,030 \\ 
+  Countries & 127 & 127 & 127 & 127 & 127 & 127 \\ 
+  Pre-trend $\chi^2$ & 2.024 & 2.013 & 1.556 & 1.473 & 2.775 & 2.679 \\ 
+  Pre-trend $p$ & 0.731 & 0.733 & 0.817 & 0.831 & 0.596 & 0.613 \\ 
+  \texttt{did} pre-test $p$ & 0.000 & 0.000 & 0.000 & 0.000 & 0.000 & 0.000 \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: CS\,(2021) DR, same specification/sample as Table~\ref{tab:remarking_exclusions}. SE: multiplier-bootstrap (999 reps, seed 1242; \texttt{did} 2.5.0; CRS Apr.\ 2026). ``[old]'' = pre-fix broad flags: title matches ``national adaptation plan''/``NAP''/``readiness''/``NAP-''/``adaptation plan''/``planning'' (bare); purpose $\in\{41010,15110,43010\}$. ``[new]'' reproduces Table~\ref{tab:remarking_exclusions}. Fund-flagged cells omitted (unchanged by this fix). * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Source: OECD CRS activity-level microdata (Rio adaptation marker 1 or 2); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

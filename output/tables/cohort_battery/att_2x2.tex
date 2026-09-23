@@ -1,0 +1,26 @@
+\begin{table}[H]
+\centering
+\caption{Cohort rule and estimator, varied one at a time}
+\label{tab:att_2x2}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:21:23 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{llllllll}
+  \toprule
+Specification & ATT & SE & $t$ & Pre-trend $p$ & $N$ & Recipients & Treated \\ 
+  \midrule
+Cohorts $\geq 5$, est\_method = dr & 0.2928** & (0.1241) & 2.360 & 0.737 & 2,030 & 127 & 40 \\ 
+  Cohorts $\geq 5$, est\_method = reg & 0.2947** & (0.1197) & 2.461 & 0.699 & 2,030 & 127 & 40 \\ 
+  All cohorts retained, est\_method = dr & 0.2649** & (0.1294) & 2.047 & 0.275 & 2,318 & 145 & 58 \\ 
+  All cohorts retained, est\_method = reg & 0.1163 & (0.1314) & 0.885 & 0.279 & 2,318 & 145 & 58 \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: Outcome: log(adaptation commitments). This grid varies the cohort rule and estimator separately, with common multiplier-bootstrap inference in all four cells. ``All cohorts retained'' adds the 2015--2020 cohorts of 2--4 recipients each.  Unless noted: headline specification (CS\,(2021) DR, never-treated controls, WGI GE + log population, cohorts $\geq$ 5), multiplier-bootstrap SE (999 reps, seed 1242). Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-5 \leq e \leq -2$; 4 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular (analytical twin fit).\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

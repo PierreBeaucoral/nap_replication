@@ -1,0 +1,37 @@
+\begin{table}[H]
+\centering
+\caption{Retained-cohorts robustness: headline vs.\ principal-marker-only outcome}
+\label{tab:principal_retained}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:21:31 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lcc}
+  \toprule
+  & Headline (retained cohorts) & Principal only (retained cohorts) \\ 
+  \midrule
+ATT & 0.1163 & -0.0961 \\ 
+  SE & (0.1279) & (0.2237) \\ 
+  $t$-statistic & 0.910 & -0.430 \\ 
+  Mean (pre-treat.) & 95.6 & 24.6 \\ 
+  Implied effect (USD M, exp(ATT)$-$1 $\times$ pre-treat.\ mean) & --- & --- \\ 
+  Observations & 2,318 & 2,318 \\ 
+  Countries & 145 & 145 \\ 
+  N treated countries & 58 & 58 \\ 
+  Share of zero/undefined cells (\%) & 11.2 & 18.7 \\ 
+  Pre-trend $\chi^2$ & 5.081 & 2.197 \\ 
+  Pre-trend $p$ & 0.279 & 0.700 \\ 
+  \texttt{did} pre-test $p$ & --- & --- \\ 
+  \midrule Estimator & CS (2021), outcome regression & CS (2021), outcome regression \\ 
+  Control group & Never-treated & Never-treated \\ 
+  Bootstrap SE & No (analytical SE) & No (analytical SE) \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: CS\,(2021) OR, never-treated controls; analytical (IF) SE; all cohorts retained (2015--2024, incl.\ $<$ 5 treated units). Pre-trend statistics: see notes to Table~\ref{tab:principal_wide}. \texttt{did}'s pre-test not computed: pre-treatment covariance singular with all cohorts retained. Implied effects: back-transform on pre-treatment mean; suppressed if insig.\ at 5\%. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

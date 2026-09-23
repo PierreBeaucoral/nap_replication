@@ -1,0 +1,35 @@
+\begin{table}[H]
+\centering
+\caption{Falsification test: effect of NAP adoption on log(mitigation commitments)}
+\label{tab:mitigation}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:21:10 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lc}
+  \toprule
+  & log(Mitigation commitments) \\ 
+  \midrule
+ATT & 0.1768 \\ 
+  SE & (0.1603) \\ 
+  $t$-statistic & 1.103 \\ 
+  Mean (pre-treat., USD M) & 134.3 \\ 
+  Implied effect (USD M, exp(ATT)$-$1 $\times$ pre-treat.\ mean) & --- \\ 
+  Observations & 2,030 \\ 
+  Countries & 127 \\ 
+  Pre-trend $\chi^2$ & 5.582 \\ 
+  Pre-trend $p$ & 0.233 \\ 
+  \texttt{did} pre-test $p$ & 0.000 \\ 
+  \midrule Estimator & CS (2021) \\ 
+  Control group & Never-treated \\ 
+  Bootstrap SE & Yes (multiplier, 999 reps) \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: CS\,(2021) DR; multiplier-bootstrap SE (999 reps, seed 1242; \texttt{did} 2.5.0; CRS Apr.\ 2026); never-treated control; cohorts $\geq 5$ units; controls: WGI gov.\ effectiveness + log population. Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-5 \leq e \leq -2$; 4 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular. \texttt{did} pre-test $p$: \texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year (54 restrictions, 127 recipients): aggregate $p = 0.233$, \texttt{did} $p = 0.000$. Implied effect: naive back-transform on the pre-treatment mean; suppressed if insignificant at 5\%. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

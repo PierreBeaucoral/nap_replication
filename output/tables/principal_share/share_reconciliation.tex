@@ -1,0 +1,42 @@
+\begin{table}[H]
+\centering
+\caption{Global adaptation-finance share: observed vs.\ ATT-implied counterfactual reconciliation}
+\label{tab:share_reconciliation}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:21:32 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lcccc}
+  \toprule
+Year & Ever-adopters (58), observed (\%) & Main-sample adopters (40), observed (\%) & Main-sample adopters (40), counterfactual (\%) & ATT-implied reallocation, same year (pp) \\ 
+  \midrule
+2009 & 18.75 & 11.81 & 11.81 & 0.00 \\ 
+  2010 & 50.31 & 29.37 & 29.37 & 0.00 \\ 
+  2011 & 49.27 & 32.37 & 32.37 & 0.00 \\ 
+  2012 & 49.64 & 33.11 & 33.11 & 0.00 \\ 
+  2013 & 50.65 & 36.35 & 36.35 & 0.00 \\ 
+  2014 & 44.10 & 31.69 & 31.69 & 0.00 \\ 
+  2015 & 48.64 & 28.95 & 28.95 & 0.00 \\ 
+  2016 & 53.79 & 34.42 & 34.42 & 0.00 \\ 
+  2017 & 42.88 & 26.20 & 26.20 & 0.00 \\ 
+  2018 & 47.91 & 33.16 & 33.16 & 0.00 \\ 
+  2019 & 46.80 & 31.15 & 31.15 & 0.00 \\ 
+  2020 & 45.76 & 30.96 & 30.96 & 0.00 \\ 
+  2021 & 49.88 & 34.33 & 27.88 & 6.45 \\ 
+  2022 & 50.03 & 37.38 & 29.65 & 7.73 \\ 
+  2023 & 55.14 & 40.24 & 31.21 & 9.03 \\ 
+  2024 & 50.16 & 36.04 & 26.12 & 9.92 \\ 
+\midrule
+\multicolumn{4}{l}{Total reallocation, correct (treated-cell-weighted): 33.12 pp over 104 treated cells} \\
+\multicolumn{4}{l}{Total reallocation, naive ($n_{\text{adopters}} \times$ simple ATT): 40 $\times$ 0.3185 = 12.74 pp} \\
+\multicolumn{4}{l}{Observed change in the 40-adopter share, 2009$\to$2024: 24.23 pp; implied counterfactual change: 14.31 pp} \\
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: share\_adapt denominator: see main-text footnote (145-country listwise-deletion panel). Counterfactual column subtracts the main-spec event-time ATT, cell by cell, from each treated country's observed share. Naive $n\times$ATT is not the correct arithmetic; treated-cell-weighted total sums att\_adj over all 104 treated country-years (cumulative, not bounded by 100 pp). Last column: single-year sum of ATT-adjusted cells.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

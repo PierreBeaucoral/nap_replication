@@ -1,0 +1,36 @@
+\begin{table}[H]
+\centering
+\caption{Envelope response by recipient size (test of Lemma 2)}
+\label{tab:lemma2_size}
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lcccccc}
+\toprule
+ & Small $\omega_i$ & Large $\omega_i$ & Difference & SE & $z$ & $p$ \\
+\midrule
+\multicolumn{7}{l}{\textit{Panel A: ATT by recipient-size half (median split of $\omega_i$)}} \\
+\midrule
+log(Total commitments) & 0.1262 & 0.0519 & 0.0743 & 0.1397 & 0.532 & 0.595 \\
+ & (0.1186) & (0.0739) & & & & \\
+log(Adaptation commitments) & 0.2337 & 0.1434 & 0.0903 & 0.2639 & 0.342 & 0.732 \\
+ & (0.2099) & (0.1600) & & & & \\
+Adaptation share (\% of global) & 0.1017 & 0.2559 & -0.1542 & 0.2259 & -0.683 & 0.495 \\
+ & (0.0754) & (0.2129) & & & & \\
+\midrule
+\quad $N$ treated (small/large) & 12 & 28 & & & & \\
+\quad $N$ countries (small/large) & 64 & 63 & & & & \\
+\\[0.5em]
+\multicolumn{7}{l}{\textit{Panel B: ATT on log(Total commitments) by tercile of $\omega_i$}} \\
+\midrule
+ & T1 (smallest) & T2 (middle) & T3 (largest) & & & \\
+ATT & 0.1984 & 0.0865 & 0.0318 & & & \\
+ & (0.1856) & (0.0876) & (0.1047) & & & \\
+\quad $N$ treated & 7 & 17 & 16 & & & \\
+\bottomrule
+\end{tabular}
+}
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: $\omega_i$ = pre-treatment (2009--2012) mean share of commitments\_all across the 145-country panel; median/terciles from the 127-country estimation sample (see text for the Lemma~\ref{lem:envelope_elast} prediction). Panel~A: CS\,(2021) OR, analytical (IF) SE, not-yet-treated controls, cohorts $<$ 5 dropped; difference row SE $=\sqrt{se_a^2+se_b^2}$ (disjoint, country-clustered), $z$ vs.\ standard normal, two-sided $p$. Panel~B: same specification by tercile, log(total commitments) only.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

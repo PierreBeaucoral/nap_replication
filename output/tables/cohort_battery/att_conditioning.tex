@@ -1,0 +1,25 @@
+\begin{table}[H]
+\centering
+\caption{Conditioning set and common support}
+\label{tab:att_conditioning}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:21:25 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{llllllll}
+  \toprule
+Specification & ATT & SE & $t$ & Pre-trend $p$ & $N$ & Recipients & Treated \\ 
+  \midrule
+Baseline: WGI GE + log population (headline specification) & 0.2928** & (0.1241) & 2.360 & 0.737 & 2,030 & 127 & 40 \\ 
+  $+$ baseline (2009--2012) mean log adaptation commitments & 0.2768** & (0.1170) & 2.366 & 0.733 & 2,030 & 127 & 40 \\ 
+  Common support: propensity $\in [0.05, 0.95]$ & 0.2928** & (0.1241) & 2.360 & 0.737 & 2,030 & 127 & 40 \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: Outcome: log(adaptation commitments). Row 2 adds mean 2009--2012 log commitments to the control set. Row 3 imposes common support via a separate ever-adoption logit; propensity outside $[0.05, 0.95]$ dropped, cohort rule re-applied. Baseline row from the stored headline fit. Unless noted: headline specification (CS\,(2021) DR, never-treated controls, WGI GE + log population, cohorts $\geq$ 5), multiplier-bootstrap SE (999 reps, seed 1242). Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-5 \leq e \leq -2$; 4 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular (analytical twin fit).\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

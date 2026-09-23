@@ -1,0 +1,26 @@
+\begin{table}[H]
+\centering
+\caption{Placebo ladder: fictitious adoption dates 2 to 5 years before the actual one}
+\label{tab:att_placebo_ladder}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:21:24 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{llllllll}
+  \toprule
+Placebo & ATT & SE & $t$ & MDE (80\% power) & Cohorts & Treated & $N$ \\ 
+  \midrule
+$-2$ years (published, Table~\ref{tab:placebo}) & -0.0214 & (0.1488) & -0.144 & 0.4168 & 2019, 2020, 2021, 2022 & 40 & 1,926 \\ 
+  $-3$ years & -0.1645 & (0.1903) & -0.865 & 0.5330 & 2018, 2019, 2020, 2021 & 40 & 1,926 \\ 
+  $-4$ years & 0.0659 & (0.1799) & 0.367 & 0.5039 & 2017, 2018, 2019, 2020 & 40 & 1,926 \\ 
+  $-5$ years & -0.0914 & (0.1453) & -0.629 & 0.4071 & 2016, 2017, 2018, 2019 & 40 & 1,926 \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: Outcome: log(adaptation commitments). Treated recipients contribute pre-adoption years only; cohort shifted back by the stated years; sample restricted to shifted cohorts from 2015; cohorts under 5 treated dropped. Estimator: CS\,(2021) OR (DR unstable on these panels), never-treated controls, multiplier-bootstrap SE (999 reps, seed 1242). MDE $= 2.8016 \times$ SE (80\% power, two-sided 5\%). The $-2$ row is read from the stored fit behind Table~\ref{tab:placebo}.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

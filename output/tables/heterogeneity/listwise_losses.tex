@@ -1,0 +1,33 @@
+\begin{table}[H]
+\centering
+\caption{Listwise-deletion losses by specification}
+\label{tab:listwise_losses}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:21:18 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lcccccc}
+  \toprule
+Specification & Recipient-years (raw) & Dropped: outcome & Dropped: controls & Recipient-years (used) & Recipients (raw) & Recipients (used) \\ 
+  \midrule
+Main panel: log(adaptation commitments) & 2,030 & 0 & 0 & 2,030 & 127 & 127 \\ 
+  Donor type: DAC bilateral & 2,030 & 0 & 0 & 2,030 & 127 & 127 \\ 
+  Donor type: multilateral & 2,030 & 0 & 0 & 2,030 & 127 & 127 \\ 
+  Donor type: other donors & 2,030 & 0 & 0 & 2,030 & 127 & 127 \\ 
+  LDC split: LDC & 702 & 0 & 0 & 702 & 44 & 44 \\ 
+  LDC split: Non-LDC & 1,328 & 0 & 0 & 1,328 & 83 & 83 \\ 
+  Governance split: High governance & 1,008 & 0 & 0 & 1,008 & 63 & 63 \\ 
+  Governance split: Low governance & 1,022 & 0 & 0 & 1,022 & 64 & 64 \\ 
+  Income split: Low income & 512 & 0 & 0 & 512 & 32 & 32 \\ 
+  Income split: Lower middle income & 750 & 0 & 0 & 750 & 47 & 47 \\ 
+  Income split: Upper middle income & 656 & 0 & 0 & 656 & 41 & 41 \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: Recipient-years/recipients lost to listwise deletion, by specification (outcome vs.\ controls: WGI government effectiveness, log population); \texttt{did} drops these cells silently, so ``used'' is the estimation sample (see text). Panels are post cohort-$\geq 5$ restriction, and post subgroup restriction for split rows.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central; WGI; World Bank WDI.
+\end{minipage}
+\end{table}

@@ -1,0 +1,37 @@
+\begin{table}[H]
+\centering
+\caption{Effect of NAP adoption on the within-country adaptation share of reported commitments}
+\label{tab:within_share_wide}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:21:31 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lcc}
+  \toprule
+  & Within-country share (\%, level) & Within-country share (logit) \\ 
+  \midrule
+ATT & 2.6553*** & 0.2574** \\ 
+  SE & (0.8508) & (0.1227) \\ 
+  $t$-statistic & 3.121 & 2.099 \\ 
+  Mean (pre-treat.) & 6.03 pp & 6.03 pp \\ 
+  Implied effect (USD M, exp(ATT)$-$1 $\times$ pre-treat.\ mean) & --- & --- \\ 
+  Observations & 2,030 & 2,030 \\ 
+  Countries & 127 & 127 \\ 
+  N treated countries & 40 & 40 \\ 
+  Share of zero/undefined cells (\%) & 7.6 & 7.6 \\ 
+  Pre-trend $\chi^2$ & 2.945 & 5.510 \\ 
+  Pre-trend $p$ & 0.567 & 0.239 \\ 
+  \texttt{did} pre-test $p$ & 0.000 & 0.000 \\ 
+  \midrule Estimator & CS (2021), doubly-robust & CS (2021), doubly-robust \\ 
+  Control group & Never-treated & Never-treated \\ 
+  Bootstrap SE & Yes (multiplier, 999 reps) & Yes (multiplier, 999 reps) \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: CS\,(2021) DR, never-treated controls; multiplier-bootstrap SE (999 reps, seed 1242). share\_within $=100 \times$ commitments/commitments\_all; logit\_within $= \log[(\text{commitments}+0.5)/(\text{commitments\_all}-\text{commitments}+0.5)]$; both NA if commitments\_all $=0$. Mean/zero-share rows use share\_within (pp) levels. Pre-trend statistics: see Table~\ref{tab:principal_wide} notes. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Source: OECD CRS (Rio adaptation markers).
+\end{minipage}
+\end{table}

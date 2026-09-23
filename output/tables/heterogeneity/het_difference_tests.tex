@@ -1,0 +1,32 @@
+\begin{table}[H]
+\centering
+\caption{Formal tests of subgroup differences in the NAP effect (test of H4: is the effect larger where baseline capacity is weaker?)}
+\label{tab:het_difftests}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:21:18 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{llcccc}
+  \toprule
+Split & Contrast & Difference & SE & $z$ & $p$-value \\ 
+  \midrule
+LDC status & LDC $-$ Non-LDC & -0.0979 & 0.2799 & -0.350 & 0.726 \\ 
+  Governance (WGI GE, median split) & Low governance $-$ High governance & 0.0037 & 0.2724 & 0.013 & 0.989 \\ 
+  Income group & Low income $-$ Upper middle income & -0.0356 & 0.4099 & -0.087 & 0.931 \\ 
+  Income group & Lower middle income $-$ Upper middle income & 0.0930 & 0.4455 & 0.209 & 0.835 \\ 
+  Income group & Joint: all three income ATTs equal ($\chi^2 = 0.188$, 2 df) & --- & --- & --- & 0.910 \\ 
+  Donor type (H3) & DAC bilateral $-$ multilateral & -0.2419 & 0.3206 & -0.755 & 0.450 \\ 
+  Donor type (H3) & DAC bilateral $-$ other donors & 0.2967 & 0.1631 & 1.819 & 0.069 \\ 
+  Donor type (H3) & Multilateral $-$ other donors & 0.5386 & 0.3092 & 1.742 & 0.081 \\ 
+  Donor type (H3) & Joint: all three donor-type ATTs equal ($\chi^2 = 5.321$, 2 df) & --- & --- & --- & 0.070 \\ 
+  Falsification & Adaptation $-$ mitigation commitments & 0.1161 & 0.1381 & 0.840 & 0.401 \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: Each row tests equality of two subgroup ATTs from the paired heterogeneity table (not re-estimated). CS\,(2021), reg.\ adjustment on log(adaptation commitments), headline specification. Differences = low- minus high-capacity (positive: larger effect where capacity weaker). H4 rows (LDC/governance/income): SE $=\sqrt{se_a^2+se_b^2}$ on multiplier-bootstrap SEs (999 reps, seed 1242), disjoint subsamples. H3/mitigation rows: aligned analytical-IF SEs (not bootstrap), same recipient-years. $z$ vs.\ standard normal; joint stats vs.\ $\chi^2$; $p$ two-sided.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central; WGI; World Bank income classification.
+\end{minipage}
+\end{table}

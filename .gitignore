@@ -1,0 +1,9 @@
+# Files created by running the pipeline (not part of the package)
+output/fits/
+output/logs/
+data/processed_shipped/
+Rplots.pdf
+.Rhistory
+.RData
+.Rproj.user/
+.DS_Store

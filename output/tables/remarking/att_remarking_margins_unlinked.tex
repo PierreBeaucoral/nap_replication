@@ -1,0 +1,32 @@
+\begin{table}[H]
+\centering
+\caption{Margin decomposition with unlinked (singleton) activities isolated as a fourth bucket}
+\label{tab:remarking_margins_unlinked}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:23:33 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lccccc}
+  \toprule
+  & Headline (all marked) & New (linked) & Unlinked (singleton, always new) & Continuing, already marked & Re-marked (previously unmarked) \\ 
+  \midrule
+ATT & 0.2928** & 0.3119** & -0.0108 & 0.1837 & 0.1207 \\ 
+  SE & (0.1241) & (0.1340) & (0.1637) & (0.1171) & (0.1666) \\ 
+  $t$-statistic & 2.360 & 2.327 & -0.066 & 1.569 & 0.725 \\ 
+  Mean (pre-treat., USD M) & 101.06 & 86.76 & 2.70 & 7.48 & 4.12 \\ 
+  Share of pre-treat.\ marked commitments (\%) & 100.0 & 85.8 & 2.7 & 7.4 & 4.1 \\ 
+  Observations & 2,030 & 2,030 & 2,030 & 2,030 & 2,030 \\ 
+  Countries & 127 & 127 & 127 & 127 & 127 \\ 
+  Pre-trend $\chi^2$ & 1.993 & 1.412 & 13.138 & 1.259 & 4.397 \\ 
+  Pre-trend $p$ & 0.737 & 0.842 & 0.011 & 0.868 & 0.355 \\ 
+  \texttt{did} pre-test $p$ & 0.000 & 0.000 & 0.000 & 0.000 & 0.000 \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: Same sample, controls, estimator as Table~\ref{tab:remarking_margins}. Splits its ``new'' bucket into ``new (linked)'' (resolvable cross-year identifier, ProjectNumber) and ``unlinked'' (singleton, new by construction). ``Continuing''/``re-marked'' are identical to Table~\ref{tab:remarking_margins}. Singleton shares: see Appendix~\ref{app:remarking}. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Source: OECD CRS activity-level microdata (Rio adaptation marker 1 or 2); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

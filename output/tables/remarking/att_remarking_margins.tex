@@ -1,0 +1,32 @@
+\begin{table}[H]
+\centering
+\caption{Margin decomposition of adaptation-marked commitments: new vs.\ continuing vs.\ re-marked activities}
+\label{tab:remarking_margins}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:23:33 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lcccc}
+  \toprule
+  & Headline (all marked) & New activities & Continuing, already marked & Re-marked (previously unmarked) \\ 
+  \midrule
+ATT & 0.2928** & 0.3577*** & 0.1837 & 0.1207 \\ 
+  SE & (0.1241) & (0.1311) & (0.1171) & (0.1666) \\ 
+  $t$-statistic & 2.360 & 2.728 & 1.569 & 0.725 \\ 
+  Mean (pre-treat., USD M) & 101.06 & 89.46 & 7.48 & 4.12 \\ 
+  Share of pre-treat.\ marked commitments (\%) & 100.0 & 88.5 & 7.4 & 4.1 \\ 
+  Observations & 2,030 & 2,030 & 2,030 & 2,030 \\ 
+  Countries & 127 & 127 & 127 & 127 \\ 
+  Pre-trend $\chi^2$ & 1.993 & 1.282 & 1.259 & 4.397 \\ 
+  Pre-trend $p$ & 0.737 & 0.864 & 0.868 & 0.355 \\ 
+  \texttt{did} pre-test $p$ & 0.000 & 0.000 & 0.000 & 0.000 \\ 
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: CS\,(2021) DR, never-treated controls, headline specification; cohorts $<5$ treated dropped (127-country sample). SE: multiplier-bootstrap (999 reps, seed 1242; \texttt{did} 2.5.0; CRS Apr.\ 2026). Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-5 \leq e \leq -2$; 4 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular. \texttt{did} pre-test $p$: \texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year. Category definitions and singleton shares: see Section~\ref{sec:remarking} and Appendix~\ref{app:remarking}. ``New'' ATT is an upper bound on genuinely new activity. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Source: OECD CRS activity-level microdata (Rio adaptation marker 1 or 2); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

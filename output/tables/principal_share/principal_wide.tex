@@ -1,0 +1,40 @@
+\begin{table}[H]
+\centering
+\caption{Effect of NAP adoption on adaptation finance: headline vs.\ principal-marker-only outcome}
+\label{tab:principal_wide}
+% latex table generated in R 4.6.0 by xtable 1.8-8 package
+% Thu Sep 17 13:21:30 2026
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lcc}
+  \toprule
+  & Principal + significant (headline) & Principal only \\ 
+  \midrule
+ATT & 0.2928** & 0.2273 \\ 
+  SE & (0.1241) & (0.2117) \\ 
+  $t$-statistic & 2.360 & 1.074 \\ 
+  Mean (pre-treat.) & 101.1 & 23.9 \\ 
+  Implied effect (USD M, exp(ATT)$-$1 $\times$ pre-treat.\ mean) & 34.4 & --- \\ 
+  Observations & 2,030 & 2,030 \\ 
+  Countries & 127 & 127 \\ 
+  N treated countries & 40 & 40 \\ 
+  Share of zero/undefined cells (\%) & 11.4 & 19.2 \\ 
+  Pre-trend $\chi^2$ & 1.993 & 1.689 \\ 
+  Pre-trend $p$ & 0.737 & 0.793 \\ 
+  \texttt{did} pre-test $p$ & 0.000 & 0.000 \\ 
+  \midrule Estimator & CS (2021), doubly-robust & CS (2021), doubly-robust \\ 
+  Control group & Never-treated & Never-treated \\ 
+  Bootstrap SE & Yes (multiplier, 999 reps) & Yes (multiplier, 999 reps) \\ 
+\midrule
+\multicolumn{3}{l}{Difference (headline $-$ principal) = 0.0655, SE = 0.2114, $z$ = 0.310, $p$ = 0.757} \\
+\multicolumn{3}{l}{\footnotesize Difference SE method: aligned unit-level influence functions (n = 127).} \\
+   \bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: CS\,(2021) DR, never-treated controls; multiplier-bootstrap SE (999 reps, seed 1242). ``Headline'' = log1p(commitments), Rio marker $\in\{1,2\}$; ``Principal only'' = log1p(commitments\_principal), Rio marker $=2$ only. Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-5 \leq e \leq -2$; 4 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit. \texttt{did} pre-test $p$: \texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year. Implied effects: back-transform on pre-treatment mean; suppressed if insig.\ at 5\%. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}
