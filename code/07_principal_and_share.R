@@ -460,7 +460,7 @@ summarize_fit <- function(fit, did_panel_in, raw_var, is_share = FALSE,
   pt    <- compute_pretrend_wald(fit$agg_d_analytical)
   wpval <- fit$gt_main$Wpval %||% NA_real_
 
-  n_obs     <- nrow(did_panel_in)
+  n_obs     <- sum(!is.na(did_panel_in[[raw_var]]))   # cells where the outcome is defined
   n_country <- n_distinct(did_panel_in$country_id)
   n_treated <- did_panel_in %>% filter(cohort_year > 0) %>% distinct(country_id) %>% nrow()
 
@@ -998,14 +998,22 @@ message(sprintf(
   min(recon_by_year$year), max(recon_by_year$year), obs_change_b, cf_change_c))
 
 # --- tab:share_reconciliation -----------------------------------------------
+# Group sizes in the labels are counted from the panel, never typed in.
+n_ever_lab <- n_distinct(did_panel_full$recipient_name[did_panel_full$cohort_year > 0])
+n_main_lab <- n_distinct(did_panel_full$recipient_name[did_panel_full$cohort_year > 0 &
+                                                         !(did_panel_full$cohort_year %in% thin_cohorts)])
+lab_a <- sprintf("Ever-adopters (%d), observed", n_ever_lab)
+lab_b <- sprintf("Main-sample adopters (%d), observed", n_main_lab)
+lab_c <- sprintf("Main-sample adopters (%d), counterfactual", n_main_lab)
 recon_tab <- recon_by_year %>%
   transmute(
     Year = year,
-    `Ever-adopters (58), observed (\\%)`             = sprintf("%.2f", share_a_observed),
-    `Main-sample adopters (40), observed (\\%)`       = sprintf("%.2f", share_b_observed),
-    `Main-sample adopters (40), counterfactual (\\%)` = sprintf("%.2f", share_c_counterfactual),
-    `ATT-implied reallocation, same year (pp)`        = sprintf("%.2f", total_att_adj)
+    a = sprintf("%.2f", share_a_observed),
+    b = sprintf("%.2f", share_b_observed),
+    c = sprintf("%.2f", share_c_counterfactual),
+    `ATT-implied reallocation, same year (pp)` = sprintf("%.2f", total_att_adj)
   )
+names(recon_tab)[2:4] <- paste0(c(lab_a, lab_b, lab_c), " (\\%)")
 xtab_r7 <- xtable(recon_tab)
 align(xtab_r7) <- "llcccc"
 raw_lines_r7 <- capture.output(
@@ -1017,8 +1025,8 @@ footer_r7 <- c(
          reallocation_correct, n_treated_cells_r7),
   sprintf("\\multicolumn{4}{l}{Total reallocation, naive ($n_{\\text{adopters}} \\times$ simple ATT): %d $\\times$ %.4f = %.2f pp} \\\\",
          n_distinct(adopters40_cf$recipient_name), fit_share$agg_s$overall.att, reallocation_naive),
-  sprintf("\\multicolumn{4}{l}{Observed change in the 40-adopter share, %d$\\to$%d: %.2f pp; implied counterfactual change: %.2f pp} \\\\",
-         min(recon_by_year$year), max(recon_by_year$year), obs_change_b, cf_change_c)
+  sprintf("\\multicolumn{4}{l}{Observed change in the %d-adopter share, %d$\\to$%d: %.2f pp; implied counterfactual change: %.2f pp} \\\\",
+         n_main_lab, min(recon_by_year$year), max(recon_by_year$year), obs_change_b, cf_change_c)
 )
 bottom_idx_r7 <- which(grepl("^\\s*\\\\bottomrule", raw_lines_r7))[1]
 stopifnot(!is.na(bottom_idx_r7))
@@ -1046,34 +1054,18 @@ copy_to_paper(out_path_r7, "Tables")
 # (built with dplyr::bind_rows() rather than tidyr::pivot_longer() to avoid an
 # extra dependency not already loaded by this script)
 recon_long <- bind_rows(
-  recon_by_year %>% transmute(year, value = share_a_observed, series = "Ever-adopters (58), observed"),
-  recon_by_year %>% transmute(year, value = share_b_observed, series = "Main-sample adopters (40), observed"),
-  recon_by_year %>% transmute(year, value = share_c_counterfactual, series = "Main-sample adopters (40), counterfactual")
+  recon_by_year %>% transmute(year, value = share_a_observed, series = lab_a),
+  recon_by_year %>% transmute(year, value = share_b_observed, series = lab_b),
+  recon_by_year %>% transmute(year, value = share_c_counterfactual, series = lab_c)
 ) %>%
-  mutate(series = factor(series, levels = c(
-    "Ever-adopters (58), observed",
-    "Main-sample adopters (40), observed",
-    "Main-sample adopters (40), counterfactual"
-  )))
+  mutate(series = factor(series, levels = c(lab_a, lab_b, lab_c)))
 
 p_r7 <- ggplot(recon_long, aes(x = year, y = value, colour = series, linetype = series, shape = series)) +
   geom_line(linewidth = 0.9) +
   geom_point(size = 2) +
-  scale_colour_manual(values = c(
-    "Ever-adopters (58), observed"               = "#2E86C1",
-    "Main-sample adopters (40), observed"         = "#27AE60",
-    "Main-sample adopters (40), counterfactual"   = "#C0392B"
-  )) +
-  scale_linetype_manual(values = c(
-    "Ever-adopters (58), observed"               = "solid",
-    "Main-sample adopters (40), observed"         = "solid",
-    "Main-sample adopters (40), counterfactual"   = "dashed"
-  )) +
-  scale_shape_manual(values = c(
-    "Ever-adopters (58), observed"               = 16,
-    "Main-sample adopters (40), observed"         = 17,
-    "Main-sample adopters (40), counterfactual"   = 15
-  )) +
+  scale_colour_manual(values = setNames(c("#2E86C1", "#27AE60", "#C0392B"), c(lab_a, lab_b, lab_c))) +
+  scale_linetype_manual(values = setNames(c("solid", "solid", "dashed"), c(lab_a, lab_b, lab_c))) +
+  scale_shape_manual(values = setNames(c(16, 17, 15), c(lab_a, lab_b, lab_c))) +
   scale_x_continuous(breaks = min(recon_long$year):max(recon_long$year)) +
   labs(title = NULL, subtitle = NULL, caption = NULL,
       x = "Year", y = "Share of the global adaptation-commitment pool (%)",

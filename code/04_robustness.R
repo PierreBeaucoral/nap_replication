@@ -521,13 +521,10 @@ compute_pretrend_test <- function(agg_d, gt_obj = NULL, anticipation = 0) {
   if (!is.null(gt_obj)) {
     if (!is.null(gt_obj$W))     W_did     <- as.numeric(gt_obj$W)
     if (!is.null(gt_obj$Wpval)) Wpval_did <- as.numeric(gt_obj$Wpval)
-    # Restrictions behind did's own pre-test. This is did's OWN q: it takes
-    # pre <- which(group > t) and inverts the full V[pre, pre] block, without
-    # dropping cells whose standard error it has already set to NA. Using a
-    # filtered count here would put two different numbers in one sentence of
-    # the table note (54 cells inverted vs 50 with a usable SE), so the count
-    # reported is the one did actually tests.
-    df_did <- sum(gt_obj$t < gt_obj$group)
+    # Restrictions behind did's own pre-test: did 2.5.0 (att_gt) drops the
+    # pre-treatment cells whose standard error is NA (the base-period cells)
+    # before inverting V[pre, pre], so q counts only cells with a usable SE.
+    df_did <- sum(gt_obj$t < gt_obj$group & !is.na(gt_obj$se))
   }
 
   # Why did returned no statistic, derived from the fit rather than guessed.
@@ -538,7 +535,7 @@ compute_pretrend_test <- function(agg_d, gt_obj = NULL, anticipation = 0) {
   # recipient-level influence functions can span.
   wpval_reason <- NA_character_
   if (!is.null(gt_obj) && is.na(Wpval_did)) {
-    pre_idx <- which(gt_obj$group > gt_obj$t)
+    pre_idx <- which(gt_obj$group > gt_obj$t & !is.na(gt_obj$se))  # the cells did inverts
     if (is.null(gt_obj$V)) {
       wpval_reason <- paste0("did does not form the analytical variance matrix ",
                              "for this fit, so its pre-test is unavailable by ",
@@ -2365,6 +2362,12 @@ if (!file.exists(mit_panel_path)) {
         } else NULL
       }
     )
+    # Estimator labels (table note, stored spec, analytical twin) follow the
+    # fit actually returned: the DR attempt above can fall back to reg.
+    if (!is.null(gt_mit)) {
+      em_mit <- gt_mit$DIDparams$est_method
+      bs_mit <- gt_mit$DIDparams$bstrap
+    }
 
     # Analytical twin (bstrap = FALSE, otherwise identical est_method) so the
     # pre-trend test below is never bootstrap-based, matching make_wide_table()'s
@@ -2738,7 +2741,7 @@ if (is.null(res_dcdh)) {
     "de Chaisemartin--D'Haultfoeuille (2024) estimator, current-treatment dummy; ",
     "never- and not-yet-treated controls; same controls as the CS main specification. ",
     "Last row: package's own joint test that all ", n_plac, " placebo estimates are ",
-    "zero (statistic in Estimate, $p$-value in the CI column), accounting for the ",
+    "zero ($p$-value in the CI column), accounting for the ",
     "covariance across placebo horizons; $p$-value taken from field \\texttt{",
     gsub("_", "\\\\_", ifelse(is.na(nm_pjoint), "not returned", nm_pjoint)),
     "} of \\texttt{did\\_multiplegt\\_dyn}'s results object (v",
@@ -2987,4 +2990,57 @@ make_wide_table(
 )
 
 message("\n=== Section C complete ===\n")
+
+# ==============================================================================
+# SECTION D. Balanced panel
+# The estimation panel is unbalanced (South Sudan enters in 2011; recipients
+# that left the DAC List have no CRS record afterwards), so did's
+# allow_unbalanced_panel path estimates it as repeated cross-sections, with
+# covariates at their current-year values. Restricting to recipients observed
+# in every year makes did use its panel estimator, with covariates at g-1.
+# ==============================================================================
+
+message("\n=== Section D: balanced panel ===\n")
+
+n_years_panel <- n_distinct(did_panel_full$year)
+did_panel_balanced <- did_panel_full %>%
+  filter(!(cohort_year %in% thin_cohorts)) %>%
+  group_by(recipient_name) %>%
+  filter(n() == n_years_panel) %>%
+  ungroup()
+message("Recipients dropped (not observed every year): ",
+        paste(setdiff(unique(did_panel_full$recipient_name[!(did_panel_full$cohort_year %in% thin_cohorts)]),
+                      unique(did_panel_balanced$recipient_name)), collapse = ", "))
+stopifnot(nrow(did_panel_balanced) == n_distinct(did_panel_balanced$recipient_name) * n_years_panel)
+
+make_wide_table(
+  did_panel_in  = did_panel_balanced,
+  retain_thin   = FALSE,
+  outcomes      = outcomes,
+  dir_tabs      = file.path(here("output", "tables"), "balanced_panel"),
+  tex_label     = "tab:combined_wide_balanced",
+  caption_spec  = "main specification, balanced panel, covariates at $g-1$"
+)
+
+# ==============================================================================
+# SECTION E. Panel starting in 2010
+# 2009 precedes routine reporting of the adaptation marker: almost every
+# recipient records zero adaptation finance that year. It enters no
+# post-treatment ATT (each cohort is compared with its own g-1 >= 2020), only
+# pre-period cells; this block re-estimates the main table without it.
+# ==============================================================================
+
+message("\n=== Section E: panel 2010-2024 ===\n")
+
+did_panel_2010 <- did_panel_full %>%
+  filter(!(cohort_year %in% thin_cohorts), year >= 2010)
+
+make_wide_table(
+  did_panel_in  = did_panel_2010,
+  retain_thin   = FALSE,
+  outcomes      = outcomes,
+  dir_tabs      = file.path(here("output", "tables"), "panel_2010"),
+  tex_label     = "tab:combined_wide_2010",
+  caption_spec  = "main specification, panel 2010--2024"
+)
 message("\n=== 04_robustness.R: complete ===\n")

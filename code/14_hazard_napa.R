@@ -599,9 +599,10 @@ if (!is.null(emdat_panel)) {
 #
 # Headline hazard set: CLIMATE-RELATED (Hydrological+Meteorological+
 # Climatological). ALL-natural is included as one robustness row.
-# Regressors: log(1+Total Affected) at g-1 (primary, row a); log(1+Total
-# Damage, Adjusted) at g-1 (second column, row a-damage); a 3-year moving
-# average of log(1+Total Affected) ending at g-1 (row c); a residualised-
+# Regressors (each observation's own lag; did's unbalanced-panel estimator uses
+# row-level covariates): log(1+Total Affected) at t-1 (primary, row a);
+# log(1+Total Damage, Adjusted) at t-1 (row a-damage); a 3-year moving
+# average of log(1+Total Affected) ending at t-1 (row c); a residualised-
 # outcome version of row (a) (row b). Every row's difference vs. the
 # baseline (no hazard control) is tested with the aligned-influence-function
 # helper (§6). Row (a) additionally gets a propensity-score overlap
@@ -839,15 +840,15 @@ if (!emdat_available) {
     list(label = "Headline (full main panel)",    set = "--", fit = fit_headline_ref, diff = NULL),
     list(label = "Baseline, hazard sample (no hazard control)", set = "--",
         fit = fit_baseline, diff = diff_ref_baseline),
-    list(label = "(a) Affected, $g-1$",          set = "Climate-related",
+    list(label = "(a) Affected, $t-1$",          set = "Climate-related",
         fit = fit_a_affected, diff = diff_a_affected),
-    list(label = "(a) Damage, $g-1$",            set = "Climate-related",
+    list(label = "(a) Damage, $t-1$",            set = "Climate-related",
         fit = fit_a_damage, diff = diff_a_damage),
     list(label = "(b) Residualised outcome",     set = "Climate-related",
         fit = fit_b_resid, diff = diff_b_resid),
     list(label = "(c) 3-yr moving avg., affected", set = "Climate-related",
         fit = fit_c_ma3, diff = diff_c_ma3),
-    list(label = "Variant: affected, $g-1$",     set = "All natural",
+    list(label = "Variant: affected, $t-1$",     set = "All natural",
         fit = fit_variant_all, diff = diff_variant_all)
   )
 
@@ -920,10 +921,14 @@ if (!emdat_available) {
       "multiplier-bootstrap SE (999 reps, seed 1242), \\texttt{did} ", DID_VERSION,
       ". Row 1: headline fit ($\\Delta$ reference). Row 2: hazard sample (missing EM-DAT ",
       "lag dropped). Hazard set CLIMATE-RELATED unless noted (last row ALL-",
-      "NATURAL). (a) adds the lagged hazard measure to \\texttt{xformla}; (b) residualises the ",
+      "NATURAL). (a) adds the one-year-lagged hazard measure to \\texttt{xformla} (each ",
+      "observation's own lag: the panel is unbalanced, so \\texttt{did} estimates it as repeated ",
+      "cross-sections); (b) residualises the ",
       "outcome on it via never-treated FE, re-estimates on the residual; (c) uses a 3-yr ",
       "moving average. $N_{treated}$: recipients in cohorts with an estimable post-treatment ",
-      "cell. $p(\\Delta)$: independence-approximation upper bound"
+      "cell. $p(\\Delta)$: aligned influence functions for (a) affected and (b); independence ",
+      "approximation (an upper bound) for the rows estimated on a different sample. ",
+      "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
     ),
     source_text = paste0("OECD CRS (", CRS_VINTAGE, "); UNFCCC NAP Central; World Bank ",
                          "WGI/WDI; ", EMDAT_VINTAGE, ", EM-DAT, CRED / UCLouvain, Brussels, ",
@@ -1103,7 +1108,8 @@ run_orthogonality_battery <- function(lag1_var, lag2_var, out_path, caption_titl
       "\\texttt{did} ", DID_VERSION,
       if (is.null(m_cloglog))
         "; col.\\ 5 not estimable (fixed-effects singleton), shown as ``--''" else "",
-      if (nzchar(extra_note)) paste0(". ", extra_note) else ""
+      if (nzchar(extra_note)) paste0(". ", extra_note) else "",
+      ". * $p<0.10$, ** $p<0.05$, *** $p<0.01$"
     ),
     source_text = source_text
   )
@@ -1405,7 +1411,7 @@ write_tex_float(
     ". ``Prior NAPA'': submitted a NAPA ",
     "to the UNFCCC before the NAP; NAPA list: ", napa_source_note,
     ". Difference row: ", diff_napa$method, ".",
-    " Sample: ", first_year, "--", last_year
+    " Sample: ", first_year, "--", last_year, ". * $p<0.10$, ** $p<0.05$, *** $p<0.01$"
   ),
   source_text = paste0("OECD CRS (", CRS_VINTAGE, "); UNFCCC NAP Central; ", napa_source_short)
 )

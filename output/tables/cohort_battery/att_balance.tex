@@ -3,23 +3,23 @@
 \caption{Balanced event windows: dynamic ATT under \texttt{balance\_e} restrictions}
 \label{tab:att_balance}
 % latex table generated in R 4.6.0 by xtable 1.8-8 package
-% Thu Sep 17 13:21:21 2026
+% Tue Sep 29 12:09:19 2026
 \begingroup\small
 \adjustbox{max width=\textwidth}{%
 \begin{tabular}{llllll}
   \toprule
 Specification & Dynamic ATT & SE & $t$ & Event times & $N$ \\ 
   \midrule
-Unbalanced (baseline aggregation) & 0.2998** & (0.1193) & 2.514 & -5, -4, -3, -2, 0, 1, 2, 3 & 2,030 \\ 
-  balance\_e = 1 & 0.2774* & (0.1560) & 1.779 & -5, -4, -3, -2, 0, 1 & 2,030 \\ 
-  balance\_e = 2 & 0.2505* & (0.1323) & 1.893 & -5, -4, -3, -2, 0, 1, 2 & 2,030 \\ 
+Unbalanced (baseline aggregation) & 0.3064** & (0.1300) & 2.357 & -5, -4, -3, -2, 0, 1, 2, 3 & 1,930 \\ 
+  balance\_e = 1 & 0.2895* & (0.1568) & 1.846 & -5, -4, -3, -2, 0, 1 & 1,930 \\ 
+  balance\_e = 2 & 0.2594* & (0.1383) & 1.876 & -5, -4, -3, -2, 0, 1, 2 & 1,930 \\ 
    \bottomrule
 \end{tabular}
 }
 \endgroup
 \par\vspace{4pt}
 \begin{minipage}{\linewidth}\footnotesize
-Notes: Outcome: log(adaptation commitments). Estimate: average dynamic effect (\texttt{aggte}, type $=$ dynamic), not the simple ATT; \texttt{balance\_e} $= k$ restricts to cohorts observed $\geq k$ post-treatment periods ($k=1$ excludes 2024; $k=2$ also excludes 2023). Unbalanced row read from the stored headline fit. Unless noted: headline specification (CS\,(2021) DR, never-treated controls, WGI GE + log population, cohorts $\geq$ 5), multiplier-bootstrap SE (999 reps, seed 1242)..\par
+Notes: Outcome: log(adaptation commitments). Estimate: average dynamic effect (\texttt{aggte}, type $=$ dynamic), not the simple ATT; \texttt{balance\_e} $= k$ restricts to cohorts observed $\geq k$ post-treatment periods ($k=1$ excludes 2024; $k=2$ also excludes 2023). Unbalanced row read from the stored headline fit. Unless noted: headline specification (CS\,(2021) DR, never-treated controls, WGI GE + log population, cohorts $\geq$ 5), multiplier-bootstrap SE (999 reps, seed 1242). * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
 Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
 \end{minipage}
 \end{table}

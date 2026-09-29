@@ -919,9 +919,9 @@ write_tex_float(
   label         = "tab:remarking_flag_shares_by_group",
   tabular_lines = flag_group_tex,
   notes_text    = paste0(
-    "Groups follow the main specification's cohort definition: treated = 40 main-sample adopters with adoption year ",
-    ">= 2021; thin-cohort adopters (2015-2020, < 5 units) are excluded from the main estimation sample but shown ",
-    "for completeness. See Table~\\ref{tab:remarking_flag_shares_by_year} for the title/purpose flag definitions ",
+    "Groups follow the main estimation sample: treated = ", sum(group_lookup$cohort_year >= 2021),
+    " adopters with adoption year $\\geq$ 2021, never-treated = ", sum(group_lookup$cohort_year == 0),
+    "; thin-cohort adopters are not in the main sample and are not shown. All years pooled. See Table~\\ref{tab:remarking_flag_shares_by_year} for the title/purpose flag definitions ",
     "and the diagnostic ``of which'' rows"
   ),
   source_text   = "OECD CRS activity-level microdata; UNFCCC NAP Central"
@@ -1526,7 +1526,8 @@ write_tex_float(
   label         = "tab:remarking_sectors",
   tabular_lines = sector_tex,
   notes_text    = paste0(
-    "Sector = leading 2 digits of the CRS purpose code. Treated: 40 main-sample adopters ",
+    "Sector = leading 2 digits of the CRS purpose code. Treated: ",
+    n_distinct(did_panel_126$recipient_name[did_panel_126$cohort_year > 0]), " main-sample adopters ",
     "(cohort $\\geq$ 2021); pre = 3 years before adoption, post = adoption year + 2 ",
     "(right-censored for 2023--24 cohorts). Never-treated: pre/post pool commitments over ",
     "the union of treated cohorts' pre-/post-window years (can overlap). Shares are \\% of ",

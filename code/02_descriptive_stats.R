@@ -594,20 +594,19 @@ message("Wrote: output/figures/top_donors.png")
 # No in-figure title/subtitle/caption (they go in the LaTeX caption).
 ##############################################################################
 
+# Both maps join on ISO3: map_data() region names ("Ivory Coast", "Republic of
+# Congo", ...) differ from CRS names, so a name join leaves recipients grey.
 world <- map_data("world")
+world$RecipientISO <- countrycode(world$region, origin = "country.name", destination = "iso3c",
+                                  custom_match = c("Micronesia" = "FSM", "Kosovo" = "XKX"),
+                                  warn = FALSE)
 
 recipient_totals <- adaptation_aid %>%
-  group_by(RecipientName) %>%
+  group_by(RecipientISO) %>%
   summarise(Total_Received = sum(Commitments, na.rm = TRUE) / 1000,
             .groups = "drop")
 
-recipient_totals$region <- countrycode(
-  recipient_totals$RecipientName,
-  origin = "country.name", destination = "country.name",
-  custom_match = c("Kosovo" = "Kosovo")
-)
-
-world_data_recv <- left_join(world, recipient_totals, by = "region")
+world_data_recv <- left_join(world, recipient_totals, by = "RecipientISO")
 
 p_map <- ggplot(world_data_recv,
                 aes(x = long, y = lat, group = group, fill = Total_Received)) +
@@ -640,13 +639,7 @@ nap_status <- adaptation_aid %>%
   summarise(has_nap = !all(is.na(date_posted)), .groups = "drop") %>%
   distinct()
 
-nap_status$region <- countrycode(
-  nap_status$RecipientName,
-  origin = "country.name", destination = "country.name",
-  custom_match = c("Kosovo" = "Kosovo")
-)
-
-world_data_nap <- left_join(world, nap_status, by = "region")
+world_data_nap <- left_join(world, nap_status %>% select(RecipientISO, has_nap), by = "RecipientISO")
 
 p_nap_map <- ggplot(world_data_nap,
                     aes(x = long, y = lat, group = group, fill = has_nap)) +

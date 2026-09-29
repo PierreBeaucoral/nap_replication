@@ -10,7 +10,7 @@ The code is written in R. One master script, `run_all.R`, runs 13 stage scripts 
 
 There are two ways to run the package:
 
-- **Default (about 10 minutes).** Start from the CRS-derived panels shipped in `data/processed/`. No external download is needed. Every exhibit is regenerated except the three scope tables built from the raw CRS files (they are shipped) and the two tables that need EM-DAT data, which cannot be redistributed (see below).
+- **Default (about 11 minutes).** Start from the CRS-derived panels shipped in `data/processed/`. No external download is needed. Every exhibit is regenerated except the three scope tables built from the raw CRS files (they are shipped) and the two tables that need EM-DAT data, which cannot be redistributed (see below).
 - **Full rebuild from raw data (`NAP_FROM_RAW=1`).** Download the raw OECD CRS files (about 4.8 GB). `run_all.R` checks their SHA-256 checksums against the vintage used in the paper, rebuilds `data/processed/` from scratch, compares every rebuilt file with the shipped one, and then runs the whole analysis on the rebuilt data.
 
 The exhibits shipped in `output/` are the ones in the paper. A default run reproduces every regenerated `.tex` table exactly; the only difference is the date-stamp comment line (e.g. `% Wed Sep 23 10:52:40 2026`) that the `xtable` package writes at the top of some tables.
@@ -44,9 +44,9 @@ The exhibits shipped in `output/` are the ones in the paper. A default run repro
 
 Details for each source:
 
-**OECD CRS.** The adaptation outcome counts every CRS activity whose Rio adaptation marker is principal (2) or significant (1) (`ClimateAdaptation %in% c(1, 2)`). Amounts are commitments in constant US dollars (`USD_Commitment_Defl`). Regional and unspecified recipient codes are excluded. Stage 01 aggregates the raw files to the panels in `data/processed/`. Stage 09 needs activity-level records and reads them from `data/processed/crs_adaptation_activities/` (one gzip-compressed CSV per year, 2009–2024, all activities for the 145 panel recipients). The OECD revises past CRS years, so a new download will usually not match the April 2026 vintage. `data/raw/CRS/crs_checksums.csv` gives the size and SHA-256 of each file used.
+**OECD CRS.** The adaptation outcome counts every CRS activity whose Rio adaptation marker is principal (2) or significant (1) (`ClimateAdaptation %in% c(1, 2)`). Amounts are commitments in constant US dollars (`USD_Commitment_Defl`). Regional and unspecified recipient codes are excluded. A recipient-year in which the country has no CRS record of any kind (after it leaves the DAC List of ODA recipients) is missing, not a year of zero adaptation finance. Stage 01 aggregates the raw files to the panels in `data/processed/`. Stage 09 needs activity-level records and reads them from `data/processed/crs_adaptation_activities/` (one gzip-compressed CSV per year, 2009–2024, all activities for the 145 panel recipients). The OECD revises past CRS years, so a new download will usually not match the April 2026 vintage. `data/raw/CRS/crs_checksums.csv` gives the size and SHA-256 of each file used.
 
-**NAP and NAPA lists.** NAP submission dates come from NAP Central. The 51 NAPAs were transcribed by hand from the UNFCCC page, which blocks scripted access. The transcription was checked 51/51 against the archived PDF of the page. SHA-256: `nap_information.csv` `95699a5675a58aaf9cef290c11dee234e3af8d49d1ae5e6e7847e137f294c525`; `napa_list_unfccc.csv` `bcf34444fc37e00cc2be8ea47cc325488d01bad0a629526ccac817a45359952d`.
+**NAP and NAPA lists.** NAP submission dates come from NAP Central. Treatment is the first submission; the one entry that lists two postings in a single cell (Paraguay: May 2020 and July 2022) is dated to the first. The 51 NAPAs were transcribed by hand from the UNFCCC page, which blocks scripted access. The transcription was checked 51/51 against the archived PDF of the page. SHA-256: `nap_information.csv` `95699a5675a58aaf9cef290c11dee234e3af8d49d1ae5e6e7847e137f294c525`; `napa_list_unfccc.csv` `bcf34444fc37e00cc2be8ea47cc325488d01bad0a629526ccac817a45359952d`.
 
 **WDI and WGI.** Stage 01 pulls these series from the World Bank API and caches them in `data/raw/wdi_cache/`. The shipped caches pin the 10 June 2026 vintage. Stage 01 reads the caches and does not pull again as long as they are present.
 
@@ -101,22 +101,22 @@ Measured on the machine above, stages run one at a time:
 | Stage | Default mode | From-raw mode | Notes |
 |---|--:|--:|---|
 | Checksums of raw CRS files | — | < 0.5 min | SHA-256 of 4.8 GB |
-| `01_prepare_data.R` | skipped | 1.0 min | Reads 18 CRS years; can take several minutes when the files are not already in the operating system's disk cache |
+| `01_prepare_data.R` | skipped | 1.5 min | Reads 18 CRS years; can take several minutes when the files are not already in the operating system's disk cache |
 | `02_descriptive_stats.R` | 0.1 min | 0.1 min | |
 | `03_main_results.R` | 0.1 min | 0.1 min | |
-| `04_robustness.R` | 6.5 min | 6.6 min | HonestDiD sensitivity, dCDH, Goodman-Bacon |
+| `04_robustness.R` | 7.4 min | 9.1 min | HonestDiD sensitivity, dCDH, Goodman-Bacon |
 | `05_heterogeneity.R` | 0.1 min | 0.1 min | |
 | `13_cohort_anticipation.R` | 0.1 min | 0.1 min | |
 | `14_hazard_napa.R` | < 0.1 min | < 0.1 min | |
 | `07_principal_and_share.R` | 0.1 min | 0.1 min | |
-| `08_randomization_inference.R` | < 0.1 min | < 0.1 min | With the shipped draws. Full recompute (draws deleted): about 29 min on 8 cores |
-| `09_remarking_decomposition.R` | 2.2 min | 2.3 min | From-raw: rebuilds the activity extract from 16 CRS years (0.4–10 min depending on disk cache) |
+| `08_randomization_inference.R` | < 0.1 min | < 0.1 min | With the shipped draws. Full recompute (draws deleted): 8 min on 8 cores of an otherwise idle machine, 17 min under load |
+| `09_remarking_decomposition.R` | 2.2 min | 3.4 min | From-raw: rebuilds the activity extract from 16 CRS years (0.4–10 min depending on disk cache) |
 | `10_model_tests.R` | < 0.1 min | < 0.1 min | |
 | `11_base_year_sensitivity.R` | 0.1 min | 0.1 min | |
 | `12_group_figures.R` | < 0.1 min | < 0.1 min | |
-| **Total** | **about 9.5 min** | **about 11 min** | Add about 29 min in either mode to recompute the permutation draws |
+| **Total** | **about 11 min** | **about 15 min** | Add 8--17 min in either mode to recompute the permutation draws |
 
-(Measured on 23 September 2026. Stage 08 timings are for a separate run of the stage with the shipped draws; the full runs above used `NAP_SKIP_RI=1`.)
+(Measured on 29 September 2026: a default-mode run from stage 03 with the shipped draws, and a from-raw run in a fresh copy of this folder with the draws deleted.)
 
 ## Instructions for replicators
 
@@ -138,12 +138,12 @@ Options (environment variables, combinable):
 | `NAP_START_AT=<stage file>` | Resume at a stage, e.g. `NAP_START_AT=09_remarking_decomposition.R Rscript run_all.R`. Earlier outputs are used as they are. |
 | `NAP_FROM_RAW=1` | Full rebuild from raw CRS files (below). |
 
-To recompute the randomization-inference draws from scratch (about 29 minutes on 8 cores), delete `output/tables/randomization/ri_draws.csv` before running. The draws are deterministic (see "Seeds and determinism"), so the recomputed file and table match the shipped ones.
+To recompute the randomization-inference draws from scratch (8--17 minutes on 8 cores), delete `output/tables/randomization/ri_draws.csv` before running. The draws are deterministic (see "Seeds and determinism"), so the recomputed file and table match the shipped ones.
 
 ### Full rebuild from the raw CRS files
 
 1. Download the 18 CRS bulk files for 2007–2024 as described in `data/raw/CRS/README.md` and put them in `data/raw/CRS/`.
-2. Make sure the machine is online: stage 01 calls the World Bank API catalogue (`WDI::WDIcache()`) even though the data series themselves are read from the shipped caches.
+2. No internet connection is needed: stage 01 reads the World Bank series from the shipped caches in `data/raw/wdi_cache/` and contacts the World Bank API only if one of those files is missing.
 3. Run:
 
    ```bash
@@ -185,7 +185,7 @@ Each stage runs in a fresh R process, in the order below (stage 06 is an interna
 | 1 | `code/01_prepare_data.R` (from-raw mode only) | `data/raw/CRS/`, `data/raw/shared_nap_data/`, `data/raw/PVCCI.csv`, `data/raw/wdi_cache/` | `data/processed/*.csv`; `output/tables/scope/` |
 | 2 | `code/02_descriptive_stats.R` | `data/processed/adaptationNAP.csv`, `adaptationNAP_donortype_wgi.csv`, `simple_panel_wgi.csv`, `donor_list.csv`, `donor_totals.csv`, `data/raw/PVCCI.csv` | descriptive tables and figures at the top level of `output/tables/`, `output/figures/` |
 | 3 | `code/03_main_results.R` | `simple_panel_wgi.csv` | `output/tables/cohorts_dropped/att_combined_wide.tex`, `extensive_margin/`, `nap_cohorts.tex`, main figures; headline fits in `output/fits/` |
-| 4 | `code/04_robustness.R` | `simple_panel_wgi.csv`, `mitigation_panel.csv`, `output/fits/` | `cohorts_retained/`, `notyettreated/`, `outlier_india/`, `units_zeros/`, `placebo/`, `mitigation/`, `bacon/`, `dcdh/`, HonestDiD tables in `cohorts_dropped/` |
+| 4 | `code/04_robustness.R` | `simple_panel_wgi.csv`, `mitigation_panel.csv`, `output/fits/` | `cohorts_retained/`, `balanced_panel/`, `panel_2010/`, `notyettreated/`, `outlier_india/`, `units_zeros/`, `placebo/`, `mitigation/`, `bacon/`, `dcdh/`, HonestDiD tables in `cohorts_dropped/` |
 | 5 | `code/05_heterogeneity.R` | `simple_panel_wgi.csv`, `data/raw/oghist/OGHIST.xlsx`, `output/fits/` | `heterogeneity/` |
 | 6 | `code/13_cohort_anticipation.R` | `simple_panel_wgi.csv`, `output/fits/` | `cohort_battery/`, `anticipation/` |
 | 7 | `code/14_hazard_napa.R` | `simple_panel_wgi.csv`, `emergency_response_panel.csv`, `data/raw/napa/`, `data/raw/emdat/emdat.csv` (if present) | `hazard/`, `napa/`; `data/processed/napa_list.csv` |
@@ -202,7 +202,7 @@ Processed data files (`data/processed/`): `simple_panel_wgi.csv` (estimation pan
 
 ## List of tables and figures
 
-Numbers refer to the paper as compiled on 23 September 2026 (Appendix A: model and descriptive appendices; Appendix B: supplementary robustness exhibits). All files are in `output/`.
+Numbers refer to the paper as compiled on 29 September 2026 (Appendix A: model and descriptive appendices; Appendix B: supplementary robustness exhibits). All files are in `output/`.
 
 | Exhibit | Location | File in `output/` | Produced by |
 |---|---|---|---|
@@ -264,7 +264,7 @@ Numbers refer to the paper as compiled on 23 September 2026 (Appendix A: model a
 | Table A.20 | Appendix | `tables/remarking/remarking_flag_shares_by_year.tex` | `code/09_remarking_decomposition.R` |
 | Table A.21 | Appendix | `tables/remarking/remarking_flag_shares_by_group.tex` | `code/09_remarking_decomposition.R` |
 | Table A.22 | Appendix | `tables/remarking/att_remarking_exclusions_regex_comparison.tex` | `code/09_remarking_decomposition.R` |
-| Figure B.1 | Appendix | `figures/nap_adoption_timeline.png` | `code/02_descriptive_stats.R` |
+| Figure B.1 | Appendix | `figures/cumulative_nap_adoption.png` | `code/02_descriptive_stats.R` |
 | Figure B.2 | Appendix | `figures/principal_share/fig_within_share_es.png` | `code/07_principal_and_share.R` |
 | Figure B.3 | Appendix | `figures/principal_share/fig_share_reconciliation.png` | `code/07_principal_and_share.R` |
 | Figure B.4 | Appendix | `figures/cohorts_dropped/did_combined_cohort_wgi.png` | `code/03_main_results.R` |
@@ -283,13 +283,15 @@ Numbers refer to the paper as compiled on 23 September 2026 (Appendix A: model a
 | Figure B.9 | Appendix | `figures/base_year/fig_es_full_window.png` | `code/11_base_year_sensitivity.R` |
 | Figure B.10 | Appendix | `figures/notyettreated/did_notyettreated_es.png` | `code/04_robustness.R` |
 | Figure B.11 | Appendix | `figures/cohorts_retained/did_combined_cohort_wgi.png` | `code/04_robustness.R` |
-| Table B.9 | Appendix | `tables/principal_share/principal_retained.tex` | `code/07_principal_and_share.R` |
-| Table B.10 | Appendix | `tables/cohort_battery/att_drop2024.tex` | `code/13_cohort_anticipation.R` |
-| Table B.11 | Appendix | `tables/cohort_battery/att_balance.tex` | `code/13_cohort_anticipation.R` |
-| Table B.12 | Appendix | `tables/cohort_battery/att_2x2.tex` | `code/13_cohort_anticipation.R` |
-| Table B.13 | Appendix | `tables/cohort_battery/att_conditioning.tex` | `code/13_cohort_anticipation.R` |
-| Table B.14 | Appendix | `tables/anticipation/att_placebo_ladder.tex` | `code/13_cohort_anticipation.R` |
-| Table B.15 | Appendix | `tables/heterogeneity/donor_type/zero_shares.tex` | `code/05_heterogeneity.R` |
+| Table B.9 | Appendix | `tables/balanced_panel/att_combined_wide.tex` | `code/04_robustness.R` |
+| Table B.10 | Appendix | `tables/panel_2010/att_combined_wide.tex` | `code/04_robustness.R` |
+| Table B.11 | Appendix | `tables/principal_share/principal_retained.tex` | `code/07_principal_and_share.R` |
+| Table B.12 | Appendix | `tables/cohort_battery/att_drop2024.tex` | `code/13_cohort_anticipation.R` |
+| Table B.13 | Appendix | `tables/cohort_battery/att_balance.tex` | `code/13_cohort_anticipation.R` |
+| Table B.14 | Appendix | `tables/cohort_battery/att_2x2.tex` | `code/13_cohort_anticipation.R` |
+| Table B.15 | Appendix | `tables/cohort_battery/att_conditioning.tex` | `code/13_cohort_anticipation.R` |
+| Table B.16 | Appendix | `tables/anticipation/att_placebo_ladder.tex` | `code/13_cohort_anticipation.R` |
+| Table B.17 | Appendix | `tables/heterogeneity/donor_type/zero_shares.tex` | `code/05_heterogeneity.R` |
 | Figure B.12 | Appendix | `figures/heterogeneity/donor_type/did_donor_type_es.png` | `code/05_heterogeneity.R` |
 | Figure B.13 | Appendix | `figures/heterogeneity/governance/did_governance_es.png` | `code/05_heterogeneity.R` |
 | Figure B.14 | Appendix | `figures/heterogeneity/ldc/did_ldc_es.png` | `code/05_heterogeneity.R` |
@@ -297,7 +299,17 @@ Numbers refer to the paper as compiled on 23 September 2026 (Appendix A: model a
 
 Table 1 (mapping of the IPCC AR6 risk components onto aid-allocation roles) is typed directly in the manuscript and is not produced by code. Every other table and figure is listed above.
 
-Exhibits in `output/` that the paper does not use are regenerated as well (for example `output/figures/climate_finance_evolution.png`, `output/tables/finance_change.tex`, `output/tables/nap_regional.tex`, `output/tables/list.tex`).
+Exhibits in `output/` that the paper does not use are regenerated as well (for example `output/figures/climate_finance_evolution.png`, `output/figures/nap_adoption_timeline.png`, `output/tables/finance_change.tex`, `output/tables/nap_regional.tex`, `output/tables/list.tex`).
+
+## Revision history
+
+- **29 September 2026.** Three corrections to `code/01_prepare_data.R`; every exhibit was regenerated.
+  1. The NAP Central entry for Paraguay lists two postings in one cell ("May 3, 2020July 14, 2022"). The cell failed to parse and Paraguay was coded as never treated. It is now dated to its first submission (2020), and stage 01 stops if any listed date fails to parse.
+  2. Recipient-years in which a country has no CRS record of any kind were filled with zeros. These are nine countries after they left the DAC List of ODA recipients (91 recipient-years). They are now missing.
+  3. The additional WDI indicators were joined by country name, which left 19 recipients without a World Bank region in the stratified randomization-inference design. They are now joined on ISO3 codes.
+
+  Other changes: two appendix specifications (balanced panel; panel starting in 2010), `did` pre-test restriction counts that match `did`'s own, validation of the cached permutation draws against the current panel, and corrected table notes. The headline ATT on log adaptation commitments is 0.3036 (SE 0.1256); it was 0.2928 (SE 0.1241) in the 23 September version.
+- **23 September 2026.** First public version.
 
 ## Licence
 

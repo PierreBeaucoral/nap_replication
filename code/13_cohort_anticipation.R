@@ -241,13 +241,10 @@ compute_pretrend_test <- function(agg_d, gt_obj = NULL, anticipation = 0) {
   if (!is.null(gt_obj)) {
     if (!is.null(gt_obj$W))     W_did     <- as.numeric(gt_obj$W)
     if (!is.null(gt_obj$Wpval)) Wpval_did <- as.numeric(gt_obj$Wpval)
-    # Restrictions behind did's own pre-test. This is did's OWN q: it takes
-    # pre <- which(group > t) and inverts the full V[pre, pre] block, without
-    # dropping cells whose standard error it has already set to NA. Using a
-    # filtered count here would put two different numbers in one sentence of
-    # the table note (54 cells inverted vs 50 with a usable SE), so the count
-    # reported is the one did actually tests.
-    df_did <- sum(gt_obj$t < gt_obj$group)
+    # Restrictions behind did's own pre-test: did 2.5.0 (att_gt) drops the
+    # pre-treatment cells whose standard error is NA (the base-period cells)
+    # before inverting V[pre, pre], so q counts only cells with a usable SE.
+    df_did <- sum(gt_obj$t < gt_obj$group & !is.na(gt_obj$se))
   }
 
   # Why did returned no statistic, derived from the fit rather than guessed.
@@ -258,7 +255,7 @@ compute_pretrend_test <- function(agg_d, gt_obj = NULL, anticipation = 0) {
   # recipient-level influence functions can span.
   wpval_reason <- NA_character_
   if (!is.null(gt_obj) && is.na(Wpval_did)) {
-    pre_idx <- which(gt_obj$group > gt_obj$t)
+    pre_idx <- which(gt_obj$group > gt_obj$t & !is.na(gt_obj$se))  # the cells did inverts
     if (is.null(gt_obj$V)) {
       wpval_reason <- paste0("did does not form the analytical variance matrix ",
                              "for this fit, so its pre-test is unavailable by ",
@@ -521,10 +518,9 @@ run_spec <- function(panel, yname = "log_commits", est_method = "dr",
     as.integer(agg_d_an$egt[k_keep][agg_d_an$egt[k_keep] < -anticipation])
   }
 
-  # Post-submission-only average. did's SIMPLE aggregate averages every treated
-  # (g, t) cell, so under anticipation = k it MECHANICALLY includes the k cells
-  # before submission. This aggregation restricts attention to e >= 0 and is
-  # the quantity comparable to the headline. It is computed last so that it
+  # Equal-weight average of the event-time effects e >= 0. did's SIMPLE
+  # aggregate also uses only post-submission cells (t >= g) but weights them by
+  # group size; the two differ only in weighting. It is computed last so that it
   # cannot disturb the bootstrap draws behind the reported ATT above; the seed
   # is set immediately before it, as for every other estimator call here.
   set.seed(1242)
@@ -651,8 +647,9 @@ SPEC_NOTE_PREAMBLE <- paste0(
   " reps, seed 1242)."
 )
 SRC_NOTE <- "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
+STAR_NOTE <- "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
 SPEC_NOTE <- paste0(SPEC_NOTE_PREAMBLE, " ", PRETREND_NOTE_AGG(-5L, -2L, 4L),
-                    " (analytical twin fit)")
+                    " (analytical twin fit). ", STAR_NOTE)
 # Tables without a "Pre-trend p" column must not define one.
 SPEC_NOTE_NOPT <- SPEC_NOTE_PREAMBLE
 
@@ -845,7 +842,7 @@ write_tex_float(
          "effect (\\texttt{aggte}, type $=$ dynamic), not the simple ATT; ",
          "\\texttt{balance\\_e} $= k$ restricts to cohorts observed $\\geq k$ post-treatment ",
          "periods ($k=1$ excludes 2024; $k=2$ also excludes 2023). Unbalanced row read from ",
-         "the stored headline fit. ", SPEC_NOTE_NOPT),
+         "the stored headline fit. ", SPEC_NOTE_NOPT, " ", STAR_NOTE),
   SRC_NOTE)
 
 # ==============================================================================
@@ -860,33 +857,56 @@ grid_panels <- list(
   list(key = "main",     label = "Cohorts $\\geq 5$", panel = did_panel_main),
   list(key = "retained", label = "All cohorts retained", panel = did_panel_full)
 )
-grid_rows <- list()   # name-keyed, 4 entries (see note in §5)
+grid_rows <- list()   # name-keyed, 12 entries (3 outcomes x 2 cohort rules x 2 estimators)
 grid_notes_extra <- character(0)
+# The envelope outcomes are included because the retained-cohort specification
+# (regression adjustment) is the only one in which they move; the grid shows
+# whether that comes from the cohorts or the estimator.
+grid_outcomes <- list(
+  list(var = "log_commits",           tag = "Adaptation"),
+  list(var = "lcommitments_all",      tag = "Total"),
+  list(var = "lcommitments_nonadapt", tag = "Non-adaptation"))
+dr_dropped <- integer(0)   # cohorts with no estimable post-treatment cell under DR
 
-for (gp in grid_panels) {
-  for (em in c("dr", "reg")) {
-    lbl <- sprintf("%s, est\\_method = %s", gp$label, em)
-    message(sprintf("-- %s x %s", gp$key, em))
-    risky <- identical(gp$key, "retained") && identical(em, "dr")
-    res <- if (risky) {
-      message("   (running in a forked process: att_gt(dr) can segfault on ",
-              "panels containing 2-unit cohorts)")
-      run_spec_forked(gp$panel, yname = "log_commits", est_method = em)
-    } else {
-      run_spec(gp$panel, yname = "log_commits", est_method = em)
+for (oc in grid_outcomes) {
+  for (gp in grid_panels) {
+    for (em in c("dr", "reg")) {
+      lbl <- sprintf("%s: %s, est\\_method = %s", oc$tag, gp$label, em)
+      message(sprintf("-- %s x %s x %s", oc$var, gp$key, em))
+      risky <- identical(gp$key, "retained") && identical(em, "dr")
+      res <- if (risky) {
+        message("   (running in a forked process: att_gt(dr) can segfault on ",
+                "panels containing 2-unit cohorts)")
+        run_spec_forked(gp$panel, yname = oc$var, est_method = em)
+      } else {
+        run_spec(gp$panel, yname = oc$var, est_method = em)
+      }
+      if (risky && is.null(res))
+        grid_notes_extra <- c(grid_notes_extra,
+          paste0("The doubly-robust estimator could not be evaluated on the retained-cohort ",
+                 "panel for ", oc$tag, " (\\texttt{fastglm} segfaults on 2-unit cohorts); that ",
+                 "cell is reported as unavailable."))
+      if (risky && !is.null(res)) {
+        rep_c <- cohort_cell_report(res$gt, gp$panel)
+        dr_dropped <- union(dr_dropped, rep_c$cohort[!rep_c$contributes])
+      }
+      grid_rows[[lbl]] <- spec_row(lbl, res)
+      if (identical(oc$var, "log_commits"))
+        battery_summary <- add_to_battery(battery_summary, "Cohort rule $\\times$ estimator",
+                                          sub("^Adaptation: ", "", lbl), res)
+      if (!is.null(res))
+        message(sprintf("   ATT = %.4f (SE %.4f, t %.3f) | N = %d | treated = %d",
+                        res$att, res$se, res$t, res$n_obs, res$n_treated))
     }
-    if (risky && is.null(res))
-      grid_notes_extra <- c(grid_notes_extra,
-        paste0("The doubly-robust estimator could not be evaluated on the retained-cohort ",
-               "panel (\\texttt{fastglm} segfaults on 2-unit cohorts); that cell ran in a ",
-               "forked process and is reported as unavailable, with the outcome-regression ",
-               "cell as the comparable estimate."))
-    grid_rows[[lbl]] <- spec_row(lbl, res)
-    battery_summary <- add_to_battery(battery_summary, "Cohort rule $\\times$ estimator", lbl, res)
-    if (!is.null(res))
-      message(sprintf("   ATT = %.4f (SE %.4f, t %.3f) | N = %d | treated = %d",
-                      res$att, res$se, res$t, res$n_obs, res$n_treated))
   }
+}
+dr_dropped_txt <- if (length(dr_dropped) == 0L) "" else {
+  sizes <- did_panel_full %>% filter(cohort_year %in% dr_dropped) %>%
+    distinct(country_id, cohort_year) %>% count(cohort_year)
+  paste0("In the doubly-robust cells with all cohorts retained, the ",
+         paste(sprintf("%d cohort (%d recipients)", sizes$cohort_year, sizes$n), collapse = " and "),
+         " have no estimable post-treatment cell and drop out of the aggregate; regression ",
+         "adjustment estimates them. ``Treated'' counts the recipients in the estimation panel.")
 }
 
 write_tex_float(
@@ -894,10 +914,10 @@ write_tex_float(
   "Cohort rule and estimator, varied one at a time",
   "tab:att_2x2",
   tabular_of(bind_rows(grid_rows), "tab:att_2x2"),
-  paste0("Outcome: log(adaptation commitments). This grid varies the cohort rule and ",
-         "estimator separately, with common multiplier-bootstrap inference in all four ",
-         "cells. ``All cohorts retained'' adds the 2015--2020 cohorts of 2--4 recipients ",
-         "each. ", paste(grid_notes_extra, collapse = " "), " ", SPEC_NOTE),
+  paste0("Outcomes: log adaptation, total and non-adaptation commitments. This grid varies ",
+         "the cohort rule and estimator separately, with common multiplier-bootstrap inference ",
+         "in all cells. ``All cohorts retained'' adds the 2015--2020 cohorts of 2--4 recipients ",
+         "each. ", dr_dropped_txt, " ", paste(grid_notes_extra, collapse = " "), " ", SPEC_NOTE),
   SRC_NOTE)
 
 # ==============================================================================
@@ -981,10 +1001,10 @@ for (k in antic_grid) {
            n_country = fit_head$n_country,
            n_treated = n_distinct(did_panel_main$country_id[
              did_panel_main$cohort_year > 0])))
-    set.seed(1242)
-    agg_e0_base <- tryCatch(
-      aggte(fit_head$gt_boot, type = "dynamic", na.rm = TRUE, min_e = 0, max_e = Inf),
-      error = function(e) NULL)
+    # The stored dynamic aggregation (min_e = -5) has the same e >= 0 average;
+    # re-running aggte() would draw a fresh bootstrap and print a second SE
+    # for a statistic the balance table already reports.
+    agg_e0_base <- fit_head$agg_dynamic
     antic_e0[[lbl]] <- agg_e0_base
     # The baseline row's lead window is that of the stored headline fit.
     antic_leads[[lbl]] <- if (is.null(fit_head$agg_dyn_analytic)) integer(0) else {
@@ -1037,9 +1057,9 @@ dyn_tab <- bind_rows(dyn_block)
 
 antic_tab <- bind_rows(antic_rows)
 
-# The pooled column is did's SIMPLE aggregate, which under anticipation = k
-# averages the k pre-submission cells together with the post-submission ones.
-# The e >= 0 column removes that mechanical component.
+# The pooled column is did's SIMPLE aggregate: post-submission cells (t >= g)
+# weighted by group size. The e >= 0 column averages the event-time effects
+# with equal weights; the two differ only in weighting.
 antic_tab$`ATT, $e \\geq 0$` <- vapply(names(antic_rows), function(lbl) {
   a <- antic_e0[[lbl]]
   if (is.null(a) || is.na(a$overall.att)) return("---")
@@ -1066,7 +1086,9 @@ write_tex_float(
          "dynamic ATTs by event time, SE in parentheses. \\texttt{anticipation} $= k$ shifts the ",
          "base period to $g-k-1$. $^{\\dagger}$ marks event times treated as TREATED under that ",
          "row's $k$, not leads. Anticipation-0 row is read from the stored headline fit. ",
-         SPEC_NOTE),
+         SPEC_NOTE_PREAMBLE, " Pre-trend $\\chi^2$ / $p$: joint Wald test on the aggregated ",
+         "pre-treatment event-time coefficients in each row's \\emph{Pre-trend leads} window ",
+         "(analytical twin fit). ", STAR_NOTE),
   SRC_NOTE)
 
 # ==============================================================================
@@ -1717,9 +1739,9 @@ write_tex_float(
   paste0("Recipient-years and recipients lost to a missing outcome or a missing ",
          "control in each specification. \\texttt{did::att\\_gt} drops those ",
          "cells silently, so the ``used'' columns are the samples on which the ",
-         "reported ATTs are computed. The baseline-outcome specification loses ",
-         "additional observations for recipients with no usable ",
-         min(BASE_YEARS), "--", max(BASE_YEARS), " window"),
+         "reported ATTs are computed. The baseline-outcome specification would lose ",
+         "recipients with no usable ", min(BASE_YEARS), "--", max(BASE_YEARS),
+         " window; the table shows how many it does"),
   "OECD CRS (Rio adaptation markers); UNFCCC NAP Central; WGI; World Bank WDI")
 
 # ==============================================================================
@@ -1776,7 +1798,7 @@ write_tex_float(
          "\\ref{tab:att_anticipation}, \\ref{tab:att_eventdate}, \\ref{tab:att_placebo_ladder}, ",
          "\\ref{tab:att_conditioning}. ``$\\Delta$ vs headline'' $=$ difference from the stored ",
          "headline ATT of ", sprintf("%.4f", fit_head$att),
-         "; descriptive, not a test. ", SPEC_NOTE_NOPT),
+         "; descriptive, not a test. ", sub("\\.$", "", SPEC_NOTE_NOPT)),
   SRC_NOTE)
 
 message("\n=== 13_cohort_anticipation.R: complete ===\n")

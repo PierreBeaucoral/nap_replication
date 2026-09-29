@@ -191,6 +191,15 @@ CRS <- lapply(annual_years, function(year) {
 CRS <- lapply(CRS, as.data.frame)
 gc()
 
+# Recipient-years that appear in the CRS at all (any flow type, any purpose).
+# A country that leaves the DAC List of ODA recipients has no CRS record
+# afterwards (e.g. Chile and Uruguay from 2018): those years are missing, not
+# years of zero adaptation finance, so the zero-filled panels below keep only
+# recipient-years in this set.
+crs_present_ry <- lapply(CRS, function(df) unique(df[c("RecipientName", "Year")])) %>%
+  bind_rows() %>%
+  distinct()
+
 ##############################################################################
 # §3. PROCESS CLIMATE ADAPTATION DATA
 # Exhibit: feeds into all descriptive figures and regression panels
@@ -335,8 +344,14 @@ adaptation_aid_panel <- expand.grid(
   mutate(
     Commitments   = coalesce(Commitments,   0),
     Disbursements = coalesce(Disbursements, 0)
-  ) %>%
+  )
+n_filled <- nrow(adaptation_aid_panel)
+adaptation_aid_panel <- adaptation_aid_panel %>%
+  semi_join(crs_present_ry, by = c("RecipientName", "Year")) %>%
   arrange(RecipientName, Year, DonorType)
+message(sprintf("Dropped %d recipient-year-donor-type rows with no CRS record of any kind (%d recipient-years).",
+                n_filled - nrow(adaptation_aid_panel),
+                (n_filled - nrow(adaptation_aid_panel)) / n_distinct(adaptation_aid_panel$DonorType)))
 
 # Panel balance check
 panel_check <- adaptation_aid_panel %>%
@@ -357,10 +372,26 @@ message("Is panel balanced? ",    all(panel_check$is_balanced))
 # §5. MERGE NAP DATA
 ##############################################################################
 
-nap_data <- fread(here("data", "raw", "shared_nap_data", "nap_information.csv"))
-nap_data$RecipientISO <- countrycode(
-  nap_data$Country, origin = "country.name", destination = "iso3c"
-)
+#' Read the NAP Central list of submitted NAPs (used here and in §20)
+#'
+#' One cell lists two postings run together (Paraguay: "May 3, 2020July 14,
+#' 2022", the first NAP and its update). Treatment is the first submission, so
+#' everything after the first four-digit year is dropped. Stops if any listed
+#' date still fails to parse, so no adopter can silently become never-treated.
+read_nap_list <- function() {
+  nap <- fread(here("data", "raw", "shared_nap_data", "nap_information.csv"))
+  nap[, `Date Posted` := sub("^(.*?\\d{4}).*$", "\\1", `Date Posted`, perl = TRUE)]
+  parsed <- parse_date_time(nap$`Date Posted`, orders = c("dmy", "mdy", "ymd"), quiet = TRUE)
+  bad <- nap$Country[is.na(parsed) & nzchar(nap$`Date Posted`)]
+  if (length(bad)) stop("Unparseable NAP date in nap_information.csv: ", paste(bad, collapse = ", "))
+  nap[, RecipientISO := countrycode(Country, origin = "country.name", destination = "iso3c")]
+  nap
+}
+
+nap_data <- read_nap_list()
+# ISO3 is derived here, before the merge, so the NAP fields are also filled on
+# the zero-filled recipient-years added by expand.grid() in §4.
+adaptation_aid_panel$RecipientISO <- recipient_iso_from_name(adaptation_aid_panel$RecipientName)
 adaptation_aid_panel <- left_join(adaptation_aid_panel, nap_data, by = "RecipientISO")
 
 ##############################################################################
@@ -406,8 +437,6 @@ gdp_clean <- gdp_data %>%
   select(iso3c, year, NY.GDP.MKTP.KD) %>%
   rename(RecipientISO = iso3c, Year = year, GDP = NY.GDP.MKTP.KD) %>%
   filter(!is.na(GDP))
-
-adaptation_aid_panel$RecipientISO <- recipient_iso_from_name(adaptation_aid_panel$RecipientName)
 
 adaptation_aid_panel <- adaptation_aid_panel %>%
   left_join(pop_clean, by = c("RecipientISO", "Year")) %>%
@@ -718,7 +747,8 @@ aggregated[, (date_cols) := lapply(.SD, as.character), .SDcols = date_cols]
 # §13. ADDITIONAL WDI INDICATORS (WGI governance + macro/social)
 ##############################################################################
 
-wdi_cache_obj <- WDIcache()
+# The indicator catalogue is only needed (and only fetched online) on a cache miss.
+wdi_cache_obj <- if (file.exists(here("data", "raw", "wdi_cache", "wdi_additional.rds"))) NULL else WDIcache()
 
 wgi_codes <- c(
   "GOV_WGI_GE.EST",
@@ -749,15 +779,15 @@ wdi_raw <- wdi_cached(
   wdi_cache = wdi_cache_obj
 )
 
+# Joined on ISO3: CRS and World Bank country names differ for 19 recipients
+# (e.g. "Côte d'Ivoire", "Egypt", "Yemen"), which a name join leaves unmatched.
 wdi_tidy <- wdi_raw %>%
-  rename(
-    recipient_name = country,
-    iso2c          = iso2c,
-    year           = year
-  )
+  filter(!is.na(iso3c), nzchar(iso3c)) %>%   # drops aggregates and blank-ISO territories
+  select(-country)
 
+aggregated[, iso3c := recipient_iso]
 aggregated <- aggregated %>%
-  left_join(wdi_tidy, by = c("recipient_name", "year"))
+  left_join(wdi_tidy, by = c("iso3c", "year"))
 
 # --- PVCCI merge ---------------------------------------------------------------
 # The panel already carries a correctly ISO3-merged `pvcci` column: §10a above
@@ -892,6 +922,7 @@ aggregated$WB_region <- countrycode(
 )
 aggregated$continent[aggregated$iso3c == "XKX"] <- "Europe"
 aggregated$WB_region[aggregated$iso3c == "XKX"] <- "Europe & Central Asia"
+stopifnot(!anyNA(aggregated$WB_region))  # the RI stratified design (08) needs every region
 
 ##############################################################################
 # §17. DERIVED VARIABLES
@@ -1069,10 +1100,7 @@ adaptation_aid_04 <- rio_data_adaptation_04 %>%
 adaptation_aid_04$RecipientISO <- recipient_iso_from_name(adaptation_aid_04$RecipientName)
 
 # Merge NAP data
-nap_data_04 <- fread(here("data", "raw", "shared_nap_data", "nap_information.csv"))
-nap_data_04$RecipientISO <- countrycode(
-  nap_data_04$Country, origin = "country.name", destination = "iso3c"
-)
+nap_data_04 <- read_nap_list()
 adaptation_aid_04 <- left_join(adaptation_aid_04, nap_data_04, by = "RecipientISO")
 
 # Add date and NAP year
@@ -1418,6 +1446,10 @@ emergency_response_panel <- expand.grid(
 ) %>%
   left_join(emergency_response_ry, by = c("recipient_iso", "year")) %>%
   mutate(emergency_commitments = coalesce(emergency_commitments, 0)) %>%
+  semi_join(crs_present_ry %>%
+              transmute(recipient_iso = recipient_iso_from_name(RecipientName), year = Year) %>%
+              distinct(),
+            by = c("recipient_iso", "year")) %>%
   arrange(recipient_iso, year)
 
 message(sprintf(

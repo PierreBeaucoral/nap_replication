@@ -809,13 +809,10 @@ compute_pretrend_test <- function(agg_d, gt_obj = NULL, anticipation = 0) {
   if (!is.null(gt_obj)) {
     if (!is.null(gt_obj$W))     W_did     <- as.numeric(gt_obj$W)
     if (!is.null(gt_obj$Wpval)) Wpval_did <- as.numeric(gt_obj$Wpval)
-    # Restrictions behind did's own pre-test. This is did's OWN q: it takes
-    # pre <- which(group > t) and inverts the full V[pre, pre] block, without
-    # dropping cells whose standard error it has already set to NA. Using a
-    # filtered count here would put two different numbers in one sentence of
-    # the table note (54 cells inverted vs 50 with a usable SE), so the count
-    # reported is the one did actually tests.
-    df_did <- sum(gt_obj$t < gt_obj$group)
+    # Restrictions behind did's own pre-test: did 2.5.0 (att_gt) drops the
+    # pre-treatment cells whose standard error is NA (the base-period cells)
+    # before inverting V[pre, pre], so q counts only cells with a usable SE.
+    df_did <- sum(gt_obj$t < gt_obj$group & !is.na(gt_obj$se))
   }
 
   # Why did returned no statistic, derived from the fit rather than guessed.
@@ -826,7 +823,7 @@ compute_pretrend_test <- function(agg_d, gt_obj = NULL, anticipation = 0) {
   # recipient-level influence functions can span.
   wpval_reason <- NA_character_
   if (!is.null(gt_obj) && is.na(Wpval_did)) {
-    pre_idx <- which(gt_obj$group > gt_obj$t)
+    pre_idx <- which(gt_obj$group > gt_obj$t & !is.na(gt_obj$se))  # the cells did inverts
     if (is.null(gt_obj$V)) {
       wpval_reason <- paste0("did does not form the analytical variance matrix ",
                              "for this fit, so its pre-test is unavailable by ",

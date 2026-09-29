@@ -374,6 +374,15 @@ if (USE_CACHED_DRAWS) {
   message(sprintf("  Loaded: %d draws/design, seed_permutation=%d, generated_at=%s",
                   N_DRAWS, ri_draws$seed_permutation, format(ri_draws$generated_at)))
 
+  # The draws are valid only for the panel they were built on: stop if they
+  # disagree with the current headline fits written by 03.
+  if (!(ri_draws$n_countries == ref_head$n_country && ri_draws$n_obs == ref_head$n_obs &&
+        isTRUE(all.equal(unname(att_obs[c("log_commits", "share_adapt")]),
+                         c(ref_head$att, ref_share$att), tolerance = 1e-8)))) {
+    stop("Cached draws in ", ri_draws_cache_path, " were built on a different panel than the ",
+         "current headline fits (output/fits/). Delete the file to recompute the draws.")
+  }
+
 } else {
 
 # ==============================================================================
@@ -812,9 +821,9 @@ notes_txt <- paste0(
   "Fisher RI (sharp null), headline specification, ", N_DRAWS, " draws/design. ",
   "\\textit{Timing} permutes adoption year among ", n_treated, " treated countries; ",
   "\\textit{Assignment} redraws which ", n_treated, " of ", n_countries, " are treated; ",
-  "\\textit{Stratified} draws within World Bank region strata. $N$ skipped: draws dropped by the ",
-  "$<$", thin_threshold, " thin-cohort rule (", paste(n_skip_note, collapse = "/"),
-  "; never binds under permutation). $N$ fallback: \"dr\" failed, \"reg\" used. $p$-value: two-sided $=$ share of $|ATT_{perm}| \\geq |ATT_{obs}|$; ",
+  "\\textit{Stratified} draws within World Bank region strata. $N$ valid: draws with at least two ",
+  "treated cohorts after the $<$", thin_threshold, " thin-cohort rule (the rule dropped ",
+  paste(n_skip_note, collapse = "/"), " draws; it never binds under permutation). $N$ fallback: \"dr\" failed, \"reg\" used. $p$-value: two-sided $=$ share of $|ATT_{perm}| \\geq |ATT_{obs}|$; ",
   "one-sided $=$ share of $ATT_{perm} \\geq ATT_{obs}$, over valid draws, observed excluded. ",
   "SD/95\\% range describe the permutation distribution"
 )

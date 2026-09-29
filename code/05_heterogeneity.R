@@ -447,13 +447,10 @@ compute_pretrend_test <- function(agg_d, gt_obj = NULL, anticipation = 0) {
   if (!is.null(gt_obj)) {
     if (!is.null(gt_obj$W))     W_did     <- as.numeric(gt_obj$W)
     if (!is.null(gt_obj$Wpval)) Wpval_did <- as.numeric(gt_obj$Wpval)
-    # Restrictions behind did's own pre-test. This is did's OWN q: it takes
-    # pre <- which(group > t) and inverts the full V[pre, pre] block, without
-    # dropping cells whose standard error it has already set to NA. Using a
-    # filtered count here would put two different numbers in one sentence of
-    # the table note (54 cells inverted vs 50 with a usable SE), so the count
-    # reported is the one did actually tests.
-    df_did <- sum(gt_obj$t < gt_obj$group)
+    # Restrictions behind did's own pre-test: did 2.5.0 (att_gt) drops the
+    # pre-treatment cells whose standard error is NA (the base-period cells)
+    # before inverting V[pre, pre], so q counts only cells with a usable SE.
+    df_did <- sum(gt_obj$t < gt_obj$group & !is.na(gt_obj$se))
   }
 
   # Why did returned no statistic, derived from the fit rather than guessed.
@@ -464,7 +461,7 @@ compute_pretrend_test <- function(agg_d, gt_obj = NULL, anticipation = 0) {
   # recipient-level influence functions can span.
   wpval_reason <- NA_character_
   if (!is.null(gt_obj) && is.na(Wpval_did)) {
-    pre_idx <- which(gt_obj$group > gt_obj$t)
+    pre_idx <- which(gt_obj$group > gt_obj$t & !is.na(gt_obj$se))  # the cells did inverts
     if (is.null(gt_obj$V)) {
       wpval_reason <- paste0("did does not form the analytical variance matrix ",
                              "for this fit, so its pre-test is unavailable by ",
@@ -2232,10 +2229,11 @@ if (!have_ldc || !have_gov || !have_inc) {
   }
 
   notes_h5 <- paste0(
-    "Each row tests equality of two subgroup ATTs from the paired heterogeneity table ",
-    "(not re-estimated). ", est_label_h5, " on log(adaptation commitments), headline ",
-    "specification. Differences = low- minus high-capacity (positive: larger effect where ",
-    "capacity weaker). H4 rows (LDC/governance/income): SE $=\\sqrt{se_a^2+se_b^2}$ on ",
+    "Each row tests equality of two ATTs from the paired heterogeneity table ",
+    "(not re-estimated). H4 rows: ", est_label_h5, " on log(adaptation commitments); H3 ",
+    "(donor-type) rows: headline specification (DR) on the donor-group commitments; ",
+    "falsification row: adaptation minus mitigation. H4 differences = low- minus ",
+    "high-capacity (positive: larger effect where capacity weaker). H4 rows (LDC/governance/income): SE $=\\sqrt{se_a^2+se_b^2}$ on ",
     "multiplier-bootstrap SEs (", BITERS, " reps, seed 1242), disjoint subsamples. ",
     "H3/mitigation rows: aligned analytical-IF SEs (not bootstrap), same recipient-years. ",
     "$z$ vs.\\ standard normal; joint stats vs.\\ $\\chi^2$; $p$ two-sided"
@@ -2246,8 +2244,8 @@ if (!have_ldc || !have_gov || !have_inc) {
   out_path_h5 <- file.path(dir_tabs_h5, "het_difference_tests.tex")
   write_tex_float(
     out_path_h5,
-    paste0("Formal tests of subgroup differences in the NAP effect ",
-           "(test of H4: is the effect larger where baseline capacity is weaker?)"),
+    paste0("Formal tests of differences in the NAP effect across subgroups, donor types ",
+           "and outcomes (H3, H4)"),
     "tab:het_difftests", raw_lines_h5, notes_h5, source_h5
   )
 
@@ -2329,7 +2327,7 @@ if (length(mde_records) == 0L) {
     "``No'' means the null is uninformative about smaller differences, not equality. Last ",
     "column: independence (disjoint subsamples) or aligned unit-level IFs (same recipient-",
     "years). Outcome: log(adaptation commitments); donor-type rows use the donor-group ",
-    "commitments"
+    "commitments; the falsification row contrasts adaptation with mitigation commitments"
   )
 
   out_path_mde <- file.path(dir_tabs_h5, "het_mde.tex")

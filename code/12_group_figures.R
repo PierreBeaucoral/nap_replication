@@ -36,27 +36,14 @@
 # Adaptation share of total (%)                 | share_pct  = commitments / commitments_all * 100
 # Growth index, 2010 = 100                      | idx_adapt, idx_total, idx_nonadapt
 # NAP adoption cohort (first-submission year)   | nap_year (0/NA = never-treated)
-# Ever-adopter indicator (58 countries)         | ever_adopter = any(!is.na(nap_year) & nap_year > 0) by recipient_name
-# Never-adopter indicator (86 countries)        | !ever_adopter
+# Ever-adopter indicator                        | ever_adopter = any(!is.na(nap_year) & nap_year > 0) by recipient_name
+# Never-adopter indicator                       | !ever_adopter
 # Mean adaptation commitments by group          | mean_commit
 # Group growth index, 2010 = 100                 | idx_mean
 # 2021-2024 main adoption-wave shading           | ADOPTION_WAVE_START / END (constants below)
 # ============================================================
 #
-# Verification against the manuscript captions (computed on this data; see the
-# printed summary at the end of this script):
-#   Fig. adaptation_marginal — share 2010 = 2.31% -> caption "2.3%"
-#                              share 2024 = 7.12% -> caption "7.1%"
-#                              pooled avg share 2010-2024 = 5.54% -> caption "5.5%"
-#                              adaptation growth x5.33 -> caption "x5.3"
-#                              total growth x1.73 -> caption "x1.7"
-#   Fig. adopter_vs_never    — n ever-adopters = 58, n never-adopters = 86
-#                              share 2010: ever 50.3% / never 49.7%
-#                              share 2024: ever 50.2% / never 49.8%
-#                              growth: ever x5.22 -> caption "x5.2"
-#                                      never x5.35 -> caption "x5.3"
-# All figures match the committed captions to the stated precision. No
-# discrepancy found; captions in the manuscript are left untouched.
+# The caption values are printed at the end of this script ("Caption values").
 ##############################################################################
 
 ##############################################################################
@@ -245,7 +232,7 @@ copy_to_paper_flat(fig_marginal_png)
 ##############################################################################
 # §3. Figure: adopter_vs_never.pdf
 #   Panel A -- mean adaptation commitments (USD million) for ever-adopters
-#              (58 countries) vs. never-adopters (86 countries), by year.
+#              vs. never-adopters, by year.
 #   Panel B -- same two series indexed to their FIG_START (2010) value.
 #   Shaded band marks the 2021-2024 main adoption wave.
 ##############################################################################
@@ -255,11 +242,8 @@ message("Building adopter_vs_never figure ...")
 ADOPTION_WAVE_START <- 2020.5
 ADOPTION_WAVE_END   <- FIG_END + 0.5
 
-# Ever-adopter status must be computed at the recipient level: nap_year is
-# NA in 2009 (partial Rio-marker reporting year) even for countries that do
-# adopt later, so a naive per-row nap_year > 0 check misclassifies adopters
-# as never-treated in that one year. Group-level "any" gives the correct
-# 58 ever- / 86 never-adopter split reported in the manuscript.
+# Ever-adopter status is computed at the recipient level (any row with a
+# NAP year), so the classification never depends on a single row.
 group_lookup <- panel %>%
   group_by(recipient_name) %>%
   summarise(ever_adopter = any(!is.na(nap_year) & nap_year > 0), .groups = "drop")
@@ -333,15 +317,13 @@ copy_to_paper_flat(fig_groups_pdf)
 copy_to_paper_flat(fig_groups_png)
 
 message("\n=== 12_group_figures.R complete ===\n")
+# Values quoted in the captions of fig:adapt_marginal and fig:adopter_groups.
 message(sprintf(paste0(
-  "Verification summary (compare to the manuscript captions at ",
-  "\\label{fig:adapt_marginal} and \\label{fig:adopter_groups}):\n",
-  "  adaptation_marginal: share %.0f=%.2f%% (caption 2.3%%), share %.0f=%.2f%% ",
-  "(caption 7.1%%), pooled avg=%.2f%% (caption 5.5%%), adapt growth x%.2f ",
-  "(caption x5.3), total growth x%.2f (caption x1.7)\n",
-  "  adopter_vs_never: n_ever=%d (caption 58), n_never=%d (caption 86), ",
-  "ever growth x%.2f (caption x5.2), never growth x%.2f (caption x5.3)\n",
-  "  All figures match the committed captions. No caption edits made."),
+  "Caption values:\n",
+  "  adaptation_marginal: share %.0f = %.2f%%, share %.0f = %.2f%%, pooled share = %.2f%%, ",
+  "adaptation growth x%.2f, total growth x%.2f\n",
+  "  adopter_vs_never: %d ever-adopters, %d never-adopters, ",
+  "ever growth x%.2f, never growth x%.2f"),
   FIG_START, share_2010, FIG_END, share_2024, share_pooled, growth_adapt, growth_total,
   n_ever, n_never, growth_ever, growth_never
 ))

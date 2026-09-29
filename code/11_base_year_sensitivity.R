@@ -151,9 +151,10 @@ write_tex_float <- function(out_path, caption_title, label,
 # crossprod(IF)/n^2, MASS::ginv fallback with message). Works for ANY dynamic
 # aggregation (min_e = -5 or min_e = -Inf) since it filters on agg_d$egt < 0.
 # ==============================================================================
-compute_pretrend_test <- function(agg_d, gt_obj = NULL) {
+compute_pretrend_test <- function(agg_d, gt_obj = NULL, antic = 0L) {
   keep    <- which(!is.na(agg_d$se.egt) & agg_d$se.egt > 1e-10)
-  pre_pos <- which(agg_d$egt[keep] < 0)
+  # Under anticipation = k, the cells e = -k..-1 are treated cells, not leads.
+  pre_pos <- which(agg_d$egt[keep] < -antic)
   if (length(pre_pos) == 0)
     return(list(stat = NA_real_, pval = NA_real_, df = 0L,
                 W_did = NA_real_, Wpval_did = NA_real_))
@@ -572,15 +573,17 @@ message("Saved: ", file.path(dir_figs_by, "fig_pretrend_cells_by_cohort.png"))
 
 message("\n=== Figure 2: full-window event study, log_commits & share_adapt ===\n")
 
+# Figure labels: the outcome labels carry LaTeX escapes (\\%) meant for the tables.
+fig_lab <- function(x) gsub("\\\\", "", x)
 dyn_full <- bind_rows(
   data.frame(
-    outcome    = outcomes[[1]]$label,
+    outcome    = fig_lab(outcomes[[1]]$label),
     event_time = aI_cache[["log_commits"]]$egt,
     ATT        = aI_cache[["log_commits"]]$att.egt,
     SE         = aI_cache[["log_commits"]]$se.egt
   ),
   data.frame(
-    outcome    = outcomes[[2]]$label,
+    outcome    = fig_lab(outcomes[[2]]$label),
     event_time = aI_cache[["share_adapt"]]$egt,
     ATT        = aI_cache[["share_adapt"]]$att.egt,
     SE         = aI_cache[["share_adapt"]]$se.egt
@@ -588,8 +591,8 @@ dyn_full <- bind_rows(
 ) %>%
   mutate(Lower = ATT - 1.96 * SE, Upper = ATT + 1.96 * SE)
 
-palette_full <- c(setNames(outcomes[[1]]$color, outcomes[[1]]$label),
-                  setNames(outcomes[[2]]$color, outcomes[[2]]$label))
+palette_full <- c(setNames(outcomes[[1]]$color, fig_lab(outcomes[[1]]$label)),
+                  setNames(outcomes[[2]]$color, fig_lab(outcomes[[2]]$label)))
 
 p_full <- ggplot(dyn_full,
                  aes(x = event_time, y = ATT, colour = outcome, shape = outcome,
@@ -639,8 +642,8 @@ build_sensitivity_row <- function(label, data, yname, antic = 0L,
   gt_bs <- fit_gt(data, yname, bstrap = TRUE, antic = antic, biters = 999L)
   agg_s <- aggte(gt_bs, type = "simple", na.rm = TRUE)
 
-  pt5 <- compute_pretrend_test(a5, gt_an)
-  ptI <- compute_pretrend_test(aI, gt_an)
+  pt5 <- compute_pretrend_test(a5, gt_an, antic)
+  ptI <- compute_pretrend_test(aI, gt_an, antic)
 
   att <- agg_s$overall.att
   se  <- agg_s$overall.se
