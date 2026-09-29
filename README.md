@@ -202,7 +202,7 @@ Processed data files (`data/processed/`): `simple_panel_wgi.csv` (estimation pan
 
 ## List of tables and figures
 
-Numbers refer to the paper as compiled on 29 September 2026 (Appendix A: model and descriptive appendices; Appendix B: supplementary robustness exhibits). All files are in `output/`.
+Numbers refer to the paper as compiled on 29 September 2026 (Appendix A: model; Appendix B: data; Appendix C: supplementary estimation results). All files are in `output/`.
 
 | Exhibit | Location | File in `output/` | Produced by |
 |---|---|---|---|
@@ -237,65 +237,65 @@ Numbers refer to the paper as compiled on 29 September 2026 (Appendix A: model a
 | Table A.1 | Appendix | `tables/model_tests/lemma2_size.tex` | `code/10_model_tests.R` |
 | Figure A.1 | Appendix | `figures/model_tests/fig_lemma2_size.png` | `code/10_model_tests.R` |
 | Table A.2 | Appendix | `tables/model_tests/alpha_half.tex` | `code/10_model_tests.R` |
-| Figure A.2 | Appendix | `figures/group/adopter_vs_never.pdf` | `code/12_group_figures.R` |
-| Table A.3 | Appendix | `tables/stats_des.tex` | `code/02_descriptive_stats.R` |
-| Figure A.3 | Appendix | `figures/top_donors.png` | `code/02_descriptive_stats.R` |
-| Figure A.4 | Appendix | `figures/recipient_map.png` | `code/02_descriptive_stats.R` |
-| Figure A.5 | Appendix | `figures/nap_status_map.png` | `code/02_descriptive_stats.R` |
-| Table A.4 | Appendix | `tables/nap_cohorts.tex` | `code/03_main_results.R` |
-| Table A.5 | Appendix | `tables/balance_adopters.tex` | `code/02_descriptive_stats.R` |
-| Table A.6 | Appendix | `tables/cohort_battery/cohort_contributions.tex` | `code/13_cohort_anticipation.R` |
-| Table A.7 | Appendix | `tables/anticipation/cohort_redating_crosstab.tex` | `code/13_cohort_anticipation.R` |
-| Table A.8 | Appendix | `tables/cohort_battery/att_cohort_battery.tex` | `code/13_cohort_anticipation.R` |
-| Table A.9 | Appendix | `tables/cohort_battery/listwise_losses_13.tex` | `code/13_cohort_anticipation.R` |
-| Table A.10 | Appendix | `tables/heterogeneity/listwise_losses.tex` | `code/05_heterogeneity.R` |
-| Table A.11 | Appendix | `tables/napa/prior_napa_ldc_crosstab.tex` | `code/14_hazard_napa.R` |
-| Table A.12 | Appendix | `tables/scope/flow_type_shares.tex` | `code/01_prepare_data.R` |
-| Table A.13 | Appendix | `tables/scope/sample_funnel.tex` | `code/01_prepare_data.R` |
-| Table A.14 | Appendix | `tables/scope/regional_exclusion.tex` | `code/01_prepare_data.R` |
-| Table A.15 | Appendix | `tables/dcdh/att_dcdh.tex` | `code/04_robustness.R` |
-| Figure A.6 | Appendix | `figures/dcdh/did_dcdh_es.png` | `code/04_robustness.R` |
-| Table A.16 | Appendix | `tables/bacon/bacon_decomp.tex` | `code/04_robustness.R` |
-| Figure A.7 | Appendix | `figures/bacon/bacon_scatter.png` | `code/04_robustness.R` |
-| Table A.17 | Appendix | `tables/remarking/att_remarking_counts.tex` | `code/09_remarking_decomposition.R` |
-| Table A.18 | Appendix | `tables/remarking/att_remarking_exclusions.tex` | `code/09_remarking_decomposition.R` |
-| Table A.19 | Appendix | `tables/remarking/tab_remarking_sectors.tex` | `code/09_remarking_decomposition.R` |
-| Figure A.8 | Appendix | `figures/remarking/fig_remarking_sectors.png` | `code/09_remarking_decomposition.R` |
-| Table A.20 | Appendix | `tables/remarking/remarking_flag_shares_by_year.tex` | `code/09_remarking_decomposition.R` |
-| Table A.21 | Appendix | `tables/remarking/remarking_flag_shares_by_group.tex` | `code/09_remarking_decomposition.R` |
-| Table A.22 | Appendix | `tables/remarking/att_remarking_exclusions_regex_comparison.tex` | `code/09_remarking_decomposition.R` |
-| Figure B.1 | Appendix | `figures/cumulative_nap_adoption.png` | `code/02_descriptive_stats.R` |
-| Figure B.2 | Appendix | `figures/principal_share/fig_within_share_es.png` | `code/07_principal_and_share.R` |
-| Figure B.3 | Appendix | `figures/principal_share/fig_share_reconciliation.png` | `code/07_principal_and_share.R` |
-| Figure B.4 | Appendix | `figures/cohorts_dropped/did_combined_cohort_wgi.png` | `code/03_main_results.R` |
-| Figure B.5 | Appendix | `figures/placebo/did_placebo_es.png` | `code/04_robustness.R` |
-| Figure B.6 | Appendix | `figures/mitigation/did_mitigation_es.png` | `code/04_robustness.R` |
-| Table B.1 | Appendix | `tables/hazard/nap_timing_vs_emdat_hazard.tex` | `code/14_hazard_napa.R` (needs EM-DAT) |
-| Table B.2 | Appendix | `tables/hazard/nap_timing_vs_humanitarian_aid.tex` | `code/14_hazard_napa.R` |
-| Table B.3 | Appendix | `tables/hazard/att_hazard_controls.tex` | `code/14_hazard_napa.R` (needs EM-DAT) |
-| Table B.4 | Appendix | `tables/napa/att_napa_falsification.tex` | `code/14_hazard_napa.R` |
-| Table B.5 | Appendix | `tables/napa/att_prior_napa_split.tex` | `code/14_hazard_napa.R` |
-| Figure B.7 | Appendix | `figures/randomization/fig_ri_distributions.png` | `code/08_randomization_inference.R` |
-| Table B.6 | Appendix | `tables/cohorts_dropped/honestdid_prepriods.tex` | `code/04_robustness.R` |
-| Table B.7 | Appendix | `tables/cohorts_dropped/honestdid_sd.tex` | `code/04_robustness.R` |
-| Table B.8 | Appendix | `tables/base_year/pretrend_cells_2021.tex` | `code/11_base_year_sensitivity.R` |
-| Figure B.8 | Appendix | `figures/base_year/fig_pretrend_cells_by_cohort.png` | `code/11_base_year_sensitivity.R` |
-| Figure B.9 | Appendix | `figures/base_year/fig_es_full_window.png` | `code/11_base_year_sensitivity.R` |
-| Figure B.10 | Appendix | `figures/notyettreated/did_notyettreated_es.png` | `code/04_robustness.R` |
-| Figure B.11 | Appendix | `figures/cohorts_retained/did_combined_cohort_wgi.png` | `code/04_robustness.R` |
-| Table B.9 | Appendix | `tables/balanced_panel/att_combined_wide.tex` | `code/04_robustness.R` |
-| Table B.10 | Appendix | `tables/panel_2010/att_combined_wide.tex` | `code/04_robustness.R` |
-| Table B.11 | Appendix | `tables/principal_share/principal_retained.tex` | `code/07_principal_and_share.R` |
-| Table B.12 | Appendix | `tables/cohort_battery/att_drop2024.tex` | `code/13_cohort_anticipation.R` |
-| Table B.13 | Appendix | `tables/cohort_battery/att_balance.tex` | `code/13_cohort_anticipation.R` |
-| Table B.14 | Appendix | `tables/cohort_battery/att_2x2.tex` | `code/13_cohort_anticipation.R` |
-| Table B.15 | Appendix | `tables/cohort_battery/att_conditioning.tex` | `code/13_cohort_anticipation.R` |
-| Table B.16 | Appendix | `tables/anticipation/att_placebo_ladder.tex` | `code/13_cohort_anticipation.R` |
-| Table B.17 | Appendix | `tables/heterogeneity/donor_type/zero_shares.tex` | `code/05_heterogeneity.R` |
-| Figure B.12 | Appendix | `figures/heterogeneity/donor_type/did_donor_type_es.png` | `code/05_heterogeneity.R` |
-| Figure B.13 | Appendix | `figures/heterogeneity/governance/did_governance_es.png` | `code/05_heterogeneity.R` |
-| Figure B.14 | Appendix | `figures/heterogeneity/ldc/did_ldc_es.png` | `code/05_heterogeneity.R` |
-| Figure B.15 | Appendix | `figures/heterogeneity/income_group/did_income_es.png` | `code/05_heterogeneity.R` |
+| Table B.1 | Appendix | `tables/scope/flow_type_shares.tex` | `code/01_prepare_data.R` |
+| Table B.2 | Appendix | `tables/scope/sample_funnel.tex` | `code/01_prepare_data.R` |
+| Table B.3 | Appendix | `tables/scope/regional_exclusion.tex` | `code/01_prepare_data.R` |
+| Figure B.1 | Appendix | `figures/nap_status_map.png` | `code/02_descriptive_stats.R` |
+| Table B.4 | Appendix | `tables/nap_cohorts.tex` | `code/03_main_results.R` |
+| Figure B.2 | Appendix | `figures/cumulative_nap_adoption.png` | `code/02_descriptive_stats.R` |
+| Table B.5 | Appendix | `tables/balance_adopters.tex` | `code/02_descriptive_stats.R` |
+| Figure B.3 | Appendix | `figures/group/adopter_vs_never.pdf` | `code/12_group_figures.R` |
+| Table B.6 | Appendix | `tables/stats_des.tex` | `code/02_descriptive_stats.R` |
+| Figure B.4 | Appendix | `figures/top_donors.png` | `code/02_descriptive_stats.R` |
+| Figure B.5 | Appendix | `figures/recipient_map.png` | `code/02_descriptive_stats.R` |
+| Table C.1 | Appendix | `tables/balanced_panel/att_combined_wide.tex` | `code/04_robustness.R` |
+| Table C.2 | Appendix | `tables/panel_2010/att_combined_wide.tex` | `code/04_robustness.R` |
+| Figure C.1 | Appendix | `figures/principal_share/fig_within_share_es.png` | `code/07_principal_and_share.R` |
+| Figure C.2 | Appendix | `figures/principal_share/fig_share_reconciliation.png` | `code/07_principal_and_share.R` |
+| Figure C.3 | Appendix | `figures/cohorts_dropped/did_combined_cohort_wgi.png` | `code/03_main_results.R` |
+| Table C.3 | Appendix | `tables/cohort_battery/cohort_contributions.tex` | `code/13_cohort_anticipation.R` |
+| Table C.4 | Appendix | `tables/anticipation/cohort_redating_crosstab.tex` | `code/13_cohort_anticipation.R` |
+| Table C.5 | Appendix | `tables/cohort_battery/att_cohort_battery.tex` | `code/13_cohort_anticipation.R` |
+| Table C.6 | Appendix | `tables/cohort_battery/listwise_losses_13.tex` | `code/13_cohort_anticipation.R` |
+| Table C.7 | Appendix | `tables/heterogeneity/listwise_losses.tex` | `code/05_heterogeneity.R` |
+| Figure C.4 | Appendix | `figures/placebo/did_placebo_es.png` | `code/04_robustness.R` |
+| Figure C.5 | Appendix | `figures/mitigation/did_mitigation_es.png` | `code/04_robustness.R` |
+| Table C.8 | Appendix | `tables/hazard/nap_timing_vs_emdat_hazard.tex` | `code/14_hazard_napa.R` (needs EM-DAT) |
+| Table C.9 | Appendix | `tables/hazard/nap_timing_vs_humanitarian_aid.tex` | `code/14_hazard_napa.R` |
+| Table C.10 | Appendix | `tables/hazard/att_hazard_controls.tex` | `code/14_hazard_napa.R` (needs EM-DAT) |
+| Table C.11 | Appendix | `tables/napa/att_napa_falsification.tex` | `code/14_hazard_napa.R` |
+| Table C.12 | Appendix | `tables/napa/att_prior_napa_split.tex` | `code/14_hazard_napa.R` |
+| Table C.13 | Appendix | `tables/napa/prior_napa_ldc_crosstab.tex` | `code/14_hazard_napa.R` |
+| Figure C.6 | Appendix | `figures/randomization/fig_ri_distributions.png` | `code/08_randomization_inference.R` |
+| Table C.14 | Appendix | `tables/cohorts_dropped/honestdid_prepriods.tex` | `code/04_robustness.R` |
+| Table C.15 | Appendix | `tables/cohorts_dropped/honestdid_sd.tex` | `code/04_robustness.R` |
+| Table C.16 | Appendix | `tables/base_year/pretrend_cells_2021.tex` | `code/11_base_year_sensitivity.R` |
+| Figure C.7 | Appendix | `figures/base_year/fig_pretrend_cells_by_cohort.png` | `code/11_base_year_sensitivity.R` |
+| Figure C.8 | Appendix | `figures/base_year/fig_es_full_window.png` | `code/11_base_year_sensitivity.R` |
+| Figure C.9 | Appendix | `figures/notyettreated/did_notyettreated_es.png` | `code/04_robustness.R` |
+| Figure C.10 | Appendix | `figures/cohorts_retained/did_combined_cohort_wgi.png` | `code/04_robustness.R` |
+| Table C.17 | Appendix | `tables/dcdh/att_dcdh.tex` | `code/04_robustness.R` |
+| Figure C.11 | Appendix | `figures/dcdh/did_dcdh_es.png` | `code/04_robustness.R` |
+| Table C.18 | Appendix | `tables/bacon/bacon_decomp.tex` | `code/04_robustness.R` |
+| Figure C.12 | Appendix | `figures/bacon/bacon_scatter.png` | `code/04_robustness.R` |
+| Table C.19 | Appendix | `tables/cohort_battery/att_drop2024.tex` | `code/13_cohort_anticipation.R` |
+| Table C.20 | Appendix | `tables/cohort_battery/att_balance.tex` | `code/13_cohort_anticipation.R` |
+| Table C.21 | Appendix | `tables/cohort_battery/att_2x2.tex` | `code/13_cohort_anticipation.R` |
+| Table C.22 | Appendix | `tables/cohort_battery/att_conditioning.tex` | `code/13_cohort_anticipation.R` |
+| Table C.23 | Appendix | `tables/anticipation/att_placebo_ladder.tex` | `code/13_cohort_anticipation.R` |
+| Table C.24 | Appendix | `tables/principal_share/principal_retained.tex` | `code/07_principal_and_share.R` |
+| Table C.25 | Appendix | `tables/remarking/att_remarking_counts.tex` | `code/09_remarking_decomposition.R` |
+| Table C.26 | Appendix | `tables/remarking/att_remarking_exclusions.tex` | `code/09_remarking_decomposition.R` |
+| Table C.27 | Appendix | `tables/remarking/tab_remarking_sectors.tex` | `code/09_remarking_decomposition.R` |
+| Figure C.13 | Appendix | `figures/remarking/fig_remarking_sectors.png` | `code/09_remarking_decomposition.R` |
+| Table C.28 | Appendix | `tables/remarking/remarking_flag_shares_by_year.tex` | `code/09_remarking_decomposition.R` |
+| Table C.29 | Appendix | `tables/remarking/remarking_flag_shares_by_group.tex` | `code/09_remarking_decomposition.R` |
+| Table C.30 | Appendix | `tables/remarking/att_remarking_exclusions_regex_comparison.tex` | `code/09_remarking_decomposition.R` |
+| Table C.31 | Appendix | `tables/heterogeneity/donor_type/zero_shares.tex` | `code/05_heterogeneity.R` |
+| Figure C.14 | Appendix | `figures/heterogeneity/donor_type/did_donor_type_es.png` | `code/05_heterogeneity.R` |
+| Figure C.15 | Appendix | `figures/heterogeneity/governance/did_governance_es.png` | `code/05_heterogeneity.R` |
+| Figure C.16 | Appendix | `figures/heterogeneity/ldc/did_ldc_es.png` | `code/05_heterogeneity.R` |
+| Figure C.17 | Appendix | `figures/heterogeneity/income_group/did_income_es.png` | `code/05_heterogeneity.R` |
 
 Table 1 (mapping of the IPCC AR6 risk components onto aid-allocation roles) is typed directly in the manuscript and is not produced by code. Every other table and figure is listed above.
 
