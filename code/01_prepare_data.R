@@ -71,8 +71,22 @@ dir.create(here("output", "figures"),      recursive = TRUE, showWarnings = FALS
 dir.create(here("output", "tables"),       recursive = TRUE, showWarnings = FALSE)
 
 ##############################################################################
-# §0c. HELPER: LaTeX-escape strings for column headers / table text
+# §0c. HELPERS
 ##############################################################################
+
+#' log1p() of a CRS sum, stopping if any value is negative
+#'
+#' CRS records can carry negative amounts; a negative recipient-year sum would
+#' give a meaningless (or NaN) log, so it stops the stage instead.
+#' @param x numeric vector of summed CRS amounts (USD millions)
+#' @return log1p(x)
+log1p_crs <- function(x) {
+  if (any(x < 0, na.rm = TRUE))
+    stop("Negative CRS sum passed to log1p(): ", deparse(substitute(x)))
+  log1p(x)
+}
+
+# LaTeX-escape strings for column headers / table text
 
 esc_header <- function(x) {
   x <- gsub("%",  "\\\\%",  x)
@@ -89,9 +103,7 @@ esc_tex <- function(x) {
 
 ##############################################################################
 # §0c-2. HELPER: RecipientName -> ISO3, with the two custom matches this
-# project needs. Consolidates what used to be six separate
-# `countrycode(...) + if_else(RecipientName == "Kosovo", ...)` call sites
-# into one function.
+# project needs, in one function used by every name -> ISO3 conversion.
 #   - Kosovo: not in ISO 3166-1, CRS reports it as "Kosovo" -- XKX is the
 #     provisional user-assigned code this project has always used for it.
 #   - "Micronesia" (CRS RecipientCode 860): countrycode() cannot resolve this
@@ -114,17 +126,30 @@ recipient_iso_from_name <- function(recipient_name) {
   iso
 }
 
+#' Left join on ISO3 keys that must not add or duplicate rows
+#'
+#' NA keys never match (a failed ISO3 lookup must not pick up another failed
+#' lookup's data), and the join must leave the row count unchanged (the
+#' right-hand table is unique on the key).
+#' @param x,y data frames; `by` columns identify one row of `y`
+#' @param by character vector of join keys
+#' @return `left_join(x, y)` with the row count of `x`
+left_join_iso <- function(x, y, by) {
+  out <- left_join(x, y, by = by, na_matches = "never")
+  if (nrow(out) != nrow(x))
+    stop(sprintf("ISO3 join on (%s) changed the row count: %d -> %d",
+                 paste(by, collapse = ", "), nrow(x), nrow(out)))
+  out
+}
+
 ##############################################################################
 # §0c-3. RECIPIENT CODES EXCLUDED AS REGIONAL/UNSPECIFIED (single definition;
 # defined once here and referenced everywhere).
-# 2026-09-15: removed code 860 ("Micronesia"). Verified against the
-# CRS RecipientCode/RecipientName crosswalk (§0c-2 above): 860 is the
-# Federated States of Micronesia, a genuine country-level recipient, distinct
-# from 1034 ("Micronesia, regional"), which correctly stays in this list. 860
-# was previously misclassified as regional and its adaptation-marked
-# commitments ($92.0M, 0.02% of the 2009-2024 total per the prior
-# regional_exclusion.tex) were dropped from the panel entirely; FSM now
-# enters the panel as recipient 145 (see §22's effect-on-panel message below).
+# Code 860 is not in this list: in the CRS RecipientCode/RecipientName
+# crosswalk (§0c-2 above) it is the Federated States of Micronesia, a
+# country-level recipient, distinct from 1034 ("Micronesia, regional"), which
+# stays in the list. FSM enters the panel as a recipient (see §22's
+# effect-on-panel message below).
 ##############################################################################
 
 regionalflows <- c(88, 89, 189, 237, 289, 298, 389, 489, 498, 589, 619,
@@ -221,7 +246,7 @@ process_rio_adaptation <- function(data_list) {
         .groups = "drop"
       )
   })
-  processed_list <- processed_list[!sapply(processed_list, is.null)]
+  processed_list <- processed_list[!vapply(processed_list, is.null, logical(1L))]
   return(processed_list)
 }
 
@@ -257,11 +282,13 @@ rio_data_adaptation_list <- lapply(rio_data_adaptation_list, function(df) {
 
 rio_data_adaptation <- bind_rows(rio_data_adaptation_list)
 
-# Sort for reproducibility
-df <- rio_data_adaptation[order(rio_data_adaptation$DonorType,
-                                rio_data_adaptation$DonorName), ]
-df_unique <- unique(df[, c("DonorType", "DonorName")])
-df_unique <- df_unique[order(df_unique$DonorType, df_unique$DonorName), ]
+# Sort for reproducibility, by the ICU "en_US" collation whatever the session
+# locale (the order of the published donor list; see
+# code/functions/make_country_id.R), so donor_list.csv is the same on every
+# machine.
+df_unique <- unique(rio_data_adaptation[, c("DonorType", "DonorName")])
+df_unique <- df_unique[order(stringi::stri_rank(df_unique$DonorType, locale = "en_US"),
+                             stringi::stri_rank(df_unique$DonorName, locale = "en_US")), ]
 
 # Persist the donor list so 02_descriptive_stats.R (list.tex) never has to
 # touch raw CRS.
@@ -324,14 +351,19 @@ message("Wrote: data/processed/donor_recipient_year_adaptation.csv  (",
 # regionalflows and the ISO3 helper are both defined once in §0c-2/§0c-3.
 ##############################################################################
 
+# Panel window: 2009 (first year of Rio adaptation-marker reporting) to the
+# last CRS year. Explicit, not inherited from whichever years carry a marker.
+PANEL_START <- 2009L
 adaptation_aid <- rio_data_adaptation %>%
-  filter(!RecipientCode %in% regionalflows) %>%
+  filter(!RecipientCode %in% regionalflows, Year >= PANEL_START) %>%
   group_by(RecipientName, Year, DonorType) %>%
   summarise(
     Commitments  = sum(USD_Commitment_Defl,  na.rm = TRUE),
     Disbursements = sum(USD_Disbursement_Defl, na.rm = TRUE),
     .groups = "drop"
   )
+stopifnot(min(adaptation_aid$Year) == PANEL_START,
+          max(adaptation_aid$Year) == max(years))
 
 adaptation_aid$RecipientISO <- recipient_iso_from_name(adaptation_aid$RecipientName)
 
@@ -385,6 +417,9 @@ read_nap_list <- function() {
   bad <- nap$Country[is.na(parsed) & nzchar(nap$`Date Posted`)]
   if (length(bad)) stop("Unparseable NAP date in nap_information.csv: ", paste(bad, collapse = ", "))
   nap[, RecipientISO := countrycode(Country, origin = "country.name", destination = "iso3c")]
+  # A name countrycode cannot match would silently make an adopter
+  # never-treated (the Paraguay bug class); a duplicate would double its rows.
+  stopifnot(!anyNA(nap$RecipientISO), !anyDuplicated(nap$RecipientISO))
   nap
 }
 
@@ -392,7 +427,7 @@ nap_data <- read_nap_list()
 # ISO3 is derived here, before the merge, so the NAP fields are also filled on
 # the zero-filled recipient-years added by expand.grid() in §4.
 adaptation_aid_panel$RecipientISO <- recipient_iso_from_name(adaptation_aid_panel$RecipientName)
-adaptation_aid_panel <- left_join(adaptation_aid_panel, nap_data, by = "RecipientISO")
+adaptation_aid_panel <- left_join_iso(adaptation_aid_panel, nap_data, by = "RecipientISO")
 
 ##############################################################################
 # §6. DATE VARIABLES & TREATMENT TIMING
@@ -439,8 +474,8 @@ gdp_clean <- gdp_data %>%
   filter(!is.na(GDP))
 
 adaptation_aid_panel <- adaptation_aid_panel %>%
-  left_join(pop_clean, by = c("RecipientISO", "Year")) %>%
-  left_join(gdp_clean, by = c("RecipientISO", "Year")) %>%
+  left_join_iso(pop_clean, by = c("RecipientISO", "Year")) %>%
+  left_join_iso(gdp_clean, by = c("RecipientISO", "Year")) %>%
   mutate(
     Commitments_pc  = if_else(Population > 0, Commitments  / Population, NA_real_),
     Disbursements_pc = if_else(Population > 0, Disbursements / Population, NA_real_)
@@ -465,7 +500,7 @@ wgi_ge_clean <- wgi_ge_wdi %>%
   filter(!is.na(ge_est))
 
 adaptation_aid_panel <- adaptation_aid_panel %>%
-  left_join(wgi_ge_clean, by = c("RecipientISO", "Year"))
+  left_join_iso(wgi_ge_clean, by = c("RecipientISO", "Year"))
 
 ##############################################################################
 # §9. IMF GDP ADJUSTMENTS
@@ -568,10 +603,9 @@ if (!all(c("recipient_name", "PVCCI") %in% names(df_pvcci))) {
   stop("PVCCI.csv must contain columns 'recipient_name' and 'PVCCI'.")
 }
 
-# recipient_iso_from_name() (this site previously duplicated a Kosovo-only countrycode() call instead of using the
-# shared helper -- §0c-2 -- which also carries the FSM custom match; PVCCI.csv
-# does not contain a Micronesia/FSM row, so FSM correctly gets an honest NA
-# PVCCI value either way, but the merge now goes through one canonical path).
+# recipient_iso_from_name() (§0c-2), the shared helper that also carries the
+# FSM custom match; PVCCI.csv has no Micronesia/FSM row, so FSM gets an NA
+# PVCCI value.
 pvcci_iso <- df_pvcci %>%
   mutate(recipientiso = recipient_iso_from_name(recipient_name)) %>%
   filter(!is.na(recipientiso) & !is.na(PVCCI)) %>%
@@ -586,7 +620,7 @@ adaptation_aid_panel <- adaptation_aid_panel %>%
       RecipientISO
     )
   ) %>%
-  left_join(pvcci_iso, by = c("RecipientISO" = "recipientiso")) %>%
+  left_join_iso(pvcci_iso, by = c("RecipientISO" = "recipientiso")) %>%
   mutate(PVCCI_std = if (all(is.na(PVCCI))) NA_real_ else as.numeric(scale(PVCCI)))
 
 vul_var <- "PVCCI_std"
@@ -675,15 +709,21 @@ donor_commits <- data %>%
     commits_dac   = if ("Bilateral_members"   %in% names(.)) Bilateral_members   else 0,
     commits_multi = if ("Multilateral_donors" %in% names(.)) Multilateral_donors else 0,
     commits_other = if ("Other"               %in% names(.)) Other               else 0,
-    log_commits_dac   = log1p(commits_dac),
-    log_commits_multi = log1p(commits_multi),
-    log_commits_other = log1p(commits_other)
+    log_commits_dac   = log1p_crs(commits_dac),
+    log_commits_multi = log1p_crs(commits_multi),
+    log_commits_other = log1p_crs(commits_other)
   ) %>%
   select(recipient_name, year,
          commits_dac, commits_multi, commits_other,
          log_commits_dac, log_commits_multi, log_commits_other)
 
-vars_to_include <- names(data)[!(names(data) %in% c("donor_type", "lcommitments_pc"))]
+# Donor-type-specific columns are not carried into the recipient-year panel:
+# collapsing them with first() would keep one donor type's value. No stage
+# reads them from simple_panel_wgi.csv (they stay in the donor-type panel).
+donor_type_cols <- c("donor_type", "lcommitments_pc", "commitments_pc",
+                     "disbursements_pc", "phi_capacity", "phi_vulnerability",
+                     "c_score", "v_score", "c_oriented")
+vars_to_include <- names(data)[!(names(data) %in% donor_type_cols)]
 df_keep <- data %>% select(any_of(vars_to_include))
 
 aggregated <- df_keep %>%
@@ -691,8 +731,8 @@ aggregated <- df_keep %>%
   summarise(
     commitments    = sum(commitments,  na.rm = TRUE),
     disbursements  = sum(disbursements, na.rm = TRUE),
-    lcommitments   = log1p(commitments),
-    ldisbursements = log1p(disbursements),
+    lcommitments   = log1p_crs(commitments),
+    ldisbursements = log1p_crs(disbursements),
     across(-c(commitments, disbursements, lcommitments, ldisbursements), first),
     .groups = "drop"
   )
@@ -725,7 +765,7 @@ aggregated <- aggregated %>%
   ungroup()
 
 setDT(aggregated)
-aggregated[, log_commits := log1p(commitments)]
+aggregated[, log_commits := log1p_crs(commitments)]
 aggregated[, year_factor      := as.factor(year)]
 aggregated[, recipient_factor := as.factor(recipient_iso)]
 
@@ -739,7 +779,7 @@ if (length(missing_cols) > 0) {
   stop(paste("Missing columns:", paste(missing_cols, collapse = ", ")))
 }
 
-date_cols <- names(aggregated)[sapply(aggregated, function(x) inherits(x, "IDate"))]
+date_cols <- names(aggregated)[vapply(aggregated, function(x) inherits(x, "IDate"), logical(1L))]
 aggregated[, (date_cols) := lapply(.SD, as.Date),      .SDcols = date_cols]
 aggregated[, (date_cols) := lapply(.SD, as.character), .SDcols = date_cols]
 
@@ -787,7 +827,7 @@ wdi_tidy <- wdi_raw %>%
 
 aggregated[, iso3c := recipient_iso]
 aggregated <- aggregated %>%
-  left_join(wdi_tidy, by = c("iso3c", "year"))
+  left_join_iso(wdi_tidy, by = c("iso3c", "year"))
 
 # --- PVCCI merge ---------------------------------------------------------------
 # The panel already carries a correctly ISO3-merged `pvcci` column: §10a above
@@ -841,8 +881,8 @@ message(sprintf("Total missing cells: %d (%.1f%%)",
 
 miss_by_col <- data.frame(
   variable    = names(z_data),
-  n_missing   = sapply(z_data, function(x) sum(is.na(x))),
-  pct_missing = round(100 * sapply(z_data, function(x) mean(is.na(x))), 1),
+  n_missing   = vapply(z_data, function(x) sum(is.na(x)), integer(1L)),
+  pct_missing = round(100 * vapply(z_data, function(x) mean(is.na(x)), numeric(1L)), 1),
   stringsAsFactors = FALSE
 ) %>%
   arrange(desc(n_missing))
@@ -899,6 +939,7 @@ message("=== END OF MISSING VALUE AUDIT ===\n")
 ##############################################################################
 
 n_before   <- nrow(aggregated)
+iso_before_listwise <- unique(aggregated$recipient_iso)  # for the NAP reconciliation (§19)
 aggregated <- aggregated[!is.na(ge_est) & !is.na(population)]
 n_after    <- nrow(aggregated)
 message(sprintf(
@@ -926,9 +967,8 @@ stopifnot(!anyNA(aggregated$WB_region))  # the RI stratified design (08) needs e
 
 ##############################################################################
 # §17. DERIVED VARIABLES
-# 2026-09-15: PVCCI_GE/PVCCI_sq/PVCCI_th now read the ISO3-merged
-# `pvcci` column (57/144 coverage) instead of the deleted name-based `PVCCI`
-# column (51/144 coverage) -- see the §13 comment above.
+# PVCCI_GE/PVCCI_sq/PVCCI_th read the ISO3-merged `pvcci` column (a
+# name-based merge would cover fewer recipients) -- see the §13 comment above.
 ##############################################################################
 
 aggregated[, `:=`(
@@ -973,11 +1013,13 @@ aggregated <- aggregated %>%
   mutate(
     commitments_all       = if_else(is.na(commitments_all), 0, commitments_all),
     commitments_nonadapt  = pmax(commitments_all - commitments, 0),
-    lcommitments_all      = log1p(commitments_all),
-    lcommitments_nonadapt = log1p(commitments_nonadapt)
+    lcommitments_all      = log1p_crs(commitments_all),
+    lcommitments_nonadapt = log1p_crs(commitments_nonadapt)
   )
 
-stopifnot(all(aggregated$commitments_all >= aggregated$commitments))
+# Tolerance: both sides are sums of the same deflated doubles, so an exact >=
+# could fail on summation order alone.
+stopifnot(all(aggregated$commitments_all >= aggregated$commitments - 1e-9))
 
 # Principal-only adaptation finance (Rio marker = 2)
 principal_ry <- lapply(CRS, function(df) {
@@ -997,7 +1039,7 @@ aggregated <- aggregated %>%
   left_join(principal_ry, by = c("recipient_name", "year")) %>%
   mutate(
     commitments_principal  = if_else(is.na(commitments_principal), 0, commitments_principal),
-    lcommitments_principal = log1p(commitments_principal)
+    lcommitments_principal = log1p_crs(commitments_principal)
   )
 
 # Flow type: ODA / OOF / private. Aggregates BOTH commitments and
@@ -1033,9 +1075,9 @@ aggregated <- aggregated %>%
     commitments_oda      = if_else(is.na(commitments_oda),     0, commitments_oda),
     commitments_oof      = if_else(is.na(commitments_oof),     0, commitments_oof),
     commitments_private  = if_else(is.na(commitments_private), 0, commitments_private),
-    lcommitments_oda     = log1p(commitments_oda),
-    lcommitments_oof     = log1p(commitments_oof),
-    lcommitments_private = log1p(commitments_private),
+    lcommitments_oda     = log1p_crs(commitments_oda),
+    lcommitments_oof     = log1p_crs(commitments_oof),
+    lcommitments_private = log1p_crs(commitments_private),
     disbursements_oda     = if_else(is.na(disbursements_oda),     0, disbursements_oda),
     disbursements_oof     = if_else(is.na(disbursements_oof),     0, disbursements_oof),
     disbursements_private = if_else(is.na(disbursements_private), 0, disbursements_private)
@@ -1052,6 +1094,51 @@ aggregated[, global_adapt_t := NULL]
 ##############################################################################
 # §19. EXPORT simple_panel_wgi.csv
 ##############################################################################
+
+## --- NAP reconciliation: every NAP adopter whose first submission falls in
+## the panel window reaches the panel, or its absence has a stated reason.
+nap_first_year <- year(parse_date_time(nap_data$`Date Posted`, orders = c("dmy", "mdy", "ymd")))
+nap_in_window  <- nap_data$RecipientISO[!is.na(nap_first_year) &
+                                          nap_first_year >= PANEL_START &
+                                          nap_first_year <= max(years)]
+nap_missing <- setdiff(nap_in_window, unique(aggregated$recipient_iso))
+nap_reason  <- ifelse(!nap_missing %in% adaptation_aid$RecipientISO,
+                      "no adaptation-marked CRS commitment in the panel window",
+               ifelse(nap_missing %in% iso_before_listwise,
+                      "no recipient-year with both government effectiveness and population",
+                      NA_character_))
+message(sprintf("NAP reconciliation: %d of %d NAP adopters with a first submission in %d-%d are in the panel.",
+                length(nap_in_window) - length(nap_missing), length(nap_in_window),
+                PANEL_START, max(years)))
+if (length(nap_missing) > 0L)
+  message("  Not in the panel: ",
+          paste(sprintf("%s (%s): %s", nap_data$Country[match(nap_missing, nap_data$RecipientISO)],
+                        nap_missing, nap_reason), collapse = "; "))
+if (anyNA(nap_reason))
+  stop("NAP adopter(s) lost without a stated reason: ",
+       paste(nap_missing[is.na(nap_reason)], collapse = ", "))
+
+## --- Unbalanced panel: recipients entering after the window opens or leaving
+## the CRS (and so the DAC List of ODA recipients) before it closes.
+crs_span <- as.data.frame(crs_present_ry) %>%
+  filter(Year >= PANEL_START) %>%
+  group_by(RecipientName) %>%
+  summarise(crs_first = min(Year), crs_last = max(Year), .groups = "drop")
+panel_span <- as.data.frame(aggregated) %>%
+  group_by(recipient_name) %>%
+  summarise(first = min(year), last = max(year), n_years = n(), .groups = "drop") %>%
+  left_join(crs_span, by = c("recipient_name" = "RecipientName"))
+n_window <- max(years) - PANEL_START + 1L
+exits   <- panel_span %>% filter(crs_last < max(years)) %>% arrange(crs_last, recipient_name)
+entries <- panel_span %>% filter(crs_first > PANEL_START) %>% arrange(crs_first, recipient_name)
+message(sprintf("Recipients whose CRS records end before %d (left the DAC List): %d -- %s",
+                max(years), nrow(exits),
+                paste(sprintf("%s (last CRS year %d, out from %d)", exits$recipient_name,
+                              exits$crs_last, exits$crs_last + 1L), collapse = "; ")))
+message(sprintf("Recipients whose CRS records start after %d: %d -- %s",
+                PANEL_START, nrow(entries),
+                paste(sprintf("%s (enters %d; %d of %d panel years)", entries$recipient_name,
+                              entries$crs_first, entries$n_years, n_window), collapse = "; ")))
 
 write.csv(aggregated, here("data", "processed", "simple_panel_wgi.csv"),
           row.names = FALSE)
@@ -1101,7 +1188,7 @@ adaptation_aid_04$RecipientISO <- recipient_iso_from_name(adaptation_aid_04$Reci
 
 # Merge NAP data
 nap_data_04 <- read_nap_list()
-adaptation_aid_04 <- left_join(adaptation_aid_04, nap_data_04, by = "RecipientISO")
+adaptation_aid_04 <- left_join_iso(adaptation_aid_04, nap_data_04, by = "RecipientISO")
 
 # Add date and NAP year
 adaptation_aid_04 <- adaptation_aid_04 %>%
@@ -1268,10 +1355,10 @@ adaptation_panel_oda_only <- aggregated %>%
     commitments_all_flow_types   = commitments,
     disbursements_all_flow_types = disbursements,
     commitments    = commitments_oda,
-    lcommitments   = log1p(commitments_oda),
-    log_commits    = log1p(commitments_oda),
+    lcommitments   = log1p_crs(commitments_oda),
+    log_commits    = log1p_crs(commitments_oda),
     disbursements  = disbursements_oda,
-    ldisbursements = log1p(disbursements_oda)
+    ldisbursements = log1p_crs(disbursements_oda)
   ) %>%
   select(-any_of(oda_inconsistent_cols))
 write.csv(adaptation_panel_oda_only,
@@ -1327,7 +1414,9 @@ message("Wrote: output/tables/scope/regional_exclusion.tex")
 fsm_commit <- sum(rio_scope_window$USD_Commitment_Defl[rio_scope_window$RecipientCode == 860],
                   na.rm = TRUE)
 fsm_in_panel <- "FSM" %in% unique(adaptation_aid$RecipientISO)
-n_adaptation_aid_countries <- n_distinct(adaptation_aid$RecipientISO)
+n_adaptation_aid_countries <- n_distinct(adaptation_aid$RecipientISO, na.rm = TRUE)
+message(sprintf("Recipient names without an ISO3 code after mapping: %d",
+                sum(is.na(unique(adaptation_aid[c("RecipientName", "RecipientISO")])$RecipientISO))))
 message(sprintf(
   paste0("Code-860 (FSM) fix: recipient code 860 ('Micronesia' = Federated States of ",
         "Micronesia) is a genuine country, no longer excluded as regional. Its 2009-2024 ",
@@ -1344,12 +1433,14 @@ message(sprintf(
 n_regional_codes_used <- n_distinct(regional_excl_tab$RecipientCode)
 funnel <- data.frame(
   stage = c(
-    "Raw adaptation-marked commitments (Rio marker 1 or 2), 2009-2024, all recipient codes",
-    paste0("After dropping regional/unspecified recipient codes (regionalflows, n = ",
+    "Raw adaptation-marked commitments (Rio marker 1 or 2), 2009--2024, all recipient codes",
+    paste0("After dropping regional and unspecified recipient codes (",
            n_regional_codes_used, " codes with nonzero commitments, of ",
-           length(regionalflows), " defined)"),
-    "After ISO3 mapping (countrycode + Kosovo/FSM custom matches; drops any residual NA)",
-    "Recipient-year panel after listwise deletion on controls (ge\\_est, population) -- \\S15"
+           length(regionalflows), " excluded codes)"),
+    paste0("After mapping recipients to ISO3 country codes (Kosovo and the ",
+           "Federated States of Micronesia matched by hand)"),
+    paste0("Recipient-year panel after dropping years with missing controls ",
+           "(government effectiveness, population)")
   ),
   commitments_usd_m = c(
     total_pre_exclusion,

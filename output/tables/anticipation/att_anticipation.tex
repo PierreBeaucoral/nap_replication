@@ -2,24 +2,24 @@
 \centering
 \caption{Anticipation: pooled and dynamic ATTs allowing donors to respond before submission}
 \label{tab:att_anticipation}
-% latex table generated in R 4.6.0 by xtable 1.8-8 package
-% Tue Sep 29 12:09:24 2026
+% latex table generated in R 4.6.1 by xtable 1.8-8 package
+% Thu Oct  1 12:41:21 2026
 \begingroup\small
 \adjustbox{max width=\textwidth}{%
-\begin{tabular}{llllllllll}
+\begin{tabular}{lllllll}
   \toprule
-Specification & ATT & SE & $t$ & Pre-trend $p$ & $N$ & Recipients & Treated & ATT, $e \geq 0$ & Pre-trend leads \\ 
+Specification & ATT & SE & $t$ & \makecell{Pre-trend \\ $p$} & \makecell{ATT, \\ $e \geq 0$} & \makecell{Pre-trend \\ leads} \\ 
   \midrule
-Anticipation = 0 (baseline, headline specification) & 0.3036** & (0.1256) & 2.418 & 0.772 & 1,930 & 126 & 40 & 0.3064** (0.1300) & $-5 \leq e \leq -2$ (4) \\ 
-  Anticipation = 1 year & 0.1943 & (0.1768) & 1.099 & 0.947 & 1,930 & 126 & 40 & 0.1590 (0.1793) & $-6 \leq e \leq -3$ (4) \\ 
-  Anticipation = 2 years & 0.0732 & (0.1774) & 0.413 & 0.926 & 1,930 & 126 & 40 & -0.0176 (0.1722) & $-7 \leq e \leq -4$ (4) \\ 
+Anticipation = 0 (baseline) & 0.3036** & (0.1256) & 2.418 & 0.772 & 0.3064** (0.1300) & $-5 \leq e \leq -2$ (4) \\ 
+  Anticipation = 1 year & 0.1943 & (0.1768) & 1.099 & 0.947 & 0.1590 (0.1793) & $-6 \leq e \leq -3$ (4) \\ 
+  Anticipation = 2 years & 0.0732 & (0.1774) & 0.413 & 0.926 & -0.0176 (0.1722) & $-7 \leq e \leq -4$ (4) \\ 
    \bottomrule
 \end{tabular}
 }
 \endgroup
 \par\vspace{6pt}
-% latex table generated in R 4.6.0 by xtable 1.8-8 package
-% Tue Sep 29 12:09:24 2026
+% latex table generated in R 4.6.1 by xtable 1.8-8 package
+% Thu Oct  1 12:41:21 2026
 \begingroup\small
 \adjustbox{max width=\textwidth}{%
 \begin{tabular}{llllllll}
@@ -35,7 +35,7 @@ Anticipation = 0 years & 0.087 (0.189) & 0.130 (0.154) & --- & 0.446 (0.160) & 0
 \endgroup
 \par\vspace{4pt}
 \begin{minipage}{\linewidth}\footnotesize
-Notes: Upper panel: pooled ATT and the $e \geq 0$ average (see main text). Lower panel: dynamic ATTs by event time, SE in parentheses. \texttt{anticipation} $= k$ shifts the base period to $g-k-1$. $^{\dagger}$ marks event times treated as TREATED under that row's $k$, not leads. Anticipation-0 row is read from the stored headline fit. Unless noted: headline specification (CS\,(2021) DR, never-treated controls, WGI GE + log population, cohorts $\geq$ 5), multiplier-bootstrap SE (999 reps, seed 1242). Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients in each row's \emph{Pre-trend leads} window (analytical twin fit). * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Notes: Upper panel: pooled ATT and the $e \geq 0$ average (see main text). Lower panel: dynamic ATTs by event time, SE in parentheses. Allowing one (or two) years of anticipation shifts the base period to $g-2$ ($g-3$). $^{\dagger}$ marks event times treated as post-treatment under that row's anticipation, not as leads. The anticipation-0 row is the headline estimate (Table~\ref{tab:combined_wide_main}). Every row of the upper panel: 1,930 observations, 126 recipients, 40 treated. Unless noted: headline specification (CS\,(2021) DR, never-treated controls, WGI GE + log population, cohorts $\geq$ 5), multiplier-bootstrap SE (999 reps, seed 1242). Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients in each row's \emph{Pre-trend leads} window, from the analytical (non-bootstrap) fit of the same specification. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
 Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
 \end{minipage}
 \end{table}

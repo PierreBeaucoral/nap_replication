@@ -193,6 +193,17 @@ distrib <- adaptation_dtype_nz %>%
     .groups = "drop"
   )
 
+# Text number (Appendix B): the recipients in Table B.6's 2009 row and how many
+# of them record positive commitments that year.
+r2009 <- adaptation_aid %>%
+  filter(Year == 2009L) %>%
+  group_by(RecipientISO, RecipientName) %>%
+  summarise(commit = sum(Commitments, na.rm = TRUE), .groups = "drop") %>%
+  arrange(desc(commit))
+message(sprintf("2009 row of the summary-statistics table: %d recipients, %d with positive commitments -- %s",
+                n_distinct(r2009$RecipientISO), sum(r2009$commit > 0),
+                paste(sprintf("%s %.2f", r2009$RecipientName, r2009$commit), collapse = "; ")))
+
 summary_stats <- totals_n %>%
   left_join(distrib, by = "Year") %>%
   select(Year, Total_Commitments, Total_Disbursements, N_Recipients,
@@ -204,7 +215,7 @@ latex_table <- xtable(
   digits = c(0, 0, 2, 2, 0, 2, 2, 2)
 )
 
-# Fix 1 + Fix 2: all value columns are /1e3 → "(USD Bn)" not "(USD Mn)"
+# All value columns are /1e3, hence "(USD Bn)"
 colnames(latex_table) <- c(
   "Year",
   "Total Commitments (USD Bn)",
@@ -311,9 +322,8 @@ list_body_lines <- vapply(seq_len(nrow(df_unique_list)), function(i) {
   )
 }, character(1))
 
-# Fix 3: {cc} — no vertical rule; booktabs rules only
-# Fix 5: caption on top, plain text; notes + source as plain rows at end;
-#   no \textit{} in caption or notes.
+# {cc}: no vertical rule, booktabs rules only. Caption on top, plain text;
+# notes + source as plain rows at the end; no \textit{} in caption or notes.
 list_lines <- c(
   "\\begin{longtable}{cc}",
   paste0(
@@ -439,7 +449,7 @@ xt_finance <- xtable(
   digits = c(0, 0, 2, 2, 1)
 )
 
-# Fix 2: human-readable column headers; Fix 4: no embedded note row (table-only)
+# Human-readable column headers; no embedded note row (table only)
 colnames(xt_finance) <- c(
   "Countries", "Pre-NAP mean (USD Bn)", "Post-NAP mean (USD Bn)", "Change (\\%)"
 )
@@ -639,16 +649,19 @@ nap_status <- adaptation_aid %>%
   summarise(has_nap = !all(is.na(date_posted)), .groups = "drop") %>%
   distinct()
 
-world_data_nap <- left_join(world, nap_status %>% select(RecipientISO, has_nap), by = "RecipientISO")
+# Countries outside the recipient panel get their own legend entry rather than "NA".
+world_data_nap <- left_join(world, nap_status %>% select(RecipientISO, has_nap), by = "RecipientISO") %>%
+  mutate(nap_label = factor(case_when(is.na(has_nap) ~ "Not in panel",
+                                      has_nap        ~ "Has NAP",
+                                      TRUE           ~ "No NAP"),
+                            levels = c("No NAP", "Has NAP", "Not in panel")))
 
 p_nap_map <- ggplot(world_data_nap,
-                    aes(x = long, y = lat, group = group, fill = has_nap)) +
+                    aes(x = long, y = lat, group = group, fill = nap_label)) +
   geom_polygon(color = "white", linewidth = 0.1) +
   scale_fill_manual(
-    values = c("TRUE" = "#2E86C1", "FALSE" = "#E67E22"),
-    labels = c("TRUE" = "Has NAP", "FALSE" = "No NAP"),
-    name   = "National Adaptation Plan Status",
-    na.value = "grey80"
+    values = c("Has NAP" = "#2E86C1", "No NAP" = "#E67E22", "Not in panel" = "grey80"),
+    name   = "National Adaptation Plan Status"
   ) +
   coord_fixed(1.3) +
   # No title, subtitle, or caption — those go in LaTeX \caption{}
@@ -759,13 +772,9 @@ message("Wrote: output/figures/cumulative_nap_adoption.png")
 # §8. BALANCE TABLE: adopters vs never-adopters, pre-adoption period
 # Documents pre-adoption comparability of the treatment and comparison groups
 # (app:descriptives).
-# The pre-period window and its
-# "before the first NAP cohort" justification used to hardcode 2009-2012 and
-# "first cohort 2013" -- the actual first cohort on the current panel is
-# 2015 (14_hazard_napa.R computes this the same way and gets the same
-# answer), so 2009-2012 was neither the true pre-treatment window nor
-# internally consistent with 14's own number. The window is now derived from
-# the panel itself: 2009 (panel start) through (first real cohort - 1), i.e.
+# The pre-period window is derived from the panel itself (14_hazard_napa.R
+# derives the first cohort the same way): 2009 (panel start) through
+# (first real cohort - 1), i.e.
 # every year before ANY unit is treated -- no hardcoded cutoff year anywhere
 # below. Country-level means over that window, Welch two-sample t-tests on
 # the group difference. Reads the estimation panel (single source of truth
@@ -777,13 +786,22 @@ message("\n=== Section 8: Balance table (adopters vs never-adopters) ===\n")
 panel_bal <- fread(here("data", "processed", "simple_panel_wgi.csv"))
 panel_bal <- as.data.frame(panel_bal)
 
+## --- Text number: donors reporting to the panel recipients --------------------
+## Donors (CRS DonorCode) with at least one adaptation-marked activity (Rio
+## marker 1 or 2) to a panel recipient, 2009-2024, from the donor x recipient x
+## year file written by 01.
+drya <- fread(here("data", "processed", "donor_recipient_year_adaptation.csv"))
+drya <- drya[RecipientISO %in% panel_bal$recipient_iso &
+               year >= min(panel_bal$year) & year <= max(panel_bal$year)]
+message(sprintf(paste0("Donors reporting adaptation-marked activities to the %d panel ",
+                       "recipients, %d-%d: %d (%d with positive commitments)"),
+                n_distinct(panel_bal$recipient_iso), min(panel_bal$year), max(panel_bal$year),
+                uniqueN(drya$DonorCode), uniqueN(drya[adaptation_commitments > 0, DonorCode])))
+
 ## --- PVCCI merge coverage audit ------------------------------------------
 ## The `pvcci` column read below is merged in 01_prepare_data.R §10a by ISO3
 ## (countrycode(recipient_name, "country.name", "iso3c")), NOT by raw
-## recipient-name string match. 01 previously ALSO carried a second,
-## name-based re-merge that fed the derived PVCCI_GE/PVCCI_sq/PVCCI_th
-## interaction terms (fixed in the same 01 edit; those terms are not consumed
-## here). This block re-derives the name-based match count directly from the
+## recipient-name string match. This block re-derives the name-based match count directly from the
 ## raw inputs, cheaply (no CRS read), purely to document the coverage gain
 ## the ISO3 merge buys over a naive name join.
 pvcci_raw_check <- suppressWarnings(

@@ -2,8 +2,8 @@
 \centering
 \caption{Global adaptation-finance share: observed vs.\ ATT-implied counterfactual reconciliation}
 \label{tab:share_reconciliation}
-% latex table generated in R 4.6.0 by xtable 1.8-8 package
-% Tue Sep 29 12:09:32 2026
+% latex table generated in R 4.6.1 by xtable 1.8-8 package
+% Thu Oct  1 12:41:33 2026
 \begingroup\small
 \adjustbox{max width=\textwidth}{%
 \begin{tabular}{lcccc}
@@ -27,16 +27,16 @@ Year & Ever-adopters (59), observed (\%) & Main-sample adopters (40), observed (
   2023 & 55.60 & 40.24 & 30.80 & 9.44 \\ 
   2024 & 50.21 & 36.04 & 26.51 & 9.53 \\ 
 \midrule
-\multicolumn{4}{l}{Total reallocation, correct (treated-cell-weighted): 33.17 pp over 99 treated cells} \\
-\multicolumn{4}{l}{Total reallocation, naive ($n_{\text{adopters}} \times$ simple ATT): 40 $\times$ 0.3356 = 13.42 pp} \\
-\multicolumn{4}{l}{Observed change in the 40-adopter share, 2009$\to$2024: 24.23 pp; implied counterfactual change: 14.70 pp} \\
+\multicolumn{5}{l}{Total reallocation, correct (treated-cell-weighted): 33.17 pp over 99 treated cells} \\
+\multicolumn{5}{l}{Total reallocation, naive ($n_{\text{adopters}} \times$ simple ATT): 40 $\times$ 0.3356 = 13.42 pp} \\
+\multicolumn{5}{l}{Observed change in the 40-adopter share, 2009$\to$2024: 24.23 pp; implied counterfactual change: 14.70 pp} \\
    \bottomrule
 \end{tabular}
 }
 \endgroup
 \par\vspace{4pt}
 \begin{minipage}{\linewidth}\footnotesize
-Notes: share\_adapt denominator: see main-text footnote (145-country listwise-deletion panel). Counterfactual column subtracts the main-spec event-time ATT, cell by cell, from each treated country's observed share. Naive $n\times$ATT is not the correct arithmetic; treated-cell-weighted total sums att\_adj over all 99 treated country-years (cumulative, not bounded by 100 pp). Last column: single-year sum of ATT-adjusted cells.\par
+Notes: Global-share denominator: total adaptation-marked commitments of the 145-recipient panel in each year (see main-text footnote). Counterfactual column subtracts the main-specification event-time ATT, cell by cell, from each treated country's observed share. Naive $n\times$ATT is not the correct arithmetic; the treated-cell-weighted total sums the event-time ATT over all 99 treated country-years (cumulative, not bounded by 100 pp). Last column: single-year sum of the ATT adjustments.\par
 Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
 \end{minipage}
 \end{table}

@@ -80,10 +80,9 @@ copy_to_paper_flat <- function(out_path) {
 ##############################################################################
 # §0d. Helper: combine_panels()
 # Stacks two ggplot panels vertically with a single shared bottom legend,
-# using cowplot (patchwork is not a top-level renv.lock dependency in this
-# project; cowplot is -- see renv.lock -- so this keeps the script
-# renv::restore()-reproducible without touching renv.lock, which is out of
-# scope for this task). legend_from selects which panel's legend to reuse
+# using cowplot (a pinned dependency in renv.lock; patchwork is not, so
+# renv::restore() installs everything this script needs). legend_from selects
+# which panel's legend to reuse
 # (only relevant when the two panels' legends are identical or one panel
 # has no legend at all, as is the case for both figures built below).
 ##############################################################################

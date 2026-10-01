@@ -17,7 +17,7 @@
 # Outputs:
 #   data/processed/crs_adaptation_activities/crs_adaptation_activities_<year>.csv.gz
 #                                                   (cached activity extract;
-#     ALL CRS activities 2009-2024 for the 144 simple_panel_wgi recipients,
+#     ALL CRS activities 2009-2024 for the simple_panel_wgi recipients,
 #     regional/multi-country flows excluded -- NOT filtered to
 #     ClimateAdaptation-marked rows only, because the margin decomposition
 #     needs each activity's marking status in years it was UNMARKED too.
@@ -34,8 +34,8 @@
 #   output/tables/remarking/remarking_results.rds          (all result objects)
 #   output/figures/remarking/fig_remarking_sectors.png     (Fig: sector composition)
 #   -- all .tex and .png outputs above are additionally copied to
-#      paper/Tables/remarking/ and paper/Figures/remarking/ (this script does
-#      its own copy since it is not wired into run_all.R).
+#      paper/Tables/remarking/ and paper/Figures/remarking/ when a paper/
+#      folder exists (not in the stand-alone replication package).
 #
 # ============================================================
 # Paper-to-Code Naming Map
@@ -54,10 +54,10 @@
 #                                      | commit_multi_excl_fund / log_commit_multi_excl_fund
 # Headline (all marked, reference)     | log_commits (already in simple_panel_wgi.csv)
 # Group-time ATT                       | gt_obj  (did::att_gt())
-# Correct joint pre-trend Wald         | compute_pretrend_wald_correct()
+# Correct joint pre-trend Wald         | compute_pretrend_test()
 # did's own built-in pre-test p-value  | did_wpval  (att_gt()$Wpval)
 # Cohort (year of first NAP adoption)  | cohort_year (0 = never-treated)
-# Main-sample adopters (treated)       | cohort_year %in% 2021:2024 (n = 40)
+# Main-sample adopters (treated)       | cohort_year > 0 after the thin-cohort rule
 # ============================================================
 
 # ==============================================================================
@@ -65,8 +65,6 @@
 # ==============================================================================
 
 library(data.table)
-library(MASS)   # ginv() fallback for a near-singular pre-trend covariance; loaded
-                # BEFORE dplyr so dplyr::select() (not MASS::select()) wins the mask
 library(dplyr)
 library(tidyr)
 library(ggplot2)
@@ -80,6 +78,9 @@ if (utils::packageVersion("did") < "2.5.0") {
     "did >= 2.5.0 (renv.lock pins it). Run renv::restore() or update did."),
     utils::packageVersion("did")))
 }
+source(here("code", "functions", "pretrend_test.R"))      # compute_pretrend_test()
+source(here("code", "functions", "read_headline_fit.R"))  # read_headline_fit()
+source(here("code", "functions", "make_country_id.R"))    # make_country_id()
 
 set.seed(20240601)  # global seed; local set.seed(1242) immediately before each att_gt()
 
@@ -87,6 +88,10 @@ t_script_start <- Sys.time()
 
 dir.create(here("output", "tables",  "remarking"), recursive = TRUE, showWarnings = FALSE)
 dir.create(here("output", "figures", "remarking"), recursive = TRUE, showWarnings = FALSE)
+# A failed run must not leave the previous run's exhibits in place: they are
+# deleted before anything is estimated, and an estimation failure stops the stage.
+unlink(list.files(here("output", c("tables", "figures"), "remarking"),
+                  pattern = "\\.(tex|png|pdf)$", full.names = TRUE))
 has_paper <- dir.exists(here("paper"))  # FALSE in the stand-alone replication package
 if (has_paper) {
   dir.create(here("paper",  "Tables",  "remarking"), recursive = TRUE, showWarnings = FALSE)
@@ -98,6 +103,7 @@ dir.create(here("data",   "processed"),            recursive = TRUE, showWarning
 log_dir  <- here("output", "logs")
 dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
 log_file <- file.path(log_dir, "09_remarking_decomposition_log.txt")
+unlink(log_file)  # one run per log: the file is rewritten, never appended across runs
 
 log_msg <- function(...) {
   txt <- sprintf(...)
@@ -196,8 +202,8 @@ crs_path <- function(y) {
 # not reordered, so this script's reconciliation is exact).
 # Mirrors the single `regionalflows` constant in 01_prepare_data.R. Code 860
 # (Federated States of Micronesia) is a country, not a regional aggregate, and
-# was removed from both lists on 2026-09-15; 1034 is the genuine "Micronesia,
-# regional" code and stays excluded.
+# is not in either list; 1034 is the genuine "Micronesia, regional" code and
+# stays excluded.
 regionalflows_dry <- c(88, 89, 189, 237, 289, 298, 389, 489, 498, 589, 619,
                        679, 689, 789, 798, 889, 1027:1035, 9998)
 
@@ -234,7 +240,7 @@ panel_raw <- fread(here("data", "processed", "simple_panel_wgi.csv"))
 panel_raw <- as.data.frame(panel_raw)
 
 did_panel <- panel_raw %>%
-  mutate(country_id = as.integer(factor(recipient_name)))
+  mutate(country_id = make_country_id(recipient_name))
 
 first_year <- min(did_panel$year)
 last_year  <- max(did_panel$year)
@@ -271,11 +277,11 @@ thin_cohorts   <- cohort_sizes$cohort_year[cohort_sizes$n_treated < thin_thresho
 
 did_panel_126 <- did_panel %>% filter(!(cohort_year %in% thin_cohorts))
 
-n_countries_144 <- n_distinct(did_panel$recipient_name)
-n_countries_126 <- n_distinct(did_panel_126$recipient_name)
+n_countries_full <- n_distinct(did_panel$recipient_name)
+n_countries_est  <- n_distinct(did_panel_126$recipient_name)
 
 main_adopters <- did_panel_126 %>%
-  filter(cohort_year >= 2021) %>%
+  filter(cohort_year > 0) %>%   # thin cohorts already dropped from did_panel_126
   distinct(recipient_name) %>%
   pull(recipient_name)
 
@@ -286,17 +292,17 @@ never_treated_126 <- did_panel_126 %>%
 
 stopifnot(
   # Reference counts come from the stored 03 headline fit (output/fits/), not
-  # literals (the 2026-09-15 panel revision restored recipient code 860).
+  # literals, so a change in the panel cannot leave a stale count here.
   "estimation-sample size differs from the stored 03 fit" =
-    n_countries_126 == readRDS(here("output", "fits", "headline_adaptation_dr_bs.rds"))$n_country,
-  "full panel must contain the estimation sample" = n_countries_144 >= n_countries_126,
+    n_countries_est == read_headline_fit("adaptation")$n_country,
+  "full panel must contain the estimation sample" = n_countries_full >= n_countries_est,
   "main-sample adopters must be non-empty" = length(main_adopters) > 0L
 )
 
-log_msg("Panel: %d countries (144-panel), %d in 126-country estimation sample, %d main adopters (cohort>=2021), %d never-treated",
-        n_countries_144, n_countries_126, length(main_adopters), length(never_treated_126))
+log_msg("Panel: %d countries (full panel), %d in the estimation sample, %d main adopters, %d never-treated",
+        n_countries_full, n_countries_est, length(main_adopters), length(never_treated_126))
 
-panel_recipients <- unique(panel_raw$recipient_name)  # 144 names, exact CRS RecipientName strings
+panel_recipients <- unique(panel_raw$recipient_name)  # full-panel names, exact CRS RecipientName strings
 
 # ==============================================================================
 # SECTION 2. RAW CRS ACTIVITY-LEVEL EXTRACTION (cache-aware, one year at a time)
@@ -515,8 +521,8 @@ activities[, flag_title_old := grepl(title_pattern_old, title_lc)]
 # 43010 (multisector aid) are too generic on their own to indicate
 # NAP-support/readiness activity -- kept as separate diagnostic flags so the
 # flag-share tables can report the commitment share attributable to each
-# code alone, and the exclusion table can show what the narrower rule now
-# retains that the old rule used to exclude.
+# code alone, and the exclusion table can show what the narrower rule
+# retains that the broader three-code rule would exclude.
 activities[, flag_purpose       := PurposeCode == 41010L]
 activities[, flag_purpose_15110 := PurposeCode == 15110L]
 activities[, flag_purpose_43010 := PurposeCode == 43010L]
@@ -832,7 +838,7 @@ flag_shares_year[, `:=`(
 group_lookup <- did_panel_126 %>%
   distinct(recipient_name, cohort_year) %>%
   mutate(group = case_when(
-    cohort_year >= 2021 ~ "Treated (main sample, cohort >= 2021)",
+    cohort_year >= 2021 ~ "Treated (main sample, cohort $\\geq$ 2021)",
     cohort_year == 0    ~ "Never-treated",
     TRUE                 ~ "Thin-cohort adopter (excluded from main sample)"
   ))
@@ -940,42 +946,12 @@ PRETREND_NOTE_AGG <- function(min_e, max_e, k) sprintf(
 PRETREND_NOTE_DID <- "\\texttt{did} pre-test $p$: \\texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year"
 PRETREND_NOTE <- function(min_e, max_e, k) paste0(PRETREND_NOTE_AGG(min_e, max_e, k), ". ", PRETREND_NOTE_DID)
 
-#' Correct joint Wald test for pre-treatment event-time ATTs
-#'
-#' Uses the dynamic-aggregation influence function stored by did >= 2.5.0 at
-#' agg_d$inf.function$dynamic.inf.func.e (Sigma = crossprod(IF)/n^2), the
-#' same covariance that 03_main_results.R's compute_pretrend_test() uses since
-#' its 2026-09-14 revision (it previously used a diagonal approximation).
-#'
-#' @param agg_d an AGGTEobj from aggte(..., type = "dynamic", min_e = -5)
-#' @return list(stat, pval, df)
-compute_pretrend_wald_correct <- function(agg_d) {
-  keep <- which(!is.na(agg_d$se.egt) & agg_d$se.egt > 1e-10)
-  pre_pos <- which(agg_d$egt[keep] < 0L)
-  if (length(pre_pos) == 0L) return(list(stat = NA_real_, pval = NA_real_, df = 0L))
-
-  IF <- agg_d$inf.function$dynamic.inf.func.e
-  if (is.null(IF)) return(list(stat = NA_real_, pval = NA_real_, df = 0L))
-
-  n <- nrow(IF)
-  sigma_full <- crossprod(IF) / n^2
-  beta      <- agg_d$att.egt[keep][pre_pos]
-  sigma_pre <- sigma_full[keep, keep][pre_pos, pre_pos, drop = FALSE]
-
-  W <- tryCatch(
-    as.numeric(t(beta) %*% solve(sigma_pre) %*% beta),
-    error = function(e) as.numeric(t(beta) %*% MASS::ginv(sigma_pre) %*% beta)
-  )
-  df <- length(pre_pos)
-  list(stat = round(W, 3), pval = round(pchisq(W, df = df, lower.tail = FALSE), 3), df = df)
-}
-
 #' Estimate one outcome with the main-spec CS(2021) settings (matches
-#' 03_main_results.R make_wide_table(): analytical fit (bstrap = FALSE) feeds
+#' make_wide_table() (code/functions/make_wide_table.R): analytical fit (bstrap = FALSE) feeds
 #' the pre-trend Wald test only; bootstrap fit (bstrap = TRUE, biters = 999)
 #' feeds the reported ATT/SE. seed = 1242 immediately before each att_gt().
 #'
-#' @param panel data.frame; the 126-country estimation sample
+#' @param panel data.frame; the main estimation sample (thin cohorts dropped)
 #' @param yvar character; outcome column name
 #' @return named list of estimation results
 estimate_cs_outcome <- function(panel, yvar, seed = 1242L) {
@@ -1009,28 +985,16 @@ estimate_cs_outcome <- function(panel, yvar, seed = 1242L) {
     }
   )
 
-  if (is.null(gt_boot)) {
-    return(list(att = NA_real_, se = NA_real_, t = NA_real_,
-                n_obs = 0L, n_country = 0L,
-                pretrend_stat = NA_real_, pretrend_pval = NA_real_, pretrend_df = 0L,
-                did_wpval = NA_real_))
-  }
+  if (is.null(gt_boot) || is.null(gt_analytical)) stop("att_gt() failed for ", yvar)
 
-  agg_s <- tryCatch(aggte(gt_boot, type = "simple", na.rm = TRUE), error = function(e) NULL)
-  att <- if (!is.null(agg_s)) agg_s$overall.att else NA_real_
-  se  <- if (!is.null(agg_s)) agg_s$overall.se  else NA_real_
+  agg_s <- aggte(gt_boot, type = "simple", na.rm = TRUE)
+  att <- agg_s$overall.att
+  se  <- agg_s$overall.se
   tst <- if (!is.na(att) && !is.na(se) && se > 0) att / se else NA_real_
 
-  pt <- list(stat = NA_real_, pval = NA_real_, df = 0L)
-  did_wpval <- NA_real_
-  if (!is.null(gt_analytical)) {
-    did_wpval <- round(gt_analytical$Wpval, 3)
-    agg_d <- tryCatch(
-      aggte(gt_analytical, type = "dynamic", na.rm = TRUE, min_e = -5, max_e = Inf),
-      error = function(e) NULL
-    )
-    if (!is.null(agg_d)) pt <- compute_pretrend_wald_correct(agg_d)
-  }
+  did_wpval <- if (is.null(gt_analytical$Wpval)) NA_real_ else as.numeric(gt_analytical$Wpval)
+  agg_d <- aggte(gt_analytical, type = "dynamic", na.rm = TRUE, min_e = -5, max_e = Inf)
+  pt    <- compute_pretrend_test(agg_d, gt_analytical)
 
   rows_oc <- panel[!is.na(panel[[yvar]]), ]
 
@@ -1038,8 +1002,47 @@ estimate_cs_outcome <- function(panel, yvar, seed = 1242L) {
     att = att, se = se, t = tst,
     n_obs = nrow(rows_oc), n_country = length(unique(rows_oc$country_id)),
     pretrend_stat = pt$stat, pretrend_pval = pt$pval, pretrend_df = pt$df,
+    pretrend_leads = pt$leads, pretrend_ginv = isTRUE(pt$ginv_used),
     did_wpval = did_wpval
   )
+}
+
+#' The headline column, read from the fit 03 stores (never re-estimated here)
+#'
+#' Same fields as estimate_cs_outcome(). The stored fit must come from this
+#' estimation sample: same recipients, same non-missing outcome cells.
+#'
+#' @param panel data.frame; the main estimation sample
+#' @return named list of estimation results
+headline_from_fit <- function(panel) {
+  f <- read_headline_fit("adaptation")
+  stopifnot(identical(f$outcome, "log_commits"),
+            identical(f$ids, sort(unique(panel$country_id))),
+            identical(as.integer(f$n_obs), sum(!is.na(panel$log_commits))))
+  list(att = f$att, se = f$se, t = f$att / f$se,
+       n_obs = f$n_obs, n_country = f$n_country,
+       pretrend_stat = f$pretrend$stat, pretrend_pval = f$pretrend$pval,
+       pretrend_df = f$pretrend$df, pretrend_leads = f$pretrend$leads,
+       pretrend_ginv = isTRUE(f$pretrend$ginv_used), did_wpval = f$pretrend$Wpval_did)
+}
+
+#' Columns whose pre-trend block was singular, as a note clause ("" if none)
+ginv_note_res <- function(res_list, labels) {
+  g <- vapply(res_list, function(r) isTRUE(r$pretrend_ginv), logical(1L))
+  if (!any(g)) return("")
+  paste0("; the pre-trend block was singular for ", paste(labels[g], collapse = ", "),
+         " and a generalized inverse was used (df = numerical rank)")
+}
+
+#' Pre-trend note derived from the columns' own tests (window, df, singular blocks)
+pretrend_note_res <- function(res_list, labels) {
+  leads <- unique(lapply(res_list, function(r) sort(as.integer(r$pretrend_leads))))
+  dfs   <- unique(vapply(res_list, function(r) as.integer(r$pretrend_df), integer(1L)))
+  if (length(leads) != 1L || length(leads[[1L]]) == 0L)
+    stop("pretrend_note_res(): the columns do not share one pre-trend lead window")
+  paste0(PRETREND_NOTE_AGG(min(leads[[1L]]), max(leads[[1L]]),
+                           if (length(dfs) == 1L) dfs else length(leads[[1L]])),
+         ginv_note_res(res_list, labels), ". ", PRETREND_NOTE_DID)
 }
 
 fmt_stars <- function(t_v) {
@@ -1076,7 +1079,8 @@ pretreat_headline <- pretreat_mean(did_panel_126_df, "commitments")
 for (i in seq_along(margin_specs)) {
   sp <- margin_specs[[i]]
   log_msg("  Estimating: %s (%s)", sp$label, sp$var)
-  res <- estimate_cs_outcome(did_panel_126_df, sp$var)
+  res <- if (identical(sp$var, "log_commits")) headline_from_fit(did_panel_126_df) else
+    estimate_cs_outcome(did_panel_126_df, sp$var)
   res$label <- sp$label
   res$mean_pre <- pretreat_mean(did_panel_126_df, sp$raw)
   res$share_pre <- if (!is.na(res$mean_pre) && !is.na(pretreat_headline) && pretreat_headline > 0) {
@@ -1087,7 +1091,7 @@ for (i in seq_along(margin_specs)) {
           res$att, res$se, res$t, res$pretrend_pval, res$pretrend_df, res$did_wpval,
           res$mean_pre, res$share_pre)
 }
-names(margin_results) <- sapply(margin_specs, `[[`, "label")
+names(margin_results) <- vapply(margin_specs, `[[`, character(1L), "label")
 
 ## --- Objective 1b: four-bucket margin diagnostic (unlinked/singleton) ------
 log_msg("Section 11a-ii: four-bucket margin diagnostic estimation (new-linked vs.\\ unlinked)")
@@ -1112,7 +1116,7 @@ for (i in seq_along(margin4_specs)) {
           res$att, res$se, res$t, res$pretrend_pval, res$pretrend_df, res$did_wpval,
           res$mean_pre, res$share_pre)
 }
-names(margin4_results) <- sapply(margin4_specs, `[[`, "label")
+names(margin4_results) <- vapply(margin4_specs, `[[`, character(1L), "label")
 
 ## --- Objective 2: counts vs values ------------------------------------------
 log_msg("Section 11b: counts-vs-values estimation")
@@ -1134,7 +1138,7 @@ for (i in seq_along(counts_specs)) {
   log_msg("    ATT=%.4f SE=%.4f t=%.3f pretrend p=%.3f (df=%d) did-Wpval=%.3f mean_pre=%.3f",
           res$att, res$se, res$t, res$pretrend_pval, res$pretrend_df, res$did_wpval, res$mean_pre)
 }
-names(counts_results) <- sapply(counts_specs, `[[`, "label")
+names(counts_results) <- vapply(counts_specs, `[[`, character(1L), "label")
 
 ## --- Objective 3: NAP-support / readiness / fund exclusion ------------------
 log_msg("Section 11c: NAP-support/readiness/fund exclusion estimation")
@@ -1152,14 +1156,15 @@ exclusion_results <- vector("list", length(exclusion_specs))
 for (i in seq_along(exclusion_specs)) {
   sp <- exclusion_specs[[i]]
   log_msg("  Estimating: %s (%s)", sp$label, sp$var)
-  res <- estimate_cs_outcome(did_panel_126_df, sp$var)
+  res <- if (identical(sp$var, "log_commits")) headline_from_fit(did_panel_126_df) else
+    estimate_cs_outcome(did_panel_126_df, sp$var)
   res$label <- sp$label
   res$mean_pre <- pretreat_mean(did_panel_126_df, sp$raw)
   exclusion_results[[i]] <- res
   log_msg("    ATT=%.4f SE=%.4f t=%.3f pretrend p=%.3f (df=%d) did-Wpval=%.3f mean_pre=%.2f",
           res$att, res$se, res$t, res$pretrend_pval, res$pretrend_df, res$did_wpval, res$mean_pre)
 }
-names(exclusion_results) <- sapply(exclusion_specs, `[[`, "label")
+names(exclusion_results) <- vapply(exclusion_specs, `[[`, character(1L), "label")
 
 ## --- Objective 3b: regex-sensitivity diagnostic -- old (pre-fix) vs.\ new --
 ## title/purpose flags for the three affected exclusion outcomes only. "Excl.
@@ -1185,7 +1190,7 @@ for (i in seq_along(exclusion_old_specs)) {
   log_msg("    [old] ATT=%.4f SE=%.4f t=%.3f pretrend p=%.3f (df=%d) did-Wpval=%.3f mean_pre=%.2f",
           res$att, res$se, res$t, res$pretrend_pval, res$pretrend_df, res$did_wpval, res$mean_pre)
 }
-names(exclusion_old_results) <- sapply(exclusion_old_specs, `[[`, "label")
+names(exclusion_old_results) <- vapply(exclusion_old_specs, `[[`, character(1L), "label")
 
 for (lbl in names(exclusion_old_results)) {
   old_r <- exclusion_old_results[[lbl]]
@@ -1226,7 +1231,7 @@ fmt_col_margin <- function(res) c(
 
 margins_tex <- build_wide_tex_table(
   row_labels = row_labels_est,
-  col_labels = sapply(margin_specs, `[[`, "label"),
+  col_labels = vapply(margin_specs, `[[`, character(1L), "label"),
   col_data   = lapply(margin_results, fmt_col_margin),
   tex_label  = "tab:remarking_margins"
 )
@@ -1237,9 +1242,9 @@ write_tex_float(
   tabular_lines = margins_tex,
   notes_text    = paste0(
     "CS\\,(2021) DR, never-treated controls, headline specification; cohorts $<5$ treated ",
-    "dropped (", n_countries_126, "-country sample). SE: multiplier-bootstrap (999 reps, ",
+    "dropped (", n_countries_est, "-country sample). SE: multiplier-bootstrap (999 reps, ",
     "seed 1242; \\texttt{did} 2.5.0; CRS Apr.\\ 2026). ",
-    PRETREND_NOTE(-5L, -2L, margin_results[[1L]]$pretrend_df), ". ",
+    pretrend_note_res(margin_results, names(margin_results)), ". ",
     "Category definitions and singleton shares: see Section~\\ref{sec:remarking} and ",
     "Appendix~\\ref{app:remarking}. ``New'' ATT is an upper bound on genuinely new activity. ",
     "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
@@ -1273,10 +1278,12 @@ write_tex_float(
   tabular_lines = margins4_tex,
   notes_text    = paste0(
     "Same sample, controls, estimator as Table~\\ref{tab:remarking_margins}. Splits its ",
-    "``new'' bucket into ``new (linked)'' (resolvable cross-year identifier, ", chosen_id,
-    ") and ``unlinked'' (singleton, new by construction). ``Continuing''/``re-marked'' are ",
+    "``new'' bucket into ``new (linked)'' (activity identifiable across years by its CRS ",
+    c(ProjectNumber = "project number", CrsID = "CRS identifier")[[chosen_id]],
+    ") and ``unlinked'' (no such identifier; new by construction). ``Continuing''/``re-marked'' are ",
     "identical to Table~\\ref{tab:remarking_margins}. Singleton shares: see ",
-    "Appendix~\\ref{app:remarking}. * $p<0.10$, ** $p<0.05$, *** $p<0.01$"
+    "Appendix~\\ref{app:remarking}", ginv_note_res(combined4_results, combined4_labels),
+    ". * $p<0.10$, ** $p<0.05$, *** $p<0.01$"
   ),
   source_text = "OECD CRS activity-level microdata (Rio adaptation marker 1 or 2); UNFCCC NAP Central"
 )
@@ -1301,7 +1308,7 @@ row_labels_counts <- c(
 
 counts_tex <- build_wide_tex_table(
   row_labels = row_labels_counts,
-  col_labels = sapply(counts_specs, `[[`, "label"),
+  col_labels = vapply(counts_specs, `[[`, character(1L), "label"),
   col_data   = lapply(counts_results, fmt_col_counts),
   tex_label  = "tab:remarking_counts"
 )
@@ -1315,7 +1322,8 @@ write_tex_float(
     "multiplier-bootstrap (999 reps, seed 1242; \\texttt{did} 2.5.0; CRS Apr.\\ 2026). ",
     "``N marked activities'' and ``mean commitment/marked activity'' are log(1+$x$); ",
     "``share of activities marked'' is the \\% of the recipient's CRS activities (all ",
-    "purposes) carrying an adaptation marker, untransformed (pp). ",
+    "purposes) carrying an adaptation marker, untransformed (pp)",
+    ginv_note_res(counts_results, names(counts_results)), ". ",
     "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
   ),
   source_text = "OECD CRS activity-level microdata (all purposes for the denominator; Rio adaptation marker 1 or 2 for the numerator)"
@@ -1323,7 +1331,7 @@ write_tex_float(
 
 exclusions_tex <- build_wide_tex_table(
   row_labels = row_labels_est[row_labels_est != "Share of pre-treat.\\ marked commitments (\\%)"],
-  col_labels = sapply(exclusion_specs, `[[`, "label"),
+  col_labels = vapply(exclusion_specs, `[[`, character(1L), "label"),
   col_data   = lapply(exclusion_results, function(res) c(
     paste0(sprintf("%.4f", res$att), fmt_stars(res$t)),
     sprintf("(%.4f)", res$se),
@@ -1347,18 +1355,20 @@ write_tex_float(
     "multiplier-bootstrap (999 reps, seed 1242; \\texttt{did} 2.5.0; CRS Apr.\\ 2026). ",
     "Title/purpose/fund-flag definitions: see notes to ",
     "Table~\\ref{tab:remarking_flag_shares_by_year}. ``Multilateral cell, excl.\\ ",
-    "fund-flagged'' recomputes log\\_commits\\_multi dropping fund-flagged activities. ",
+    "fund-flagged'' recomputes log multilateral adaptation commitments without the ",
+    "fund-flagged activities. ",
     "Flag coverage: Tables~\\ref{tab:remarking_flag_shares_by_year}--",
-    "\\ref{tab:remarking_flag_shares_by_group}. * $p<0.10$, ** $p<0.05$, *** $p<0.01$"
+    "\\ref{tab:remarking_flag_shares_by_group}", ginv_note_res(exclusion_results, names(exclusion_results)),
+    ". * $p<0.10$, ** $p<0.05$, *** $p<0.01$"
   ),
   source_text = "OECD CRS activity-level microdata (Rio adaptation marker 1 or 2); UNFCCC NAP Central"
 )
 
 ## --- Table 3b (diagnostic): old vs.\ new title/purpose regex, before/after -
 exclusions_compare_labels <- c(
-  "Excl. title-flagged [old regex]", "Excl. title-flagged [new regex]",
-  "Excl. purpose-flagged [old codes]", "Excl. purpose-flagged [new codes]",
-  "Excl. all three [old]", "Excl. all three [new]"
+  "Excl. title-flagged [broad]", "Excl. title-flagged [narrow]",
+  "Excl. purpose-flagged [broad]", "Excl. purpose-flagged [narrow]",
+  "Excl. all three [broad]", "Excl. all three [narrow]"
 )
 exclusions_compare_results <- list(
   exclusion_old_results[["Excl. title-flagged"]],   exclusion_results[["Excl. title-flagged"]],
@@ -1384,16 +1394,18 @@ exclusions_compare_tex <- build_wide_tex_table(
 )
 write_tex_float(
   out_path      = here("output", "tables", "remarking", "att_remarking_exclusions_regex_comparison.tex"),
-  caption_title = "Sensitivity of the exclusion ATTs to the title/purpose flag regex fix",
+  caption_title = "Sensitivity of the exclusion ATTs to the title and purpose flag definitions",
   label         = "tab:remarking_exclusions_regex_comparison",
   tabular_lines = exclusions_compare_tex,
   notes_text    = paste0(
     "CS\\,(2021) DR, same specification/sample as Table~\\ref{tab:remarking_exclusions}. ",
     "SE: multiplier-bootstrap (999 reps, seed 1242; \\texttt{did} 2.5.0; CRS Apr.\\ 2026). ",
-    "``[old]'' = pre-fix broad flags: title matches ``national adaptation plan''/``NAP''/",
+    "``[broad]'' = broad flag definitions: title matches ``national adaptation plan''/``NAP''/",
     "``readiness''/``NAP-''/``adaptation plan''/``planning'' (bare); purpose ",
-    "$\\in\\{41010,15110,43010\\}$. ``[new]'' reproduces Table~\\ref{tab:remarking_exclusions}. ",
-    "Fund-flagged cells omitted (unchanged by this fix). ",
+    "$\\in\\{41010,15110,43010\\}$. ``[narrow]'' = the definitions of ",
+    "Table~\\ref{tab:remarking_exclusions}, whose estimates it reproduces. ",
+    "Fund-flagged cells omitted (the fund flag is the same under both definitions)",
+    ginv_note_res(exclusions_compare_results, exclusions_compare_labels), ". ",
     "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
   ),
   source_text = "OECD CRS activity-level microdata (Rio adaptation marker 1 or 2); UNFCCC NAP Central"

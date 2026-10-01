@@ -28,12 +28,13 @@
 # Outputs:
 #   data/processed/napa_list.csv
 #   data/processed/emdat_panel.csv
-#   output/tables/hazard/att_hazard_controls.tex          (EM-DAT only;
-#                                                           not written if
-#                                                           EM-DAT absent)
+#   output/tables/hazard/att_hazard_controls.tex          (needs EM-DAT;
+#                                                           without it the
+#                                                           existing copy is
+#                                                           kept, not rebuilt)
 #   output/tables/hazard/nap_timing_vs_humanitarian_aid.tex
-#   output/tables/hazard/nap_timing_vs_emdat_hazard.tex   (not written if
-#                                                           EM-DAT absent)
+#   output/tables/hazard/nap_timing_vs_emdat_hazard.tex   (needs EM-DAT; idem)
+#   output/tables/napa/prior_napa_ldc_crosstab.tex
 #   output/tables/napa/att_prior_napa_split.tex
 #   output/tables/napa/att_napa_falsification.tex
 ##############################################################################
@@ -51,6 +52,9 @@ library(did)
 library(fixest)
 library(countrycode)
 library(stringr)
+source(here("code", "functions", "read_headline_fit.R"))  # read_headline_fit()
+source(here("code", "functions", "mde.R"))                # mde()
+source(here("code", "functions", "make_country_id.R"))    # make_country_id()
 
 # Version guard identical to 03_main_results.R: SEs on unbalanced panels
 # changed in did 2.5.0 (renv.lock pins it).
@@ -67,7 +71,7 @@ if (utils::packageVersion("did") < "2.5.0") {
 set.seed(20240601)
 
 # Kept short (no embedded parenthetical) so paste0("... (", CRS_VINTAGE, ")") call sites never produce nested parens.
-CRS_VINTAGE  <- "April 2026, DATA\\_AVAILABILITY.md"
+CRS_VINTAGE  <- "April 2026 vintage"
 DID_VERSION  <- as.character(utils::packageVersion("did"))
 EMDAT_VINTAGE <- "EM-DAT v2026-09-11 (CRED/UCLouvain public custom request, downloaded 2026-09-15)"
 
@@ -79,20 +83,8 @@ dir.create(here("output", "tables", "hazard"), recursive = TRUE, showWarnings = 
 dir.create(here("output", "tables", "napa"),   recursive = TRUE, showWarnings = FALSE)
 dir.create(here("data", "processed"),          recursive = TRUE, showWarnings = FALSE)
 
-# Superseded filenames from earlier iterations of this script (renamed when
-# the tables were relabelled).
-# Removed UNCONDITIONALLY at the top of every run, regardless of which
-# branches execute below, so a stale file never survives a rerun.
-stale_output_files <- c(
-  here("output", "tables", "hazard", "nap_timing_orthogonality.tex"),
-  here("output", "tables", "napa",   "att_napa_placebo.tex")
-)
-for (sf in stale_output_files) {
-  if (file.exists(sf)) {
-    file.remove(sf)
-    message("Deleted stale output file (superseded name): ", sf)
-  }
-}
+# This stage's previous exhibits are deleted in Section 2, before anything is
+# re-estimated (the EM-DAT exhibits only when EM-DAT is present).
 
 ##############################################################################
 # §0c. HELPERS
@@ -181,7 +173,10 @@ fmt1 <- function(x) ifelse(is.na(x), "--", sprintf("%.1f", x))
 # log (still print via message()), and returned so callers can fold a count
 # into the table note.
 run_att_gt_captured <- function(...) {
-  warns <- character(0)
+  # Pre-sized buffer (att_gt emits a handful of warnings per fit); it extends
+  # itself only past its size, which no fit here reaches.
+  warns   <- character(20L)
+  n_warns <- 0L
   gt_obj <- withCallingHandlers(
     tryCatch(did::att_gt(...), error = function(e) {
       message("  att_gt failed: ", conditionMessage(e)); NULL
@@ -190,12 +185,13 @@ run_att_gt_captured <- function(...) {
       # Sanctioned exception to the project's `<<-` rule: the only way to
       # accumulate conditions out of a withCallingHandlers() handler; the
       # target is a local of the enclosing function, not a global.
-      warns <<- c(warns, conditionMessage(w))
+      n_warns <<- n_warns + 1L
+      warns[n_warns] <<- conditionMessage(w)
       message("  att_gt warning: ", conditionMessage(w))
       invokeRestart("muffleWarning")
     }
   )
-  list(gt_obj = gt_obj, warnings = warns)
+  list(gt_obj = gt_obj, warnings = warns[seq_len(n_warns)])
 }
 
 ##############################################################################
@@ -282,7 +278,7 @@ aggregated  <- as.data.frame(aggregated)
 
 did_panel <- aggregated
 did_panel <- did_panel %>%
-  mutate(country_id = as.integer(factor(recipient_name)))
+  mutate(country_id = make_country_id(recipient_name))
 
 first_year <- min(did_panel$year)
 last_year  <- max(did_panel$year)
@@ -384,6 +380,15 @@ emdat_path      <- here("data", "raw", "emdat", "emdat.csv")
 emdat_available <- file.exists(emdat_path)
 emdat_panel     <- NULL
 
+# A failed run must not leave the previous run's exhibits in place: every table
+# this stage writes is deleted before it is re-estimated, and an estimation
+# failure below stops the stage. Exception: without EM-DAT the two EM-DAT
+# exhibits cannot be regenerated, and the authors' copies are kept (see below).
+emdat_exhibits <- c("att_hazard_controls.tex", "nap_timing_vs_emdat_hazard.tex")
+old_exhibits   <- list.files(here("output", "tables", c("hazard", "napa")),
+                             pattern = "\\.tex$", full.names = TRUE)
+unlink(old_exhibits[emdat_available | !basename(old_exhibits) %in% emdat_exhibits])
+
 # EM-DAT's terms of use do not allow redistribution, so the replication package
 # does not include it. Without it the two EM-DAT exhibits below cannot be
 # regenerated; the rest of this script (humanitarian-aid timing check, NAPA
@@ -440,6 +445,12 @@ if (emdat_available) {
     if (length(recipients_no_emdat_entity) == 0) "none" else
       paste(recipients_no_emdat_entity, collapse = ", ")
   ))
+  if (length(recipients_no_emdat_entity) > 0L)
+    message("  Recipients without an EM-DAT entity: ",
+            paste(sprintf("%s (%s)",
+                          did_panel_full$recipient_name[match(recipients_no_emdat_entity,
+                                                              did_panel_full$recipient_iso)],
+                          recipients_no_emdat_entity), collapse = ", "))
 
   # --- Missing vs. zero: a
   # recipient-year with n_events > 0 but where NONE of those events reported
@@ -517,8 +528,8 @@ if (emdat_available) {
   message(sprintf(
     paste0("Wrote: data/processed/emdat_panel.csv (%d recipient-year rows, %d recipients; %d ",
           "recipients NA throughout for lack of an EM-DAT entity). Coverage (share of non-NA ",
-          "recipient-years with >= 1 event): ALL natural = %.1f%%; CLIMATE-RELATED = %.1f%%. ",
-          "Missing-value audit (CLIMATE-RELATED event-years, n = %d): %.1f%% have NO event ",
+          "recipient-years with >= 1 event): all natural = %.1f%%; climate-related = %.1f%%. ",
+          "Missing-value audit (climate-related event-years, n = %d): %.1f%% have NO event ",
           "reporting Total Affected (coded NA, not 0); %.1f%% have NO event reporting Total ",
           "Damage (coded NA, not 0)."),
     nrow(emdat_panel), length(recipients_est), length(recipients_no_emdat_entity),
@@ -557,6 +568,8 @@ if (emdat_available) {
 #     control -- see the design-decision note in the header). --------------
 aid_proxy_raw <- fread(here("data", "processed", "emergency_response_panel.csv")) %>%
   rename(aid_value = emergency_commitments)
+# CRS sums enter log1p() below: a negative recipient-year sum stops the stage.
+stopifnot(all(aid_proxy_raw$aid_value >= 0, na.rm = TRUE))
 
 aid_proxy_panel <- aid_proxy_raw %>%
   arrange(recipient_iso, year) %>%
@@ -638,13 +651,10 @@ if (!emdat_available) {
     # separately as n_treated_input and both are disclosed in the table note.
     gt <- cap$gt_obj
     ok_groups <- unique(gt$group[gt$t >= gt$group & !is.na(gt$att)])
-    n_treated_fit <- tryCatch({
-      dd <- gt$DIDparams$data
-      n_distinct(dd$country_id[dd$cohort_year %in% ok_groups])
-    }, error = function(e) NA_integer_)
+    dd <- gt$DIDparams$data
+    n_treated_fit   <- n_distinct(dd$country_id[dd$cohort_year %in% ok_groups])
     n_treated_input <- n_distinct(data$country_id[data$cohort_year > 0])
-    n_treated_source <- if (is.na(n_treated_fit)) "input-frame fallback" else "fitted object"
-    if (is.na(n_treated_fit)) n_treated_fit <- n_treated_input
+    n_treated_source <- "fitted object"
     list(gt_obj = cap$gt_obj, agg_s = agg_s, n_obs = nrow(data),
         n_treated = n_treated_fit, n_treated_input = n_treated_input,
         n_treated_source = n_treated_source, n_ok_groups = length(ok_groups),
@@ -673,12 +683,23 @@ if (!emdat_available) {
     100 * n_dropped_damage_na / nrow(did_panel_hazard_ok)
   ))
 
-  # Headline reference row: the same
-  # specification on the FULL main panel (Table 2 sample), so the table
-  # carries its own reference point and the sample-restriction effect of the
-  # EM-DAT merge is visible inside the exhibit.
-  fit_headline_ref <- hazard_headline_spec("log_commits", ~ ge_est + log_population,
-                                           did_panel_main)
+  # Headline reference row: the headline fit on the FULL main panel (Table 2
+  # sample), read from the fit stored by 03_main_results.R rather than
+  # re-estimated, so the table carries Table 2's own ATT and SE as its
+  # reference point and the sample-restriction effect of the EM-DAT merge is
+  # visible inside the exhibit.
+  fit_headline_ref <- local({
+    h  <- read_headline_fit("adaptation")
+    stopifnot(identical(h$ids, sort(unique(did_panel_main$country_id))))
+    gt <- h$gt_boot
+    ok_groups <- unique(gt$group[gt$t >= gt$group & !is.na(gt$att)])
+    dd <- gt$DIDparams$data
+    list(gt_obj = gt, agg_s = h$agg_simple, n_obs = nrow(did_panel_main),
+         n_treated = n_distinct(dd$country_id[dd$cohort_year %in% ok_groups]),
+         n_treated_input = n_distinct(did_panel_main$country_id[did_panel_main$cohort_year > 0]),
+         n_treated_source = "fitted object", n_ok_groups = length(ok_groups),
+         warnings = character(0), ids = h$ids)
+  })
   n_units_main   <- n_distinct(did_panel_main$country_id)
   n_units_hazard <- n_distinct(did_panel_hazard_ok$country_id)
   n_units_lost_hazard <- n_units_main - n_units_hazard
@@ -796,7 +817,7 @@ if (!emdat_available) {
       .groups = "drop"
     ) %>%
     mutate(is_treated = as.integer(cohort_year > 0))
-  n_main_sample_units <- n_units_main   # 127 main-sample recipients (Table 2), not the hazard sample
+  n_main_sample_units <- n_units_main   # main-sample recipients (Table 2), not the hazard sample
   n_no_pscore <- sum(!complete.cases(
     pretrend_means[, c("ge_est_mean", "log_population_mean", "log_affected_climate_lag1_mean")]))
   cross_pscore <- pretrend_means %>%
@@ -830,12 +851,6 @@ if (!emdat_available) {
       did_panel_hazard_ok %>% filter(country_id %in% trimmed_ids))
   }
 
-  # --- Warning roll-up ---------------------------------------------------
-  all_fits_for_warn <- list(fit_headline_ref, fit_baseline, fit_a_affected, fit_a_damage,
-                            fit_c_ma3, fit_variant_all, fit_b_resid)
-  if (!no_unit_trimmed) all_fits_for_warn <- c(all_fits_for_warn, list(fit_a_trimmed))
-  n_warnings_total <- sum(vapply(all_fits_for_warn, function(f) length(f$warnings), integer(1)))
-
   hazard_rows <- list(
     list(label = "Headline (full main panel)",    set = "--", fit = fit_headline_ref, diff = NULL),
     list(label = "Baseline, hazard sample (no hazard control)", set = "--",
@@ -853,11 +868,8 @@ if (!emdat_available) {
   )
 
   hazard_tab <- bind_rows(lapply(hazard_rows, function(r) {
-    if (is.null(r$fit) || is.null(r$fit$agg_s)) {
-      return(data.frame(spec = r$label, set = r$set, ATT = NA_real_, SE = NA_real_,
-                        p = NA_real_, n_obs = NA_integer_, n_treated = NA_integer_,
-                        diff = NA_real_, diff_se = NA_real_, diff_p = NA_real_))
-    }
+    if (is.null(r$fit) || is.null(r$fit$agg_s))
+      stop("Hazard-control estimation failed for row: ", r$label)
     att <- r$fit$agg_s$overall.att; se <- r$fit$agg_s$overall.se
     z <- att / se; p <- 2 * pnorm(-abs(z))
     data.frame(spec = r$label, set = r$set, ATT = att, SE = se, p = p,
@@ -885,32 +897,6 @@ if (!emdat_available) {
     "\\end{tabular}"
   )
 
-  all_warn_texts <- unlist(lapply(all_fits_for_warn, function(f) f$warnings))
-  warn_tab <- if (length(all_warn_texts) > 0) sort(table(gsub("\\s+", " ", trimws(all_warn_texts))), decreasing = TRUE) else NULL
-  # Singular-design warnings (one per failed (g,t) cell) are collapsed into a
-  # single entry listing the cells; every other distinct warning is kept.
-  warn_listing <- if (!is.null(warn_tab)) {
-    nm <- names(warn_tab); is_sing <- grepl("singular", nm, ignore.case = TRUE)
-    cells <- regmatches(nm[is_sing], regexpr("\\(g, t\\) = \\([0-9]+, [0-9]+\\)", nm[is_sing]))
-    cells <- sub("\\(g, t\\) = ", "", cells)
-    sing_g_all <- rep(sub("\\((\\d+), \\d+\\)", "\\1", cells), times = as.integer(warn_tab[is_sing]))
-    sing_by_g  <- table(sing_g_all)
-    sing_txt <- if (any(is_sing)) paste0("``singular design, $ATT(g,t)$ set NA'' for ",
-      sum(warn_tab[is_sing]), " cells (",
-      esc_tex(paste(paste0(names(sing_by_g), ":", as.integer(sing_by_g)), collapse = ", ")),
-      "; cell list in run log)") else NULL
-    # Non-singular warnings are grouped by their first 55 characters so near-
-    # duplicate messages (same complaint, different group list) collapse into
-    # one note entry with a summed count, rather than one entry each.
-    other_txt <- if (any(!is_sing)) {
-      prefixes <- substr(nm[!is_sing], 1, 32)
-      by_prefix <- tapply(as.integer(warn_tab[!is_sing]), prefixes, sum)
-      vapply(seq_along(by_prefix), function(i) paste0("``", esc_tex(names(by_prefix)[i]),
-             "\\dots'' ($\\times$", by_prefix[[i]], ")"), character(1))
-    } else NULL
-    paste(c(sing_txt, other_txt), collapse = "; ")
-  } else "none"
-
   write_tex_float(
     out_path      = here("output", "tables", "hazard", "att_hazard_controls.tex"),
     caption_title = "NAP effect on log adaptation commitments with EM-DAT hazard-realisation controls",
@@ -919,9 +905,10 @@ if (!emdat_available) {
     notes_text    = paste0(
       "CS\\,(2021) DR, never-treated controls, WGI GE + log population, cohorts $\\geq 5$, ",
       "multiplier-bootstrap SE (999 reps, seed 1242), \\texttt{did} ", DID_VERSION,
-      ". Row 1: headline fit ($\\Delta$ reference). Row 2: hazard sample (missing EM-DAT ",
-      "lag dropped). Hazard set CLIMATE-RELATED unless noted (last row ALL-",
-      "NATURAL). (a) adds the one-year-lagged hazard measure to \\texttt{xformla} (each ",
+      ". Row 1: the headline estimate. Row 2: hazard sample (missing EM-DAT ",
+      "lag dropped). $\\Delta$ vs.\\ reference $=$ reference ATT $-$ row ATT; the reference is ",
+      "Row 1 for Row 2 and Row 2 for Rows 3--", length(hazard_rows), ". Hazards: climate-related events unless noted (last row: all natural ",
+      "hazards). (a) adds the one-year-lagged hazard measure to the covariates (each ",
       "observation's own lag: the panel is unbalanced, so \\texttt{did} estimates it as repeated ",
       "cross-sections); (b) residualises the ",
       "outcome on it via never-treated FE, re-estimates on the residual; (c) uses a 3-yr ",
@@ -988,30 +975,29 @@ run_orthogonality_battery <- function(lag1_var, lag2_var, out_path, caption_titl
   m_lag1     <- fixest::feols(as.formula(fm1_str), data = two_lag, cluster = ~country_id)
   m_lag2     <- fixest::feols(as.formula(fm2b_str), data = two_lag, cluster = ~country_id)
   m_nocovid  <- fixest::feols(as.formula(fm2_str), data = two_lag_nocovid, cluster = ~country_id)
-  cloglog_error_msg <- NULL
-  m_cloglog  <- tryCatch(
+  # The cloglog model can fail to converge on these sparse events; it is then
+  # dropped from the table and the note says why (the error is returned, not
+  # assigned from inside the handler).
+  m_cloglog <- tryCatch(
     fixest::feglm(as.formula(fm2_str), data = two_lag,
                   family = binomial(link = "cloglog"), cluster = ~country_id),
-    error = function(e) {
-      # Sanctioned exception to the `<<-` rule (condition capture; see §2 note).
-      cloglog_error_msg <<- conditionMessage(e)
-      message("  cloglog failed: ", cloglog_error_msg)
-      NULL
-    }
-  )
+    error = function(e) e)
+  cloglog_error_msg <- NULL
+  if (inherits(m_cloglog, "error")) {
+    cloglog_error_msg <- conditionMessage(m_cloglog)
+    message("  cloglog failed: ", cloglog_error_msg)
+    m_cloglog <- NULL
+  }
 
-  wald_lpm     <- tryCatch(fixest::wald(m_lpm, keep = c(lag1_var, lag2_var)),
-                           error = function(e) list(stat = NA_real_, p = NA_real_))
-  wald_nocovid <- tryCatch(fixest::wald(m_nocovid, keep = c(lag1_var, lag2_var)),
-                           error = function(e) list(stat = NA_real_, p = NA_real_))
-  wald_cloglog <- if (!is.null(m_cloglog)) tryCatch(
-    fixest::wald(m_cloglog, keep = c(lag1_var, lag2_var)),
-    error = function(e) list(stat = NA_real_, p = NA_real_)) else list(stat = NA_real_, p = NA_real_)
+  wald_lpm     <- fixest::wald(m_lpm, keep = c(lag1_var, lag2_var))
+  wald_nocovid <- fixest::wald(m_nocovid, keep = c(lag1_var, lag2_var))
+  wald_cloglog <- if (!is.null(m_cloglog)) fixest::wald(m_cloglog, keep = c(lag1_var, lag2_var)) else
+    list(stat = NA_real_, p = NA_real_)
 
   extract <- function(model, term) {
     if (is.null(model)) return(list(est = NA_real_, se = NA_real_, p = NA_real_))
-    tt <- tryCatch(broom::tidy(model), error = function(e) NULL)
-    if (is.null(tt) || !(term %in% tt$term)) return(list(est = NA_real_, se = NA_real_, p = NA_real_))
+    tt <- broom::tidy(model)
+    if (!(term %in% tt$term)) return(list(est = NA_real_, se = NA_real_, p = NA_real_))
     r <- tt[tt$term == term, ]
     list(est = r$estimate[1], se = r$std.error[1], p = r$p.value[1])
   }
@@ -1026,6 +1012,12 @@ run_orthogonality_battery <- function(lag1_var, lag2_var, out_path, caption_titl
   wald_p <- c(wald_lpm$p, NA_real_, NA_real_, wald_nocovid$p, wald_cloglog$p)
   n_rows <- c(nrow(two_lag), nrow(two_lag), nrow(two_lag), nrow(two_lag_nocovid),
               if (is.null(m_cloglog)) NA_integer_ else nrow(two_lag))
+  # A model that could not be estimated is dropped from the table and named in
+  # the note, rather than shown as a column of dashes.
+  est_ok <- !vapply(models, function(x) is.null(x$m), logical(1L))
+  models <- models[est_ok]
+  wald_p <- wald_p[est_ok]
+  n_rows <- n_rows[est_ok]
 
   col1 <- vapply(seq_along(models), function(i) {
     if (!models[[i]]$has1) return("--")
@@ -1058,7 +1050,7 @@ run_orthogonality_battery <- function(lag1_var, lag2_var, out_path, caption_titl
   row_events  <- paste0("NAP-submission events & ",
                         paste(rep(sum(two_lag$nap_submit), length(models)), collapse = " & "),
                         " \\\\")
-  row_fe      <- "Country + year FE & \\multicolumn{5}{c}{Yes} \\\\"
+  row_fe      <- sprintf("Country + year FE & \\multicolumn{%d}{c}{Yes} \\\\", length(models))
 
   ortho_lines <- c(
     paste0("\\begin{tabular}{l", strrep("c", length(models)), "}"),
@@ -1098,16 +1090,20 @@ run_orthogonality_battery <- function(lag1_var, lag2_var, out_path, caption_titl
     out_path = out_path, caption_title = caption_title, label = label,
     tabular_lines = ortho_lines,
     notes_text = paste0(
-      "LPM (cols 1--4), cloglog hazard (col 5); DV $= 1$ in the NAP-submission year, else 0; ",
+      if (is.null(m_cloglog)) "Linear probability models (LPM)" else
+        "LPM (cols 1--4), cloglog hazard (col 5)",
+      "; DV $= 1$ in the NAP-submission year, else 0; ",
       "post-adoption years excluded, never-treated countries censored. Country + year FE, SE ",
       "clustered by recipient. Regressor: ", hazard_desc, ". Col.\\ 4 drops 2020--2022. Joint ",
       "Wald tests both lags jointly nonzero. Base rate ",
       sprintf("%.1f", 100 * mean(two_lag$nap_submit)), "\\% per country-year (",
       sum(two_lag$nap_submit), " events, ", n_countries_two_lag, " countries). ", n_dropped,
-      " rows lacking a valid two-year lag dropped. Full cohort set (not $\\geq 5$). ",
-      "\\texttt{did} ", DID_VERSION,
+      " rows lacking a valid two-year lag dropped. Full cohort set (not $\\geq 5$)",
       if (is.null(m_cloglog))
-        "; col.\\ 5 not estimable (fixed-effects singleton), shown as ``--''" else "",
+        paste0(". A two-lag complementary log-log hazard model with the same fixed ",
+               "effects is not estimable (",
+               if (grepl("singleton", cloglog_error_msg)) "fixed-effects singleton" else
+                 "estimation error", ") and is not reported") else "",
       if (nzchar(extra_note)) paste0(". ", extra_note) else "",
       ". * $p<0.10$, ** $p<0.05$, *** $p<0.01$"
     ),
@@ -1157,9 +1153,7 @@ if (emdat_available) {
   m_events <- fixest::feols(
     nap_submit ~ n_events_climate_lag1 + n_events_climate_lag2 | country_id + year,
     data = events_2lag, cluster = ~country_id)
-  wald_events <- tryCatch(
-    fixest::wald(m_events, keep = c("n_events_climate_lag1", "n_events_climate_lag2")),
-    error = function(e) list(p = NA_real_))
+  wald_events <- fixest::wald(m_events, keep = c("n_events_climate_lag1", "n_events_climate_lag2"))
   message(sprintf(
     "NAP timing vs. EM-DAT hazard (n_events, compact alternative, N=%d): joint Wald p = %s.",
     nrow(events_2lag), fmt3(wald_events$p)))
@@ -1202,12 +1196,14 @@ if (file.exists(napa_src)) {
 
 stopifnot(!any(is.na(napa_list$iso3)))
 n_napa <- nrow(napa_list)  # computed from the file, never hardcoded
+message(sprintf("NAPA submissions span %d-%d (%d NAPAs).",
+                min(napa_list$napa_year), max(napa_list$napa_year), n_napa))
 
 # Provenance string reused in every NAPA table note.
 napa_source_note <- paste0(
   "UNFCCC `NAPAs received' page (", n_napa, " NAPAs, latest South Sudan, Feb.\\ 2017), ",
   "transcribed by the authors 2026-09-15, cross-checked ", n_napa, "/", n_napa,
-  " against the archived page PDF; data/raw/napa/napa\\_list\\_unfccc.csv")
+  " against the archived page PDF (shipped with the replication package)")
 # Short label for Source: fields (the full provenance sentence belongs in
 # Notes only; repeating it in Source would be redundant).
 napa_source_short <- "UNFCCC `NAPAs received' list (transcribed by the authors, verified -- see Notes)"
@@ -1238,7 +1234,7 @@ stopifnot(length(ldc_iso3_2013) == 49L, !anyDuplicated(ldc_iso3_2013))
 # Among NAP adopters in the main sample (cohorts >= 5 treated units), split
 # by whether the country had submitted a NAPA before its NAP, and estimate
 # the NAP effect in each cell (same spec as the LDC split in 05: CS (2021),
-# doubly-robust, never-treated control, analytical SE -- see 05 §22 for the
+# doubly-robust, never-treated control, multiplier-bootstrap SE -- see 05 §22 for the
 # split machinery this mirrors; 05 itself was not edited).
 #
 # Because every
@@ -1309,7 +1305,7 @@ write_tex_float(
   tabular_lines = cross_tab_lines,
   notes_text    = paste0(
     "Treated-unit counts (main-sample NAP adopters, cohorts $\\geq 5$) by prior-NAPA status ",
-    "and LDC classification (UN 2013 list, matching 05\\_heterogeneity.R's split). See main ",
+    "and LDC classification (UN 2013 list, the classification of the LDC heterogeneity split). See main ",
     "text: the two partitions nearly coincide, so this split is the LDC split under another ",
     "name. NAPA list: ", napa_source_note
   ),
@@ -1319,16 +1315,28 @@ write_tex_float(
 napa_split_spec <- function(panel_in, keep_treated_flag) {
   panel_split <- panel_in %>%
     filter(cohort_year == 0 | prior_napa == keep_treated_flag)
+  # Global state as before (later sections re-seed anyway); the bootstrap fit
+  # and its simple aggregation draw inside withr::with_seed(1242), seeded
+  # immediately before the estimator as in 05's sample splits, so the reported
+  # SE is ONE multiplier-bootstrap draw (999 reps, clustered by recipient) and
+  # no later random draw in this script moves.
   set.seed(1242)
-  cap <- run_att_gt_captured(
-    yname = "log_commits", tname = "year", idname = "country_id", gname = "cohort_year",
-    xformla = ~ ge_est + log_population, data = panel_split, est_method = "dr",
-    bstrap = FALSE, cband = FALSE, control_group = "nevertreated", anticipation = 0,
-    base_period = "universal", panel = TRUE, allow_unbalanced_panel = TRUE
-  )
+  fit <- withr::with_seed(1242L, {
+    cap <- run_att_gt_captured(
+      yname = "log_commits", tname = "year", idname = "country_id", gname = "cohort_year",
+      xformla = ~ ge_est + log_population, data = panel_split, est_method = "dr",
+      bstrap = TRUE, biters = 999L, cband = FALSE, control_group = "nevertreated",
+      anticipation = 0, base_period = "universal", panel = TRUE,
+      allow_unbalanced_panel = TRUE
+    )
+    agg_s <- if (is.null(cap$gt_obj)) NULL else
+      tryCatch(aggte(cap$gt_obj, type = "simple", na.rm = TRUE), error = function(e) NULL)
+    list(cap = cap, agg_s = agg_s)
+  })
+  cap   <- fit$cap
+  agg_s <- fit$agg_s
   if (is.null(cap$gt_obj)) return(list(gt_obj = NULL, agg_s = NULL, n_units = NA_integer_,
                                        ids = integer(0)))
-  agg_s <- tryCatch(aggte(cap$gt_obj, type = "simple", na.rm = TRUE), error = function(e) NULL)
   list(gt_obj = cap$gt_obj, agg_s = agg_s, n_units = n_distinct(panel_split$country_id),
       ids = sort(unique(panel_split$country_id)))
 }
@@ -1342,10 +1350,7 @@ n_treated_yes <- sum(adopters_prior_napa$prior_napa == 1L)
 n_treated_no  <- sum(adopters_prior_napa$prior_napa == 0L)
 
 napa_split_row <- function(label, fit, n_treated_cell) {
-  if (is.null(fit) || is.null(fit$agg_s)) {
-    return(data.frame(group = label, ATT = NA_real_, SE = NA_real_, p = NA_real_,
-                      n_units = NA_integer_, n_treated = n_treated_cell))
-  }
+  if (is.null(fit) || is.null(fit$agg_s)) stop("Prior-NAPA split estimation failed: ", label)
   att <- fit$agg_s$overall.att; se <- fit$agg_s$overall.se
   z <- att / se; p <- 2 * pnorm(-abs(z))
   data.frame(group = label, ATT = att, SE = se, p = p, n_units = fit$n_units,
@@ -1357,28 +1362,24 @@ napa_split_tab <- bind_rows(
 ) %>% mutate(stars = stars_of(p))
 
 # The two subgroup fits' unit-id
-# INTERSECTION is exactly the 87 shared never-treated controls (fit_prior_yes
+# INTERSECTION is exactly the shared never-treated controls (fit_prior_yes
 # and fit_prior_no both include every never-treated unit; their TREATED
-# units are mutually exclusive by construction). Aligning influence functions
-# on a set that contains zero treated units from EITHER fit is invalid --
-# it would estimate Var(ATT_yes - ATT_no) from the control-side IF alone,
-# discarding the very treated-unit variation the ATT difference depends on.
-# did has no single-call mechanism for a joint fit of both subgroups against
-# one shared control group with a group indicator, so this uses the independence approximation directly
-# (replicating compute_att_difference()'s own fallback formula) rather than
-# routing through that helper's id-intersection branch, with the reason
-# stated explicitly in the table note.
-diff_napa <- if (!is.null(fit_prior_yes$agg_s) && !is.null(fit_prior_no$agg_s)) {
+# units are mutually exclusive by construction), so compute_att_difference()'s
+# id-intersection branch would estimate Var(ATT_yes - ATT_no) from the
+# control-side IF alone and is not used. Aligned influence functions on the
+# union of the two samples are not implemented; the independence
+# approximation (compute_att_difference()'s own fallback formula) is used
+# instead. The shared controls make the two estimates positively correlated,
+# so the independence SE is conservative and p is an upper bound.
+diff_napa <- {
   d_att <- fit_prior_yes$agg_s$overall.att - fit_prior_no$agg_s$overall.att
   d_se  <- sqrt(fit_prior_yes$agg_s$overall.se^2 + fit_prior_no$agg_s$overall.se^2)
   d_z   <- if (d_se > 1e-12) d_att / d_se else NA_real_
   list(diff = d_att, se = d_se, z = d_z,
       pval = if (is.na(d_z)) NA_real_ else 2 * pnorm(-abs(d_z)),
-      method = paste0("independence approximation (the subgroups share all never-treated ",
-                      "controls, so aligned-IF is not meaningful; conservative, $p$ is an upper bound)"),
+      method = paste0("independence approximation (aligned influence functions not ",
+                      "implemented; the independence SE is conservative, so $p$ is an upper bound)"),
       n_units = NA_integer_)
-} else {
-  list(diff = NA_real_, se = NA_real_, z = NA_real_, pval = NA_real_, method = "not estimable")
 }
 message(sprintf("Difference (prior NAPA - no prior NAPA) = %.4f, SE = %.4f, p = %.3f [%s]",
                 diff_napa$diff, diff_napa$se, diff_napa$pval, diff_napa$method))
@@ -1407,7 +1408,8 @@ write_tex_float(
   tabular_lines = napa_split_lines,
   notes_text    = paste0(
     "CS\\,(2021) DR, never-treated controls, WGI GE + log population, cohorts $\\geq 5$, ",
-    "analytical (IF) SE, \\texttt{did} ", DID_VERSION,
+    "\\texttt{did} ", DID_VERSION, ". Multiplier-bootstrap SE (999 reps, clustered by ",
+    "recipient, seed 1242)",
     ". ``Prior NAPA'': submitted a NAPA ",
     "to the UNFCCC before the NAP; NAPA list: ", napa_source_note,
     ". Difference row: ", diff_napa$method, ".",
@@ -1530,8 +1532,8 @@ if (n_late_napa < 5L) {
   # individual cohort may meet the project's per-cohort thin_threshold = 5.
   # Applying the headline's own "drop cohorts < 5" rule here could drop every
   # treated cohort and leave att_gt() with zero treated groups. Instead this
-  # uses the SAME fallback the headline spec itself uses for its own small
-  # 2015-2020 cohorts (03_main_results.R's "cohorts_retained" spec): retain
+  # uses the retained-cohorts robustness specification of 04_robustness.R
+  # (Table 12), which keeps the headline's small 2015-2020 cohorts: retain
   # every NAPA cohort, outcome-regression estimator, analytical SE.
   use_retained_fallback <- length(napa_thin) > 0
   if (use_retained_fallback) {
@@ -1539,7 +1541,7 @@ if (n_late_napa < 5L) {
       paste0("All or some NAPA cohorts (%s) fall below the per-cohort thin_threshold = %d ",
             "(total treated units = %d, which is >= 5, so the check is still run -- using ",
             "the 'cohorts_retained' style fallback: est_method = \"reg\", bstrap = FALSE, ",
-            "analytical SE, matching 03_main_results.R's own small-cohort convention)."),
+            "analytical SE, as in the retained-cohorts specification of 04_robustness.R)."),
       paste(napa_thin, collapse = ", "), thin_threshold, n_late_napa))
   }
   use_dr_placebo     <- if (use_retained_fallback) "reg"  else "dr"
@@ -1566,11 +1568,7 @@ if (n_late_napa < 5L) {
   #     text and gt_obj$group in a controlled test); gt_placebo$n is did's
   #     own count of units used.
   if (is.null(gt_placebo) || is.null(agg_placebo)) {
-    surviving_cohorts   <- integer(0)
-    surviving_countries <- character(0)
-    n_units_used        <- NA_integer_
-    placebo_att <- placebo_se <- placebo_p <- NA_real_
-    ci_lo <- ci_hi <- mde <- NA_real_
+    stop("NAPA falsification estimation failed: no table written.")
   } else {
     surviving_cohorts <- sort(unique(gt_placebo$group))
     surviving_countries <- napa_treated_names %>%
@@ -1582,13 +1580,15 @@ if (n_late_napa < 5L) {
     placebo_p    <- 2 * pnorm(-abs(placebo_att / placebo_se))
     ci_lo <- placebo_att - 1.96 * placebo_se
     ci_hi <- placebo_att + 1.96 * placebo_se
-    mde   <- 2.8 * placebo_se  # standard approx. MDE, 80% power at 5% significance
+    mde_napa <- mde(placebo_se)  # 80% power, 5% two-sided (code/functions/mde.R)
   }
   n_dropped_cohorts <- setdiff(unique(did_panel_placebo$cohort_year[did_panel_placebo$cohort_year > 0]),
                                surviving_cohorts)
   message(sprintf("Falsification-check ATT = %s, SE = %s, p = %s, 95%% CI = [%s, %s], MDE = %s.",
                   fmt4(placebo_att), fmt4(placebo_se), fmt3(placebo_p), fmt4(ci_lo), fmt4(ci_hi),
-                  fmt4(mde)))
+                  fmt4(mde_napa)))
+  message(sprintf("Falsification-check ATT = %.8g, SE = %.8g (8 significant digits).",
+                  placebo_att, placebo_se))
   message(sprintf("Surviving cohorts (from gt_obj$group): %s. Contributing countries: %s.",
                   if (length(surviving_cohorts) == 0) "(none)" else paste(surviving_cohorts, collapse = ", "),
                   if (length(surviving_countries) == 0) "(none)" else paste(surviving_countries, collapse = ", ")))
@@ -1622,7 +1622,7 @@ if (n_late_napa < 5L) {
     "\\toprule",
     "Falsification treatment & ATT & SE & 95\\% CI & $p$-value & $N$ cohorts \\\\",
     "\\midrule",
-    paste0("NAPA submission ($G_i$ = napa\\_year) & ", fmt4(placebo_att), stars_of(placebo_p),
+    paste0("NAPA submission ($G_i$ = NAPA-submission year) & ", fmt4(placebo_att), stars_of(placebo_p),
            " & (", fmt4(placebo_se), ") & [", fmt4(ci_lo), ", ", fmt4(ci_hi), "] & ",
            fmt3(placebo_p), " & ", length(surviving_cohorts), " \\\\"),
     "\\bottomrule",
@@ -1634,9 +1634,10 @@ if (n_late_napa < 5L) {
     label         = "tab:napa_falsification",
     tabular_lines = placebo_lines,
     notes_text    = paste0(
-      "CS\\,(2021), ", if (use_retained_fallback) "OR (analytical SE)"
+      "CS\\,(2021), ", if (use_retained_fallback)
+        "OR with analytical SE (the NAPA cohorts have fewer than 5 treated units each)"
       else "DR (multiplier-bootstrap SE, 999 reps, seed 1242)",
-      " fallback, never-treated controls; low-power falsification, not a placebo (see main ",
+      ", never-treated controls; low-power falsification, not a placebo (see main ",
       "text for the point estimate, cohort composition, and MDE). $G_i$ = NAPA-submission ",
       "year; panel restricted to ", first_year, "--", placebo_cutoff_year,
       ", verified free of real-NAP treatment; out-of-window NAPAs are pseudo-never-treated. ",

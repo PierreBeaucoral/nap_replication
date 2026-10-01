@@ -1,27 +1,26 @@
 \begin{table}[H]
 \centering
-\caption{Alternative treatment dates: submission month and the $e \geq 1$ aggregation}
+\caption{Alternative treatment dates: re-dating adoption by submission month}
 \label{tab:att_eventdate}
-% latex table generated in R 4.6.0 by xtable 1.8-8 package
-% Tue Sep 29 12:09:25 2026
+% latex table generated in R 4.6.1 by xtable 1.8-8 package
+% Thu Oct  1 12:41:22 2026
 \begingroup\small
 \adjustbox{max width=\textwidth}{%
 \begin{tabular}{lllllllll}
   \toprule
-Specification & ATT & SE & $t$ & Pre-trend $p$ & $N$ & Recipients & Treated & Contributing cohorts \\ 
+Specification & ATT & SE & $t$ & \makecell{Pre-trend \\ $p$} & $N$ & Recipients & Treated & \makecell{Contributing \\ cohorts} \\ 
   \midrule
-Baseline: treatment dated by submission YEAR (headline specification) & 0.3036** & (0.1256) & 2.418 & 0.772 & 1,930 & 126 & 40 / 40 & 2021, 2022, 2023, 2024 \\ 
-  (a1) Re-dated, main treated set, $\geq 5$ rule re-applied & 0.1053 & (0.1409) & 0.748 & 0.571 & 1,866 & 122 & 36 / 36 & 2022, 2023, 2024 \\ 
-  (a2) Re-dated, main treated set, all re-dated cohorts retained & 0.1053 & (0.1501) & 0.702 & 0.571 & 1,882 & 123 & 36 / 37 & 2022, 2023, 2024 \\ 
-  (b) Re-dated, full adopter sample, $\geq 5$ rule re-applied & -0.3097 & (0.2698) & -1.148 & 0.384 & 1,962 & 128 & 42 / 42 & 2020, 2022, 2023, 2024 \\ 
-  Dynamic average over $e \geq 1$ (impact year excluded) & 0.2599 & (0.1722) & 1.510 & 0.772 & 1,930 & 126 & 40 / 40 & 2021, 2022, 2023, 2024 \\ 
+\makecell[l]{Baseline: dated by \\ submission year} & 0.3036** & (0.1256) & 2.418 & 0.772 & 1,930 & 126 & 40 / 40 & \makecell{2021, 2022, \\ 2023, 2024} \\ 
+  \makecell[l]{(a1) Main treated set, \\ $\geq 5$ rule re-applied} & 0.1053 & (0.1409) & 0.748 & 0.571 & 1,866 & 122 & 36 / 36 & \makecell{2022, 2023, \\ 2024} \\ 
+  \makecell[l]{(a2) Main treated set, \\ all cohorts retained} & 0.1053 & (0.1501) & 0.702 & 0.571 & 1,882 & 123 & 36 / 37 & \makecell{2022, 2023, \\ 2024} \\ 
+  \makecell[l]{(b) Full adopter sample, \\ $\geq 5$ rule re-applied} & -0.3097 & (0.2698) & -1.148 & 0.384 & 1,962 & 128 & 42 / 42 & \makecell{2020, 2022, \\ 2023, 2024} \\ 
    \bottomrule
 \end{tabular}
 }
 \endgroup
 \par\vspace{4pt}
 \begin{minipage}{\linewidth}\footnotesize
-Notes: Outcome: log(adaptation commitments). Rows re-date treatment by posting month (post-June $\to$ next year); see Table~\ref{tab:cohort_redating}. (a1)/(a2): main treated set, $\geq 5$ rule re-applied vs.\ retained. (b): full sample re-dated. Contributing/Treated: estimable-cell counts. Last row: headline fit over $e \geq 1$. Unless noted: headline specification (CS\,(2021) DR, never-treated controls, WGI GE + log population, cohorts $\geq$ 5), multiplier-bootstrap SE (999 reps, seed 1242). Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-5 \leq e \leq -2$; 4 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular (analytical twin fit). * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Notes: Outcome: log(adaptation commitments). Rows re-date treatment by posting month (post-June $\to$ next year); see Table~\ref{tab:cohort_redating}. (a1)/(a2): main treated set, $\geq 5$ rule re-applied vs.\ retained. (b): full sample re-dated. Contributing/Treated: estimable-cell counts. Unless noted: headline specification (CS\,(2021) DR, never-treated controls, WGI GE + log population, cohorts $\geq$ 5), multiplier-bootstrap SE (999 reps, seed 1242). Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-5 \leq e \leq -2$; 4 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
 Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
 \end{minipage}
 \end{table}

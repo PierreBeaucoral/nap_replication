@@ -9,17 +9,25 @@
 \cmidrule(lr){2-4} \cmidrule(lr){5-7} \cmidrule(lr){8-10}
 Outcome & $\chi^2$ & df & $p$ & $\chi^2$ & df & $p$ & $W$ & df & $p$ \\
 \midrule
+\multicolumn{10}{l}{\textit{Panel A: panel 2009--2024 (headline sample)}} \\
 log(Adaptation commitments) & 1.803 & 4 & 0.772 & 25.827 & 14 & 0.027 & 563.117 & 50 & 0.000 \\
 Adaptation share (\% of global) & 2.631 & 4 & 0.621 & 20.569 & 14 & 0.113 & 347.407 & 50 & 0.000 \\
 log(Total commitments) & 11.690 & 4 & 0.020 & 22.921 & 14 & 0.062 & 294.368 & 50 & 0.000 \\
 log(Non-adaptation commitments) & 10.104 & 4 & 0.039 & 19.037 & 14 & 0.164 & 296.618 & 50 & 0.000 \\
 log(Adaptation disbursements) & 4.005 & 4 & 0.405 & 23.382 & 14 & 0.054 & 575.188 & 50 & 0.000 \\
+\midrule
+\multicolumn{10}{l}{\textit{Panel B: panel 2010--2024}} \\
+log(Adaptation commitments) & 1.803 & 4 & 0.772 & 27.968 & 13 & 0.009 & 400.115 & 46 & 0.000 \\
+Adaptation share (\% of global) & 2.631 & 4 & 0.621 & 21.008 & 13 & 0.073 & 247.886 & 46 & 0.000 \\
+log(Total commitments) & 11.690 & 4 & 0.020 & 23.910 & 13 & 0.032 & 288.740 & 46 & 0.000 \\
+log(Non-adaptation commitments) & 10.104 & 4 & 0.039 & 20.480 & 13 & 0.084 & 267.157 & 46 & 0.000 \\
+log(Adaptation disbursements) & 4.005 & 4 & 0.405 & 20.296 & 13 & 0.088 & 451.210 & 46 & 0.000 \\
 \bottomrule
 \end{tabular}
 }
 \par\vspace{4pt}
 \begin{minipage}{\linewidth}\footnotesize
-Notes: Headline specification (CS 2021, DR, never-treated controls, WGI GE + log population, universal base period, cohorts $\geq 5$); analytical (non-bootstrap) fit throughout. ``Leads $\geq -5$'' and ``full window'' report the joint Wald $\chi^2$/$p$ test on the aggregated pre-treatment event-time coefficients, using the influence-function covariance of the dynamic aggregation from the analytical fit (Table~\ref{tab:combined_wide_main}'s window vs.\ every available pre-period respectively; restriction counts are the df columns); a generalized inverse is used if a block is singular. \texttt{did} pre-test $p$: \texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year, pooling each cohort's pre-treatment $ATT(g,t)$ cells against its own base year and excluding the zero-variance base-year cell.\par
+Notes: Headline specification (CS 2021, DR, never-treated controls, WGI GE + log population, universal base period, cohorts $\geq 5$); analytical (non-bootstrap) fit throughout. ``Leads $\geq -5$'' and ``full window'' report the joint Wald $\chi^2$/$p$ test on the aggregated pre-treatment event-time coefficients, using the influence-function covariance of the dynamic aggregation from the analytical fit (Table~\ref{tab:combined_wide_main}'s window vs.\ every available pre-period respectively; restriction counts are the df columns); a generalized inverse is used if a block is singular. \texttt{did} pre-test $p$: \texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year, pooling each cohort's pre-treatment $ATT(g,t)$ cells against its own base year and excluding the zero-variance base-year cell. Panel~B repeats the three tests on the panel starting in 2010 (the sample of Table~\ref{tab:combined_wide_2010}), which has no 2009 cells.\par
 Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
 \end{minipage}
 \end{table}

@@ -2,8 +2,8 @@
 \centering
 \caption{HonestDiD breakdown value $\bar{M}$ by the number of pre-treatment periods used}
 \label{tab:honestdid_prepriods}
-% latex table generated in R 4.6.0 by xtable 1.8-8 package
-% Tue Sep 29 11:45:38 2026
+% latex table generated in R 4.6.1 by xtable 1.8-8 package
+% Thu Oct  1 12:40:57 2026
 \begingroup\small
 \adjustbox{max width=\textwidth}{%
 \begin{tabular}{llllll}
@@ -19,7 +19,7 @@ Pre-treatment window & log(Adapt.) & Share (pp) & log(Total) & log(Non-adapt.) &
 \endgroup
 \par\vspace{4pt}
 \begin{minipage}{\linewidth}\footnotesize
-Notes: Each cell: breakdown value $\bar{M}$, disciplined by 4, 6 or 8 pre-treatment event times. Estimator/covariance as Table~\ref{tab:honestdid}; only \texttt{min\_e} changes ($-5$, $-7$, $-9$). 4-lead row: stored aggregation behind Table~\ref{tab:combined_wide_main}. 6-/8-lead rows: re-aggregated from the same stored fit (seed 1242), two primary outcomes only; point estimates unchanged, SEs a fresh bootstrap draw. Three aggregate outcomes already break at $\bar{M} = 0$ with four leads, so those cells are left blank.\par
+Notes: Each cell: breakdown value $\bar{M}$, disciplined by 4, 6 or 8 pre-treatment event times. Estimator/covariance as Table~\ref{tab:honestdid}; only the first event time of the dynamic aggregation changes ($-5$, $-7$, $-9$). 4-lead row: the event-study estimates behind Table~\ref{tab:combined_wide_main}. 6-/8-lead rows: the same estimates aggregated over a longer pre-treatment window (seed 1242), for log(Adapt.) and Share (pp) only; point estimates unchanged, SEs a new bootstrap draw. log(Total), log(Non-adapt.) and log(Disb.) already break at $\bar{M} = 0$ with 4 leads, so their longer-window cells are left blank.\par
 Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
 \end{minipage}
 \end{table}

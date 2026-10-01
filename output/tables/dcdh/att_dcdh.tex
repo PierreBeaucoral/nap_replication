@@ -1,9 +1,9 @@
 \begin{table}[H]
 \centering
-\caption{Robustness: de Chaisemartin and D'Haultfoeuille (2024) estimator}
+\caption{Robustness: de Chaisemartin and D'Haultf{\oe}uille (2026) estimator}
 \label{tab:dcdh}
-% latex table generated in R 4.6.0 by xtable 1.8-8 package
-% Tue Sep 29 11:45:40 2026
+% latex table generated in R 4.6.1 by xtable 1.8-8 package
+% Thu Oct  1 12:41:00 2026
 \begingroup\small
 \adjustbox{max width=\textwidth}{%
 \begin{tabular}{lcccc}
@@ -25,7 +25,7 @@ Av. total effect & 0.297 & (0.125) & [0.053, 0.542] & 473 \\
 \endgroup
 \par\vspace{4pt}
 \begin{minipage}{\linewidth}\footnotesize
-Notes: de Chaisemartin--D'Haultfoeuille (2024) estimator, current-treatment dummy; never- and not-yet-treated controls; same controls as the CS main specification. Last row: package's own joint test that all 3 placebo estimates are zero ($p$-value in the CI column), accounting for the covariance across placebo horizons; $p$-value taken from field \texttt{p\_jointplacebo} of \texttt{did\_multiplegt\_dyn}'s results object (v2.3.3), which returns no accompanying statistic (Estimate column blank).\par
+Notes: de Chaisemartin--D'Haultf{\oe}uille (2026) estimator, current-treatment dummy; never- and not-yet-treated controls; same controls as the CS main specification. Effect $+\ell$ is event time $e = \ell - 1$ of the Callaway--Sant'Anna event studies ($\ell = 1$ is the adoption year, $e = 0$), and Placebo $-\ell$ is $e = -1 - \ell$. Last row: package's own joint test that all 3 placebo estimates are zero ($p$-value in the CI column), accounting for the covariance across placebo horizons. The package (DIDmultiplegtDYN 2.3.3) reports only the $p$-value of this test, so the Estimate column is blank.\par
 Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
 \end{minipage}
 \end{table}
