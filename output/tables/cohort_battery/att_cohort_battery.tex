@@ -3,7 +3,7 @@
 \caption{Cohort, timing and conditioning battery: every perturbation against the headline}
 \label{tab:att_cohort_battery}
 % latex table generated in R 4.6.1 by xtable 1.8-8 package
-% Thu Oct  1 12:41:24 2026
+% Thu Oct  1 14:51:59 2026
 \begingroup\small
 \adjustbox{max width=\textwidth}{%
 \begin{tabular}{llllllll}
@@ -17,6 +17,7 @@ Headline & Headline estimate (Table~\ref{tab:combined_wide_main}) & 0.3036** & (
   Leave-one-cohort-out & Drop cohort 2024 (8 recipients) & 0.2550* & (0.1358) & 1.878 & -0.0486 & 32 & 1,816 \\ 
   Drop 2024 & Drop the 2024 adoption cohort & 0.2550* & (0.1358) & 1.878 & -0.0486 & 32 & 1,816 \\ 
   Drop 2024 & Drop calendar year 2024 & 0.3411** & (0.1344) & 2.538 & +0.0375 & 32 & 1,705 \\ 
+  Balanced event window & Unbalanced, all post-adoption years (dynamic average) & 0.3064** & (0.1300) & 2.357 & +0.0027 & 40 & 1,930 \\ 
   Balanced event window & 1 post-adoption year (dynamic average) & 0.2895* & (0.1568) & 1.846 & -0.0141 & 40 & 1,930 \\ 
   Balanced event window & 2 post-adoption years (dynamic average) & 0.2594* & (0.1383) & 1.876 & -0.0443 & 40 & 1,930 \\ 
   Cohort rule $\times$ estimator & Cohorts $\geq 5$, doubly robust & 0.3036** & (0.1256) & 2.418 & +0.0000 & 40 & 1,930 \\ 
@@ -32,14 +33,13 @@ Headline & Headline estimate (Table~\ref{tab:combined_wide_main}) & 0.3036** & (
   Placebo ladder & Placebo -4 years & 0.1324 & (0.1849) & 0.716 & --- & 40 & 1,831 \\ 
   Placebo ladder & Placebo -5 years & -0.0368 & (0.1713) & -0.215 & --- & 40 & 1,831 \\ 
   Conditioning set & Add baseline (2009--2012) outcome level & 0.2866** & (0.1142) & 2.509 & -0.0170 & 40 & 1,930 \\ 
-  Conditioning set & Common support (propensity in [0.05, 0.95]) & 0.3036** & (0.1256) & 2.418 & +0.0000 & 40 & 1,930 \\ 
    \bottomrule
 \end{tabular}
 }
 \endgroup
 \par\vspace{4pt}
 \begin{minipage}{\linewidth}\footnotesize
-Notes: Outcome: log(adaptation commitments). Each row changes one thing from the headline spec (Specification column); blocks correspond to Tables~\ref{tab:att_loco}, \ref{tab:att_drop2024}, \ref{tab:att_balance}, \ref{tab:att_2x2}, \ref{tab:att_anticipation}, \ref{tab:att_eventdate}, \ref{tab:att_placebo_ladder}, \ref{tab:att_conditioning}. ``$\Delta$ vs headline'' $=$ difference from the headline ATT of 0.3036; descriptive, not a test; not shown for the placebo rows, which estimate a fictitious effect. Unless noted: headline specification (CS\,(2021) DR, never-treated controls, WGI GE + log population, cohorts $\geq$ 5), multiplier-bootstrap SE (999 reps, seed 1242).\par
+Notes: Outcome: log(adaptation commitments). Each row changes one thing from the headline spec (Specification column). The 2$\times$2, anticipation, event-date and placebo blocks are detailed in Tables~\ref{tab:att_2x2}, \ref{tab:att_anticipation}, \ref{tab:att_eventdate} and \ref{tab:att_placebo_ladder}; the leave-one-cohort-out, 2024, balanced-window and conditioning blocks are reported here only. ``$\Delta$ vs headline'' $=$ difference from the headline ATT of 0.3036; descriptive, not a test; not shown for the placebo rows, which estimate a fictitious effect. Unless noted: headline specification (CS\,(2021) DR, never-treated controls, WGI GE + log population, cohorts $\geq$ 5), multiplier-bootstrap SE (999 reps, seed 1242).\par
 Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
 \end{minipage}
 \end{table}

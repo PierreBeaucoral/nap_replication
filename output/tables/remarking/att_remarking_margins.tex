@@ -2,31 +2,44 @@
 \centering
 \caption{Margin decomposition of adaptation-marked commitments: new vs.\ continuing vs.\ re-marked activities}
 \label{tab:remarking_margins}
-% latex table generated in R 4.6.1 by xtable 1.8-8 package
-% Thu Oct  1 12:44:49 2026
 \begingroup\small
 \adjustbox{max width=\textwidth}{%
 \begin{tabular}{lcccc}
-  \toprule
-  & Headline (all marked) & New activities & Continuing, already marked & Re-marked (previously unmarked) \\ 
-  \midrule
-ATT & 0.3036** & 0.3741*** & 0.2027* & 0.1197 \\ 
-  SE & (0.1256) & (0.1338) & (0.1186) & (0.1804) \\ 
-  $t$-statistic & 2.418 & 2.796 & 1.710 & 0.663 \\ 
-  Mean (pre-treat., USD M) & 104.18 & 92.23 & 7.71 & 4.25 \\ 
-  Share of pre-treat.\ marked commitments (\%) & 100.0 & 88.5 & 7.4 & 4.1 \\ 
-  Observations & 1,930 & 1,930 & 1,930 & 1,930 \\ 
-  Countries & 126 & 126 & 126 & 126 \\ 
-  Pre-trend $\chi^2$ & 1.803 & 1.456 & 1.097 & 5.350 \\ 
-  Pre-trend $p$ & 0.772 & 0.834 & 0.895 & 0.253 \\ 
-  \texttt{did} pre-test $p$ & 0.000 & 0.000 & 0.000 & 0.000 \\ 
-   \bottomrule
+\toprule
+\multicolumn{5}{l}{\textit{Panel A: New, continuing and re-marked activities}} \\
+ & Headline (all marked) & New activities & Continuing, already marked & Re-marked (previously unmarked) \\
+\midrule
+ATT & 0.3036** & 0.3741*** & 0.2027* & 0.1197 \\
+SE & (0.1256) & (0.1338) & (0.1186) & (0.1804) \\
+$t$-statistic & 2.418 & 2.796 & 1.710 & 0.663 \\
+Mean (pre-treat., USD M) & 104.18 & 92.23 & 7.71 & 4.25 \\
+Share of pre-treat.\ marked commitments (\%) & 100.0 & 88.5 & 7.4 & 4.1 \\
+Observations & 1,930 & 1,930 & 1,930 & 1,930 \\
+Countries & 126 & 126 & 126 & 126 \\
+Pre-trend $\chi^2$ & 1.803 & 1.456 & 1.097 & 5.350 \\
+Pre-trend $p$ & 0.772 & 0.834 & 0.895 & 0.253 \\
+\texttt{did} pre-test $p$ & 0.000 & 0.000 & 0.000 & 0.000 \\
+\midrule
+\multicolumn{5}{l}{\textit{Panel B: ``New'' activities split into linked and unlinked (singleton) activities}} \\
+ & New (linked) & Unlinked (singleton, always new) &  &  \\
+\midrule
+ATT & 0.3225** & -0.0240 &  &  \\
+SE & (0.1351) & (0.1669) &  &  \\
+$t$-statistic & 2.387 & -0.144 &  &  \\
+Mean (pre-treat., USD M) & 89.44 & 2.79 &  &  \\
+Share of pre-treat.\ marked commitments (\%) & 85.8 & 2.7 &  &  \\
+Observations & 1,930 & 1,930 &  &  \\
+Countries & 126 & 126 &  &  \\
+Pre-trend $\chi^2$ & 1.485 & 13.393 &  &  \\
+Pre-trend $p$ & 0.829 & 0.010 &  &  \\
+\texttt{did} pre-test $p$ & 0.000 & 0.000 &  &  \\
+\bottomrule
 \end{tabular}
 }
 \endgroup
 \par\vspace{4pt}
 \begin{minipage}{\linewidth}\footnotesize
-Notes: CS\,(2021) DR, never-treated controls, headline specification; cohorts $<5$ treated dropped (126-country sample). SE: multiplier-bootstrap (999 reps, seed 1242; \texttt{did} 2.5.0; CRS Apr.\ 2026). Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-5 \leq e \leq -2$; 4 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular. \texttt{did} pre-test $p$: \texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year. Category definitions and singleton shares: see Section~\ref{sec:remarking} and Appendix~\ref{app:remarking}. ``New'' ATT is an upper bound on genuinely new activity. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Notes: CS\,(2021) DR, never-treated controls, headline specification; cohorts $<5$ treated dropped (126-country sample). SE: multiplier-bootstrap (999 reps, seed 1242; \texttt{did} 2.5.0; CRS Apr.\ 2026). Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-5 \leq e \leq -2$; 4 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular. \texttt{did} pre-test $p$: \texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year. Panel B splits Panel A's ``new'' column into ``new (linked)'' (activity identifiable across years by its CRS project number) and ``unlinked'' (no such identifier; new by construction); the other columns are unchanged. Category definitions and singleton shares: see Section~\ref{sec:remarking} and Appendix~\ref{app:remarking}. ``New'' ATT is an upper bound on genuinely new activity. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
 Source: OECD CRS activity-level microdata (Rio adaptation marker 1 or 2); UNFCCC NAP Central.
 \end{minipage}
 \end{table}

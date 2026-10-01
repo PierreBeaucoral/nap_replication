@@ -16,7 +16,7 @@
 #   C   Conditioning set: baseline (2009-2012) outcome level in xformla, and a
 #       common-support specification trimming recipients whose estimated
 #       propensity to adopt lies outside [0.05, 0.95]; listwise-deletion losses
-#       for each specification.
+#       for each specification (stage log).
 #
 # Inputs :
 #   data/processed/simple_panel_wgi.csv
@@ -26,14 +26,9 @@
 #   data/raw/shared_nap_data/nap_information.csv (submission dates; also carried
 #                                                 in the processed panel)
 # Outputs:
-#   output/tables/cohort_battery/att_loco.tex
-#   output/tables/cohort_battery/att_drop2024.tex
-#   output/tables/cohort_battery/att_balance.tex
 #   output/tables/cohort_battery/att_2x2.tex
 #   output/tables/cohort_battery/cohort_contributions.tex
 #   output/tables/cohort_battery/att_cohort_battery.tex   (combined summary)
-#   output/tables/cohort_battery/att_conditioning.tex
-#   output/tables/cohort_battery/listwise_losses_13.tex
 #   output/tables/anticipation/att_anticipation.tex
 #   output/tables/anticipation/att_eventdate.tex
 #   output/tables/anticipation/att_placebo_ladder.tex
@@ -508,8 +503,8 @@ SPEC_NOTE <- paste0(SPEC_NOTE_PREAMBLE, " ",
 # Tables without a "Pre-trend p" column must not define one.
 SPEC_NOTE_NOPT <- SPEC_NOTE_PREAMBLE
 
-# Pre-sized accumulator: 4 LOCO + 2 drop-2024 + 2 balanced + 4 grid
-# cells + 2 anticipation + 3 event-date + 3 placebo rungs + 2 conditioning = 22.
+# Pre-sized accumulator: 4 LOCO + 2 drop-2024 + 3 balanced + 4 grid
+# cells + 2 anticipation + 3 event-date + 3 placebo rungs + 1 conditioning = 22.
 # add_to_battery() fills the first empty slot and grows only if that estimate is
 # ever exceeded, so the common path never reallocates.
 battery_summary <- vector("list", 22L)
@@ -541,34 +536,16 @@ add_to_battery <- function(acc, block, label, res) {
 
 message("\n=== A.1: leave-one-cohort-out ===\n")
 
-loco_rows <- vector("list", length(kept_cohorts))   # pre-allocated
-names(loco_rows) <- as.character(kept_cohorts)
 for (g in kept_cohorts) {
   panel_g <- did_panel_main %>% filter(cohort_year != g)
   n_drop  <- n_distinct(did_panel_main$country_id[did_panel_main$cohort_year == g])
   message(sprintf("-- dropping cohort %d (%d treated recipients)", g, n_drop))
   res <- run_spec(panel_g, yname = "log_commits")
   lbl <- sprintf("Drop cohort %d (%d recipients)", g, n_drop)
-  loco_rows[[as.character(g)]] <- spec_row(lbl, res)
   battery_summary <- add_to_battery(battery_summary, "Leave-one-cohort-out", lbl, res)
   if (!is.null(res))
     message(sprintf("   ATT = %.4f (SE %.4f, t %.3f)", res$att, res$se, res$t))
 }
-
-loco_tab <- bind_rows(
-  spec_row(sprintf("Baseline: all %d cohorts (headline specification)", length(kept_cohorts)),
-           res_head),
-  bind_rows(loco_rows))
-
-write_tex_float(
-  file.path(dir_tabs_cb, "att_loco.tex"),
-  "Leave-one-cohort-out: headline ATT dropping each adoption cohort in turn",
-  "tab:att_loco",
-  tabular_of(loco_tab, "tab:att_loco"),
-  paste0("Outcome: log(adaptation commitments). Each row removes all recipients of one ",
-         "adoption cohort; controls untouched. Baseline row: the headline estimate ",
-         "(Table~\\ref{tab:combined_wide_main}). ", SPEC_NOTE),
-  SRC_NOTE)
 
 # ==============================================================================
 # SECTION 4. A.2 — dropping 2024 as a cohort and as a calendar year
@@ -589,27 +566,10 @@ panel_no2024_year <- did_panel_main %>%
   filter(year < 2024, cohort_year != 2024)
 res_no2024_year   <- run_spec(panel_no2024_year, yname = "log_commits")
 
-drop24_tab <- bind_rows(
-  spec_row("Baseline (headline specification)",
-           res_head),
-  spec_row("Drop the 2024 adoption cohort", res_no2024_cohort),
-  spec_row("Drop calendar year 2024 (and the 2024 cohort)", res_no2024_year))
-
 battery_summary <- add_to_battery(battery_summary, "Drop 2024",
                                   "Drop the 2024 adoption cohort", res_no2024_cohort)
 battery_summary <- add_to_battery(battery_summary, "Drop 2024",
                                   "Drop calendar year 2024", res_no2024_year)
-
-write_tex_float(
-  file.path(dir_tabs_cb, "att_drop2024.tex"),
-  "Sensitivity to the 2024 adoption cohort and to the 2024 CRS vintage year",
-  "tab:att_drop2024",
-  tabular_of(drop24_tab, "tab:att_drop2024"),
-  paste0("Outcome: log(adaptation commitments). Row 2 drops the 2024 adoption cohort; row 3 ",
-         "also drops calendar year 2024 for every recipient, which removes that cohort's ",
-         "post-treatment period entirely. Baseline row: the headline estimate ",
-         "(Table~\\ref{tab:combined_wide_main}). ", SPEC_NOTE),
-  SRC_NOTE)
 
 # ==============================================================================
 # SECTION 5. A.3 — balanced event windows (balance_e = 1, 2)
@@ -624,9 +584,6 @@ message("\n=== A.3: balanced event windows ===\n")
 balance_grid <- c(NA_integer_, 1L, 2L)
 balance_lbl  <- function(be) if (is.na(be)) "Unbalanced (baseline aggregation)" else
   sprintf("%d post-adoption year%s", be, if (be == 1L) "" else "s")
-# Pre-sized with the row labels as names (filled by label below).
-balance_rows <- setNames(vector("list", length(balance_grid)),
-                         vapply(balance_grid, balance_lbl, character(1L)))
 for (be in balance_grid) {
   lbl <- balance_lbl(be)
   message("-- ", lbl)
@@ -646,58 +603,24 @@ for (be in balance_grid) {
   dyn_att <- if (!is.null(agg_bal)) agg_bal$overall.att else NA_real_
   dyn_se  <- if (!is.null(agg_bal)) agg_bal$overall.se  else NA_real_
   dyn_t   <- if (!is.na(dyn_att) && !is.na(dyn_se) && dyn_se > 0) dyn_att / dyn_se else NA_real_
-  # Event times actually estimated: e = -1 is the normalised base period (zero
-  # standard error) and is excluded from the displayed window.
-  cohorts_in <- if (!is.null(agg_bal)) {
-    ok_e <- agg_bal$egt[!is.na(agg_bal$se.egt) & agg_bal$se.egt > 1e-10]
-    paste(sprintf("%d", as.integer(sort(unique(ok_e)))), collapse = ", ")
-  } else "---"
-  balance_rows[[lbl]] <- data.frame(
-    Specification = lbl,
-    `Dynamic ATT` = if (is.na(dyn_att)) "---" else
-      paste0(sprintf("%.4f", dyn_att), fmt_stars(dyn_t)),
-    SE            = if (is.na(dyn_se)) "---" else sprintf("(%.4f)", dyn_se),
-    `$t$`         = if (is.na(dyn_t)) "---" else sprintf("%.3f", dyn_t),
-    `Event times` = cohorts_in,
-    `$N$`         = if (is.na(be)) format(fit_head$n_obs, big.mark = ",") else
-      if (is.null(res)) "---" else format(res$n_obs, big.mark = ","),
-    check.names = FALSE, stringsAsFactors = FALSE)
   if (!is.na(dyn_att))
     message(sprintf("   dynamic ATT = %.4f (SE %.4f)%s", dyn_att, dyn_se,
                     if (is.na(be)) "  [read from the stored headline fit]" else ""))
-  if (!is.na(be)) {
-    # The summary must report the same quantity as att_balance.tex: the
-    # dynamic average under balance_e, not the (unchanged) simple ATT.
-    res_bal <- res
-    res_bal$att <- dyn_att; res_bal$se <- dyn_se; res_bal$t <- dyn_t
-    p_bal <- if (is.na(dyn_t)) NA_real_ else 2 * pnorm(-abs(dyn_t))
-    res_bal$stars <- if (is.na(p_bal)) "" else if (p_bal < 0.01) "***" else if (p_bal < 0.05) "**" else if (p_bal < 0.10) "*" else ""
-    battery_summary <- add_to_battery(battery_summary, "Balanced event window",
-                                      paste0(lbl, " (dynamic average)"), res_bal)
-  }
+  # The summary reports the dynamic average (under balance_e for the balanced
+  # rows; the stored headline dynamic aggregation for the unbalanced row), not
+  # the simple ATT.
+  res_bal <- if (is.na(be)) list(
+    n_treated = n_distinct(did_panel_main$country_id[did_panel_main$cohort_year > 0]),
+    n_obs     = fit_head$n_obs) else res
+  res_bal$att <- dyn_att; res_bal$se <- dyn_se; res_bal$t <- dyn_t
+  p_bal <- if (is.na(dyn_t)) NA_real_ else 2 * pnorm(-abs(dyn_t))
+  res_bal$stars <- if (is.na(p_bal)) "" else if (p_bal < 0.01) "***" else if (p_bal < 0.05) "**" else if (p_bal < 0.10) "*" else ""
+  battery_summary <- add_to_battery(
+    battery_summary, "Balanced event window",
+    if (is.na(be)) "Unbalanced, all post-adoption years (dynamic average)" else
+      paste0(lbl, " (dynamic average)"),
+    res_bal)
 }
-
-# Cohorts each balanced window excludes, from the panel (not typed).
-be_vals  <- balance_grid[!is.na(balance_grid)]
-be_words <- vapply(be_vals, num_word, character(1L))
-be_excl  <- vapply(be_vals, function(be) paste(sort(unique(did_panel_main$cohort_year[
-  did_panel_main$cohort_year > max(did_panel_main$year) - be])), collapse = " and "),
-  character(1L))
-write_tex_float(
-  file.path(dir_tabs_cb, "att_balance.tex"),
-  paste0("Dynamic ATT over a balanced event window of ",
-         paste(be_words, collapse = " or "), " post-adoption years"),
-  "tab:att_balance",
-  tabular_of(bind_rows(balance_rows), "tab:att_balance"),
-  paste0("Outcome: log(adaptation commitments). Estimate: the average of the event-time ",
-         "effects (dynamic aggregation), not the simple ATT. A balanced window of ",
-         paste(be_words, collapse = " (or "), strrep(")", length(be_words) - 1L),
-         " post-adoption years restricts that average to the cohorts observed for at least ",
-         "that many years after their adoption year (",
-         paste(sprintf("%s excludes %s", be_words, be_excl), collapse = "; "), "). ",
-         "Unbalanced row: the dynamic aggregation of the headline estimate ",
-         "(Table~\\ref{tab:combined_wide_main}). ", SPEC_NOTE_NOPT, " ", STAR_NOTE),
-  SRC_NOTE)
 
 # ==============================================================================
 # SECTION 6. A.4 — the 2x2 grid {main, retained} x {dr, reg}
@@ -1541,28 +1464,11 @@ res_cs <- run_spec(cf_cs$panel, yname = "log_commits")
 if (!is.null(res_cs))
   message(sprintf("  Common support: ATT = %.4f (SE %.4f, t %.3f) | N = %d",
                   res_cs$att, res_cs$se, res_cs$t, res_cs$n_obs))
-battery_summary <- add_to_battery(battery_summary, "Conditioning set",
-                                  "Common support (propensity in [0.05, 0.95])", res_cs)
-
-cond_tab <- bind_rows(
-  spec_row("Baseline: WGI GE + log population (headline specification)",
-           res_head),
-  spec_row("$+$ baseline (2009--2012) mean log adaptation commitments", res_base),
-  spec_row("Common support: propensity $\\in [0.05, 0.95]$", res_cs))
-
-write_tex_float(
-  file.path(dir_tabs_cb, "att_conditioning.tex"),
-  "Conditioning set and common support",
-  "tab:att_conditioning",
-  tabular_of(cond_tab, "tab:att_conditioning"),
-  paste0("Outcome: log(adaptation commitments). Row 2 adds mean ", min(BASE_YEARS), "--",
-         max(BASE_YEARS), " log commitments to the control set. Row 3 imposes common ",
-         "support via a separate ever-adoption logit; propensity outside $[", PS_LO, ", ",
-         PS_HI, "]$ dropped, cohort rule re-applied. ",
-         "Baseline row: the headline estimate (Table~\\ref{tab:combined_wide_main}). ", SPEC_NOTE),
-  SRC_NOTE)
+# Not added to the combined battery: the support restriction is not binding,
+# so the estimate is the headline; the log above records it.
 
 # --- Listwise-deletion losses for the specifications estimated here ----------
+# Printed to the stage log (the text states them).
 lw13 <- function(panel, yname, label, controls) {
   present <- intersect(controls, names(panel))
   miss_y <- is.na(panel[[yname]])
@@ -1583,27 +1489,19 @@ lw13 <- function(panel, yname, label, controls) {
 lw_tab13 <- bind_rows(
   lw13(did_panel_main, "log_commits", "Main specification",
        c("ge_est", "log_population")),
-  lw13(did_panel_base, "log_commits", "$+$ baseline outcome level",
+  lw13(did_panel_base, "log_commits", "+ baseline outcome level",
        c("ge_est", "log_population", "base_outcome")),
   lw13(cf_cs$panel, "log_commits", "Common support (trimmed)",
        c("ge_est", "log_population")),
   lw13(did_panel_full, "log_commits", "All cohorts retained",
        c("ge_est", "log_population"))
 )
-print(lw_tab13, row.names = FALSE)
-
-write_tex_float(
-  file.path(dir_tabs_cb, "listwise_losses_13.tex"),
-  "Listwise-deletion losses in the cohort, anticipation and conditioning specifications",
-  "tab:listwise_losses_13",
-  tabular_of(lw_tab13, "tab:listwise_losses_13"),
-  paste0("Recipient-years and recipients lost to a missing outcome or a missing ",
-         "control in each specification. The estimator drops those ",
-         "cells silently, so the ``used'' columns are the samples on which the ",
-         "reported ATTs are computed. The baseline-outcome specification would lose ",
-         "recipients with no usable ", min(BASE_YEARS), "--", max(BASE_YEARS),
-         " window; the table shows how many it does"),
-  "OECD CRS (Rio adaptation markers); UNFCCC NAP Central; WGI; World Bank WDI")
+for (r in seq_len(nrow(lw_tab13)))
+  message(sprintf("  Listwise losses, %-28s raw %6s -> used %6s  (outcome %s, controls %s; recipients %s -> %s)",
+                  lw_tab13$Specification[r], lw_tab13$`Recipient-years (raw)`[r],
+                  lw_tab13$`Recipient-years (used)`[r], lw_tab13$`Dropped: outcome`[r],
+                  lw_tab13$`Dropped: controls`[r], lw_tab13$`Recipients (raw)`[r],
+                  lw_tab13$`Recipients (used)`[r]))
 
 # ==============================================================================
 # SECTION 12. Combined cohort-battery summary exhibit
@@ -1661,10 +1559,11 @@ write_tex_float(
   "tab:att_cohort_battery",
   tabular_of(bat_tab, "tab:att_cohort_battery"),
   paste0("Outcome: log(adaptation commitments). Each row changes one thing from the headline ",
-         "spec (Specification column); blocks correspond to Tables~\\ref{tab:att_loco}, ",
-         "\\ref{tab:att_drop2024}, \\ref{tab:att_balance}, \\ref{tab:att_2x2}, ",
-         "\\ref{tab:att_anticipation}, \\ref{tab:att_eventdate}, \\ref{tab:att_placebo_ladder}, ",
-         "\\ref{tab:att_conditioning}. ``$\\Delta$ vs headline'' $=$ difference from the ",
+         "spec (Specification column). The 2$\\times$2, anticipation, event-date and placebo ",
+         "blocks are detailed in Tables~\\ref{tab:att_2x2}, \\ref{tab:att_anticipation}, ",
+         "\\ref{tab:att_eventdate} and \\ref{tab:att_placebo_ladder}; the leave-one-cohort-out, ",
+         "2024, balanced-window and conditioning blocks are reported here only. ",
+         "``$\\Delta$ vs headline'' $=$ difference from the ",
          "headline ATT of ", sprintf("%.4f", fit_head$att),
          "; descriptive, not a test; not shown for the placebo rows, which estimate a ",
          "fictitious effect. ",

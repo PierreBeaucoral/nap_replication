@@ -12,10 +12,9 @@
 #' above `tol` (USD millions) and as zero otherwise; a sum below -tol stops the
 #' stage, as 01 does for the summed columns it logs.
 #'
-#' The published counts were computed with exact tests (x > 0, x == 0). The
-#' check below stops the stage if the tolerance changes any classification, so
-#' that a CRS vintage for which it matters is noticed rather than silently
-#' shifting the counts.
+#' The check below stops the stage if the tolerance classifies any sum
+#' differently from the exact tests (x > 0, x == 0), so that a CRS vintage for
+#' which it matters is noticed rather than silently shifting the counts.
 #'
 #' @param x numeric vector of summed CRS amounts (USD millions); NA allowed
 #' @param tol amounts in [-tol, tol] count as zero

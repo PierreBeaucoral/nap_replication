@@ -22,8 +22,6 @@
 #   donor_recipient_year_adaptation.csv — donor x recipient x year adaptation
 #                                     commitments panel (§3c;
 #                                     not used by the paper's exhibits)
-#   adaptation_panel_oda_only.csv    — ODA-only variant of simple_panel_wgi.csv
-#                                     (§22; ODA-only robustness input)
 #   emergency_response_panel.csv     — recipient x year emergency-response AID
 #                                     commitments (§23).
 #                                     Used ONLY by 14_hazard_napa.R's NAP-
@@ -190,8 +188,7 @@ annual_years <- years
 
 # Resolve a CRS file path tolerating the two capitalizations OECD has used
 # ("CRS <year> Data.txt" vs "CRS <year> data.txt"). macOS file systems are
-# case-insensitive so both work locally; on Linux (coauthor reruns, CI) the
-# exact name matters.
+# case-insensitive so both work there; on Linux the exact name matters.
 crs_path <- function(y) {
   for (nm in c(paste0("CRS ", y, " Data.txt"), paste0("CRS ", y, " data.txt"))) {
     p <- here("data", "raw", "CRS", nm)
@@ -281,20 +278,6 @@ rio_data_adaptation_list <- lapply(rio_data_adaptation_list, function(df) {
 })
 
 rio_data_adaptation <- bind_rows(rio_data_adaptation_list)
-
-# Sort for reproducibility, by the ICU "en_US" collation whatever the session
-# locale (the order of the published donor list; see
-# code/functions/make_country_id.R), so donor_list.csv is the same on every
-# machine.
-df_unique <- unique(rio_data_adaptation[, c("DonorType", "DonorName")])
-df_unique <- df_unique[order(stringi::stri_rank(df_unique$DonorType, locale = "en_US"),
-                             stringi::stri_rank(df_unique$DonorName, locale = "en_US")), ]
-
-# Persist the donor list so 02_descriptive_stats.R (list.tex) never has to
-# touch raw CRS.
-write.csv(df_unique, here("data", "processed", "donor_list.csv"),
-          row.names = FALSE)
-message("Wrote: data/processed/donor_list.csv  (", nrow(df_unique), " donors)")
 
 # Persist total adaptation commitments by DonorName (+DonorType) so 02 §8
 # (top_donors figure) never has to touch raw CRS on the happy path.
@@ -418,7 +401,7 @@ read_nap_list <- function() {
   if (length(bad)) stop("Unparseable NAP date in nap_information.csv: ", paste(bad, collapse = ", "))
   nap[, RecipientISO := countrycode(Country, origin = "country.name", destination = "iso3c")]
   # A name countrycode cannot match would silently make an adopter
-  # never-treated (the Paraguay bug class); a duplicate would double its rows.
+  # never-treated; a duplicate would double its rows.
   stopifnot(!anyNA(nap$RecipientISO), !anyDuplicated(nap$RecipientISO))
   nap
 }
@@ -1148,8 +1131,7 @@ message("Wrote: data/processed/simple_panel_wgi.csv  (", nrow(aggregated), " row
 # §20. DESCRIPTIVES PANEL (adaptationNAP.csv)
 # This is the panel used by 02_descriptive_stats.R: no WGI/WDI, no donor-type
 # split, just recipient x year aggregation for descriptive tables and figures.
-# Exhibit: 02_descriptive_stats.R (all 6 figures + stats_des + nap_regional
-#          + finance_change + list.tex)
+# Exhibit: 02_descriptive_stats.R (descriptive figures + stats_des)
 ##############################################################################
 
 # Build CRS extract directly from per-year files
@@ -1197,7 +1179,7 @@ adaptation_aid_04 <- adaptation_aid_04 %>%
     NAP_Year    = year(date_posted)
   )
 
-# NAP treatment variable for finance_change table
+# NAP treatment indicator (1 from the adoption year on)
 adaptation_aid_04 <- adaptation_aid_04 %>%
   mutate(
     NAP = case_when(
@@ -1331,46 +1313,6 @@ flow_lines <- c(
 writeLines(flow_lines, here("output", "tables", "scope", "flow_type_shares.tex"))
 message("Wrote: output/tables/scope/flow_type_shares.tex")
 
-## ODA-only panel variant (does NOT replace the main panel; for a future
-## robustness run). Same row structure as `aggregated` (simple_panel_wgi.csv),
-## with commitments/lcommitments/log_commits AND disbursements/ldisbursements
-## recomputed from commitments_oda/disbursements_oda (built in §18 above,
-## flow_ry now aggregates both); the original all-flow-type totals are kept
-## as commitments_all_flow_types / disbursements_all_flow_types for reference.
-## Columns defined relative to ALL-flow-type commitments would be
-## inconsistent with the ODA-only figure this file represents, so
-## disbursements/ldisbursements are rebuilt from disbursements_oda, and
-## commitments_all, lcommitments_all,
-## commitments_nonadapt, lcommitments_nonadapt, commitments_pc,
-## disbursements_pc, and share_adapt still cannot be rebuilt without a much
-## larger CRS re-aggregation ("all commitments across every purpose code",
-## not just the adaptation marker) this file does not otherwise need, so
-## those remain DROPPED (not silently stale).
-stopifnot("commitments_oda" %in% names(aggregated), "disbursements_oda" %in% names(aggregated))
-oda_inconsistent_cols <- c("commitments_all", "lcommitments_all", "commitments_nonadapt",
-                           "lcommitments_nonadapt", "commitments_pc", "disbursements_pc",
-                           "share_adapt")
-adaptation_panel_oda_only <- aggregated %>%
-  mutate(
-    commitments_all_flow_types   = commitments,
-    disbursements_all_flow_types = disbursements,
-    commitments    = commitments_oda,
-    lcommitments   = log1p_crs(commitments_oda),
-    log_commits    = log1p_crs(commitments_oda),
-    disbursements  = disbursements_oda,
-    ldisbursements = log1p_crs(disbursements_oda)
-  ) %>%
-  select(-any_of(oda_inconsistent_cols))
-write.csv(adaptation_panel_oda_only,
-          here("data", "processed", "adaptation_panel_oda_only.csv"),
-          row.names = FALSE)
-message("Wrote: data/processed/adaptation_panel_oda_only.csv  (",
-        nrow(adaptation_panel_oda_only), " rows; ODA-only commitments AND disbursements ",
-        "(rebuilt from disbursements_oda); dropped ",
-        length(intersect(oda_inconsistent_cols, names(aggregated))),
-        " flow-type-dependent columns that cannot be rebuilt without a larger CRS pass: ",
-        paste(oda_inconsistent_cols, collapse = ", "))
-
 ## --- Regional-flow exclusion documentation --------------------------------
 # regionalflows (§4) drops recipient codes that identify regional/unspecified
 # aggregates rather than single countries; these commitments are DROPPED, not
@@ -1410,7 +1352,7 @@ regional_lines <- c(
 writeLines(regional_lines, here("output", "tables", "scope", "regional_exclusion.tex"))
 message("Wrote: output/tables/scope/regional_exclusion.tex")
 
-## --- Effect of the code-860 (FSM) fix on the panel -------------------------
+## --- Recipient code 860 (FSM) in the panel ----------------------------------
 fsm_commit <- sum(rio_scope_window$USD_Commitment_Defl[rio_scope_window$RecipientCode == 860],
                   na.rm = TRUE)
 fsm_in_panel <- "FSM" %in% unique(adaptation_aid$RecipientISO)
@@ -1418,12 +1360,11 @@ n_adaptation_aid_countries <- n_distinct(adaptation_aid$RecipientISO, na.rm = TR
 message(sprintf("Recipient names without an ISO3 code after mapping: %d",
                 sum(is.na(unique(adaptation_aid[c("RecipientName", "RecipientISO")])$RecipientISO))))
 message(sprintf(
-  paste0("Code-860 (FSM) fix: recipient code 860 ('Micronesia' = Federated States of ",
-        "Micronesia) is a genuine country, no longer excluded as regional. Its 2009-2024 ",
-        "adaptation-marked commitments ($%.2fM, %.4f%% of the pre-exclusion total) now ",
-        "enter the panel. FSM present in adaptation_aid post-fix: %s. adaptation_aid ",
-        "country count (broader than the final estimation panel -- see the sample funnel ",
-        "below): %d (would be %d without this fix)."),
+  paste0("Recipient code 860 ('Micronesia' = Federated States of Micronesia) is a ",
+        "country, not a regional code. Its 2009-2024 adaptation-marked commitments ",
+        "($%.2fM, %.4f%% of the pre-exclusion total) enter the panel. FSM present in ",
+        "adaptation_aid: %s. adaptation_aid country count (broader than the final ",
+        "estimation panel -- see the sample funnel below): %d (%d without FSM)."),
   fsm_commit, 100 * fsm_commit / total_pre_exclusion, fsm_in_panel,
   n_adaptation_aid_countries, n_adaptation_aid_countries - 1L
 ))
@@ -1562,10 +1503,8 @@ message("  data/processed/adaptationNAP_donortype_wgi.csv")
 message("  data/processed/simple_panel_wgi.csv")
 message("  data/processed/adaptationNAP.csv")
 message("  data/processed/mitigation_panel.csv")
-message("  data/processed/donor_list.csv")
 message("  data/processed/donor_totals.csv")
 message("  data/processed/donor_recipient_year_adaptation.csv")
-message("  data/processed/adaptation_panel_oda_only.csv")
 message("  data/processed/emergency_response_panel.csv")
 message("  output/tables/scope/flow_type_shares.tex")
 message("  output/tables/scope/regional_exclusion.tex")

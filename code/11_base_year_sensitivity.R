@@ -15,6 +15,7 @@
 #   output/tables/base_year/pretrend_tests_full.tex     (tab:pretrend_tests_full)
 #   output/tables/base_year/pretrend_cells_2021.tex      (tab:pretrend_cells_2021)
 #   output/tables/base_year/base_year_sensitivity.tex    (tab:base_year_sensitivity)
+#   output/tables/base_year/base_year_sensitivity_logit.tex (tab:base_year_logit)
 #   output/figures/base_year/fig_pretrend_cells_by_cohort.png
 #   output/figures/base_year/fig_es_full_window.png
 #   (copied to paper/Tables/base_year/ and paper/Figures/base_year/ when a
@@ -228,8 +229,8 @@ message("Thin cohorts dropped (< ", thin_threshold, " treated units): ",
 main_panel <- did_panel_full %>% filter(!(cohort_year %in% thin_cohorts))
 # The same sample with the within-country adaptation share of
 # 07_principal_and_share.R (level, pp, and logit; undefined when the recipient
-# has no reported commitments that year), used only by Panels C and D of the
-# base-year table.
+# has no reported commitments that year), used only by Panel C of the base-year table and by
+# tab:base_year_logit.
 main_panel_w <- main_panel %>%
   mutate(
     share_within = if_else(crs_positive(commitments_all), 100 * commitments / commitments_all, NA_real_),
@@ -441,7 +442,7 @@ write_tex_float(
     "columns); a generalized inverse is used if a block is singular. ", PRETREND_NOTE_DID,
     ", pooling each cohort's pre-treatment $ATT(g,t)$ cells against its own base year and ",
     "excluding the zero-variance base-year cell. Panel~B repeats the three tests on the panel ",
-    "starting in ", min(panel_2010$year), " (the sample of Table~\\ref{tab:combined_wide_2010}), ",
+    "starting in ", min(panel_2010$year), ", ",
     "which has no ", min(main_panel$year), " cells"),
   source_text   = "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
 )
@@ -751,7 +752,7 @@ message(sprintf(paste0("log_commits: main spec %.4f (%.4f), read from the stored
 
 sa4     <- sens_all[sens_all$outcome == "share_adapt", ]
 
-# --- Panels C and D: within-country adaptation share (level, pp; logit) ------
+# --- Panel C (pp) and tab:base_year_logit: within-country adaptation share -----
 # Same rows. The main-spec row is the fit 07_principal_and_share.R stores (the
 # estimate of Table tab:within_share_wide), read, not re-estimated.
 within_stems <- c(share_within = "within_share", logit_within = "within_logit")
@@ -789,8 +790,8 @@ for (r in seq_len(nrow(within_all)))
 # treated, so fewer leads remain than in Table tab:att_anticipation, whose
 # window starts at e = -5 - antic.
 num_word <- function(n) { stopifnot(n >= 1L, n <= 6L); c("one", "two", "three", "four", "five", "six")[n] }
-antic_all <- bind_rows(sens_all, within_all)
-antic_txt <- vapply(c(1L, 2L), function(k) {
+# Computed per table from the rows that table shows (Panels A-C vs. the logit table).
+antic_sentence <- function(antic_all) vapply(c(1L, 2L), function(k) {
   a <- antic_all[antic_all$antic == k, ]
   stopifnot(nrow(a) > 0L, length(unique(a$lead5_min)) == 1L, length(unique(a$lead5_max)) == 1L)
   n_lead <- unique(a$lead5_max) - unique(a$lead5_min) + 1L
@@ -801,6 +802,8 @@ antic_txt <- vapply(c(1L, 2L), function(k) {
           paste(dfs, collapse = " or "), if (identical(dfs, 1L)) "" else "s",
           -5L - k, -2L - k)
 }, character(1L))
+antic_txt       <- antic_sentence(bind_rows(sens_all, sw4))
+antic_txt_logit <- antic_sentence(sl4)
 
 # --- Build tab:base_year_sensitivity ------------------------------------------
 build_panel_lines <- function(rows_df) {
@@ -834,10 +837,6 @@ tabular_lines_4 <- c(
   "\\multicolumn{7}{l}{\\textit{Panel C: Within-country adaptation share (pp)}} \\\\",
   "\\midrule",
   build_panel_lines(sw4),
-  "\\\\[0.5em]",
-  "\\multicolumn{7}{l}{\\textit{Panel D: Within-country adaptation share (logit)}} \\\\",
-  "\\midrule",
-  build_panel_lines(sl4),
   "\\bottomrule",
   "\\end{tabular}"
 )
@@ -854,10 +853,40 @@ write_tex_float(
     "(``$=2$'') resets the base period to $g-2$ ($g-3$): one year of anticipation moves the ",
     "2021 cohort's base year to 2019. The leads-$\\geq -5$ test uses the leads left after the ",
     "base period: ", antic_txt[1L], "; ", antic_txt[2L], ". This is why its $p$ differs from ",
-    "that table's. Panels C and D: within-country adaptation share of ",
-    "Table~\\ref{tab:within_share_wide}, $100 \\times E/S$ in pp and its logit ",
-    "$\\log[(E+0.5)/(S-E+0.5)]$, with $E$ the recipient's adaptation-marked and $S$ its total ",
-    "commitments; main-spec rows are the estimates of that table. ",
+    "that table's. Panel C: within-country adaptation share of ",
+    "Table~\\ref{tab:within_share_wide}, $100 \\times E/S$ in pp, with $E$ the recipient's ",
+    "adaptation-marked and $S$ its total commitments; its main-spec row is the estimate of that ",
+    "table; the logit of the same share is in Table~\\ref{tab:base_year_logit}. ",
+    "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"),
+  source_text   = "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
+)
+
+# --- tab:base_year_logit: the logit within-share rows, same specifications ----
+# Same rows and columns as the panels of tab:base_year_sensitivity; split out of
+# that table for length. Numbers are those of the former Panel D.
+write_tex_float(
+  out_path      = file.path(dir_tabs_by, "base_year_sensitivity_logit.tex"),
+  caption_title = paste0("Sensitivity of the within-country adaptation share (logit) to the ",
+                         "2021 cohort's base year"),
+  label         = "tab:base_year_logit",
+  tabular_lines = c(
+    "\\begin{tabular}{lcccccc}",
+    "\\toprule",
+    "Specification & ATT & SE & $t$ & $N$ treated & Wald $p$ (leads $\\geq -5$) & Wald $p$ (full window) \\\\",
+    "\\midrule",
+    build_panel_lines(sl4),
+    "\\bottomrule",
+    "\\end{tabular}"),
+  notes_text    = paste0(
+    "Outcome: logit of the within-country adaptation share of ",
+    "Table~\\ref{tab:within_share_wide}, $\\log[(E+0.5)/(S-E+0.5)]$, with $E$ the recipient's ",
+    "adaptation-marked and $S$ its total commitments; the main-spec row is the estimate of that ",
+    "table. Specifications and columns as in Table~\\ref{tab:base_year_sensitivity}. ",
+    "CS(2021) DR, never-treated controls, WGI GE + log population, cohorts $\\geq 5$. ATT/SE ",
+    "from the multiplier-bootstrap fit (999 reps, seed 1242; \\texttt{did} 2.5.0); Wald $p$ from ",
+    "the analytical fit's dynamic aggregation (as in the pre-trend table). ``Anticipation $=1$'' ",
+    "(``$=2$'') resets the base period to $g-2$ ($g-3$). The leads-$\\geq -5$ test uses the ",
+    "leads left after the base period: ", antic_txt_logit[1L], "; ", antic_txt_logit[2L], ". ",
     "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"),
   source_text   = "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
 )

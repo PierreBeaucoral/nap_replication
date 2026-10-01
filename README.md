@@ -193,7 +193,7 @@ Each stage runs in a fresh R process, in the order below (stage 06 is an interna
 | Order | Script | Reads | Writes |
 |---|---|---|---|
 | 1 | `code/01_prepare_data.R` (from-raw mode only) | `data/raw/CRS/`, `data/raw/shared_nap_data/`, `data/raw/PVCCI.csv`, `data/raw/wdi_cache/` | `data/processed/*.csv`; `output/tables/scope/` |
-| 2 | `code/02_descriptive_stats.R` | `data/processed/adaptationNAP.csv`, `adaptationNAP_donortype_wgi.csv`, `simple_panel_wgi.csv`, `donor_list.csv`, `donor_totals.csv`, `data/raw/PVCCI.csv` | descriptive tables and figures at the top level of `output/tables/`, `output/figures/` |
+| 2 | `code/02_descriptive_stats.R` | `data/processed/adaptationNAP.csv`, `adaptationNAP_donortype_wgi.csv`, `simple_panel_wgi.csv`, `donor_totals.csv`, `data/raw/PVCCI.csv` | descriptive tables and figures at the top level of `output/tables/`, `output/figures/` |
 | 3 | `code/03_main_results.R` | `simple_panel_wgi.csv` | `output/tables/cohorts_dropped/att_combined_wide.tex`, `extensive_margin/`, `nap_cohorts.tex`, main figures; headline fits in `output/fits/` |
 | 4 | `code/04_robustness.R` | `simple_panel_wgi.csv`, `mitigation_panel.csv`, `output/fits/` | `cohorts_retained/`, `balanced_panel/`, `panel_2010/`, `notyettreated/`, `outlier_india/`, `units_zeros/`, `placebo/`, `mitigation/`, `bacon/`, `dcdh/`, HonestDiD tables in `cohorts_dropped/` |
 | 5 | `code/05_heterogeneity.R` | `simple_panel_wgi.csv`, `data/raw/oghist/OGHIST.xlsx`, `output/fits/` | `heterogeneity/` |
@@ -223,9 +223,9 @@ After the last stage, `run_all.R` wraps each table's `tabular` in `\adjustbox{ma
 
 **Table format.** Stages 02 to 14 write each table as a complete LaTeX float (`table` environment with caption, label, notes and source), which the paper includes with `\input` as it stands. The three scope tables written by stage 01 (`output/tables/scope/`) are the exception: they are bare `tabular` environments, and the manuscript supplies their float, caption and notes.
 
-**Logs.** `run_all.R` copies each stage's console output, messages included, to `output/logs/<stage>.log` (e.g. `output/logs/03_main_results.log`), overwriting it on every run. Numbers that the paper quotes but that appear in no table or figure are printed there by the stage that computes them: for example the recipients that leave the DAC List or enter late and the NAP-adopter reconciliation (stage 01), the number of reporting donors and the recipients of the 2009 summary-statistics row (stage 02), the cohort-level ATTs (stages 03 and 04), the exact zeros in 2009 and the 2009 reporters (stage 04), the income-classification changes (stage 05), the propensity-score range (stage 13), the recipients without an EM-DAT entity, the NAPA submission years, the NAPA check's cohorts, control pool, estimate to eight significant digits (ATT 0.49002138, SE 0.30103212) and minimum detectable effect (stage 14), the extensive-margin minimum detectable effect (stage 03), the event-study coefficients of the governance split (stage 05) and of the within-country share (stage 07), and every cell of the within-share panels of the base-year table (stage 11). Stage 09 also writes its own detailed log, `output/logs/09_remarking_decomposition_log.txt` (rewritten on every run), which includes the activity-linkage rates. `output/logs/` is not shipped.
+**Logs.** `run_all.R` copies each stage's console output, messages included, to `output/logs/<stage>.log` (e.g. `output/logs/03_main_results.log`), overwriting it on every run. Numbers that the paper quotes but that appear in no table or figure are printed there by the stage that computes them: for example the recipients that leave the DAC List or enter late and the NAP-adopter reconciliation (stage 01), the number of reporting donors and the recipients of the 2009 summary-statistics row (stage 02), the cohort-level ATTs (stages 03 and 04), the exact zeros in 2009 and the 2009 reporters (stage 04), the income-classification changes (stage 05), the listwise-deletion losses of each specification (stages 05 and 13), the propensity-score range (stage 13), the prior-NAPA by LDC-status counts of the NAP adopters (stage 14), the recipients without an EM-DAT entity, the NAPA submission years, the NAPA check's cohorts, control pool, estimate to eight significant digits (ATT 0.49002138, SE 0.30103212) and minimum detectable effect (stage 14), the extensive-margin minimum detectable effect (stage 03), the event-study coefficients of the governance split (stage 05) and of the within-country share (stage 07), and every cell of the within-share panels of the base-year table (stage 11). Stage 09 also writes its own detailed log, `output/logs/09_remarking_decomposition_log.txt` (rewritten on every run), which includes the activity-linkage rates. `output/logs/` is not shipped.
 
-Processed data files (`data/processed/`): `simple_panel_wgi.csv` (estimation panel, one row per recipient-year), `adaptationNAP.csv` (descriptive panel), `adaptationNAP_donortype_wgi.csv` (recipient-year-donor type panel), `mitigation_panel.csv`, `emergency_response_panel.csv` (CRS emergency-response aid, used only for a NAP-timing check), `adaptation_panel_oda_only.csv` (ODA-only variant, not used in the paper), `donor_list.csv`, `donor_totals.csv`, `donor_recipient_year_adaptation.csv` (used only for the donor count printed by stage 02), `napa_list.csv` (copy of the NAPA list written by stage 14), and `crs_adaptation_activities/` (activity-level extract for stage 09).
+Processed data files (`data/processed/`): `simple_panel_wgi.csv` (estimation panel, one row per recipient-year), `adaptationNAP.csv` (descriptive panel), `adaptationNAP_donortype_wgi.csv` (recipient-year-donor type panel), `mitigation_panel.csv`, `emergency_response_panel.csv` (CRS emergency-response aid, used only for a NAP-timing check), `donor_totals.csv`, `donor_recipient_year_adaptation.csv` (used only for the donor count printed by stage 02), `napa_list.csv` (copy of the NAPA list written by stage 14), and `crs_adaptation_activities/` (activity-level extract for stage 09).
 
 ## List of tables and figures
 
@@ -236,39 +236,30 @@ Numbers refer to the paper as compiled on 1 October 2026 (Appendix A: model; App
 | Figure 1 | Main text | `figures/group/adaptation_marginal.pdf` | `code/12_group_figures.R` |
 | Table 2 | Main text | `tables/cohorts_dropped/att_combined_wide.tex` | `code/03_main_results.R` |
 | Table 3 | Main text | `tables/principal_share/within_share_wide.tex` | `code/07_principal_and_share.R` |
-| Table 4 | Main text | `tables/principal_share/share_reconciliation.tex` | `code/07_principal_and_share.R` |
-| Table 5 | Main text | `tables/extensive_margin/att_extensive.tex` | `code/03_main_results.R` |
 | Figure 2 | Main text | `figures/cohorts_dropped/did_combined_es_wgi.png` | `code/03_main_results.R` |
-| Table 6 | Main text | `tables/placebo/att_placebo.tex` | `code/04_robustness.R` |
-| Table 7 | Main text | `tables/mitigation/att_mitigation.tex` | `code/04_robustness.R` |
-| Table 8 | Main text | `tables/randomization/ri_pvalues.tex` | `code/08_randomization_inference.R` |
-| Table 9 | Main text | `tables/cohorts_dropped/honestdid_rm.tex` | `code/04_robustness.R` |
-| Table 10 | Main text | `tables/base_year/pretrend_tests_full.tex` | `code/11_base_year_sensitivity.R` |
-| Table 11 | Main text | `tables/base_year/base_year_sensitivity.tex` | `code/11_base_year_sensitivity.R` |
-| Table 12 | Main text | `tables/cohorts_retained/att_combined_wide.tex` | `code/04_robustness.R` |
-| Table 13 | Main text | `tables/principal_share/principal_wide.tex` | `code/07_principal_and_share.R` |
-| Table 14 | Main text | `tables/remarking/att_remarking_margins.tex` | `code/09_remarking_decomposition.R` |
-| Table 15 | Main text | `tables/remarking/att_remarking_margins_unlinked.tex` | `code/09_remarking_decomposition.R` |
-| Table 16 | Main text | `tables/cohort_battery/att_loco.tex` | `code/13_cohort_anticipation.R` |
-| Table 17 | Main text | `tables/anticipation/att_anticipation.tex` | `code/13_cohort_anticipation.R` |
-| Table 18 | Main text | `tables/heterogeneity/het_mde.tex` | `code/05_heterogeneity.R` |
-| Table 19 | Main text | `tables/heterogeneity/donor_type/att_combined_wide.tex` | `code/05_heterogeneity.R` |
-| Table 20 | Main text | `tables/heterogeneity/governance/het_gov_wide.tex` | `code/05_heterogeneity.R` |
-| Table 21 | Main text | `tables/heterogeneity/ldc/het_ldc_wide.tex` | `code/05_heterogeneity.R` |
-| Table 22 | Main text | `tables/heterogeneity/income_group/het_income_wide.tex` | `code/05_heterogeneity.R` |
-| Table 23 | Main text | `tables/heterogeneity/het_difference_tests.tex` | `code/05_heterogeneity.R` |
+| Table 4 | Main text | `tables/placebo/att_placebo.tex` | `code/04_robustness.R` |
+| Table 5 | Main text | `tables/mitigation/att_mitigation.tex` | `code/04_robustness.R` |
+| Table 6 | Main text | `tables/randomization/ri_pvalues.tex` | `code/08_randomization_inference.R` |
+| Table 7 | Main text | `tables/cohorts_dropped/honestdid_rm.tex` | `code/04_robustness.R` |
+| Table 8 | Main text | `tables/base_year/base_year_sensitivity.tex` | `code/11_base_year_sensitivity.R` |
+| Table 9 | Main text | `tables/cohorts_retained/att_combined_wide.tex` | `code/04_robustness.R` |
+| Table 10 | Main text | `tables/principal_share/principal_wide.tex` | `code/07_principal_and_share.R` |
+| Table 11 | Main text | `tables/remarking/att_remarking_margins.tex` | `code/09_remarking_decomposition.R` |
+| Table 12 | Main text | `tables/heterogeneity/donor_type/att_combined_wide.tex` | `code/05_heterogeneity.R` |
+| Table 13 | Main text | `tables/heterogeneity/het_capacity.tex` | `code/05_heterogeneity.R` |
+| Table 14 | Main text | `tables/heterogeneity/het_difference_tests.tex` | `code/05_heterogeneity.R` |
 | Table A.1 | Appendix | `tables/model_tests/lemma2_size.tex` | `code/10_model_tests.R` |
-| Figure A.1 | Appendix | `figures/model_tests/fig_lemma2_size.png` | `code/10_model_tests.R` |
 | Table A.2 | Appendix | `tables/model_tests/alpha_half.tex` | `code/10_model_tests.R` |
 | Table B.1 | Appendix | `tables/scope/flow_type_shares.tex` | `code/01_prepare_data.R` |
 | Table B.2 | Appendix | `tables/scope/sample_funnel.tex` | `code/01_prepare_data.R` |
 | Table B.3 | Appendix | `tables/scope/regional_exclusion.tex` | `code/01_prepare_data.R` |
+| Table B.4 | Appendix | `tables/stats_des.tex` | `code/02_descriptive_stats.R` |
 | Figure B.1 | Appendix | `figures/nap_status_map.png` | `code/02_descriptive_stats.R` |
-| Table B.4 | Appendix | `tables/nap_cohorts.tex` | `code/03_main_results.R` |
+| Table B.5 | Appendix | `tables/nap_cohorts.tex` | `code/03_main_results.R` |
 | Figure B.2 | Appendix | `figures/cumulative_nap_adoption.png` | `code/02_descriptive_stats.R` |
-| Table B.5 | Appendix | `tables/balance_adopters.tex` | `code/02_descriptive_stats.R` |
+| Table B.6 | Appendix | `tables/balance_adopters.tex` | `code/02_descriptive_stats.R` |
 | Figure B.3 | Appendix | `figures/group/adopter_vs_never.pdf` | `code/12_group_figures.R` |
-| Table B.6 | Appendix | `tables/stats_des.tex` | `code/02_descriptive_stats.R` |
+| Table B.7 | Appendix | `tables/principal_share/share_reconciliation.tex` | `code/07_principal_and_share.R` |
 | Figure B.4 | Appendix | `figures/top_donors.png` | `code/02_descriptive_stats.R` |
 | Figure B.5 | Appendix | `figures/recipient_map.png` | `code/02_descriptive_stats.R` |
 | Table C.1 | Appendix | `tables/balanced_panel/att_combined_wide.tex` | `code/04_robustness.R` |
@@ -277,85 +268,50 @@ Numbers refer to the paper as compiled on 1 October 2026 (Appendix A: model; App
 | Figure C.1 | Appendix | `figures/principal_share/fig_within_share_es.png` | `code/07_principal_and_share.R` |
 | Figure C.2 | Appendix | `figures/principal_share/fig_share_reconciliation.png` | `code/07_principal_and_share.R` |
 | Figure C.3 | Appendix | `figures/cohorts_dropped/did_combined_cohort_wgi.png` | `code/03_main_results.R` |
-| Table C.4 | Appendix | `tables/cohort_battery/cohort_contributions.tex` | `code/13_cohort_anticipation.R` |
-| Table C.5 | Appendix | `tables/anticipation/att_eventdate.tex` | `code/13_cohort_anticipation.R` |
-| Table C.6 | Appendix | `tables/anticipation/cohort_redating_crosstab.tex` | `code/13_cohort_anticipation.R` |
-| Table C.7 | Appendix | `tables/cohort_battery/att_cohort_battery.tex` | `code/13_cohort_anticipation.R` |
-| Table C.8 | Appendix | `tables/cohort_battery/listwise_losses_13.tex` | `code/13_cohort_anticipation.R` |
-| Table C.9 | Appendix | `tables/heterogeneity/listwise_losses.tex` | `code/05_heterogeneity.R` |
+| Table C.4 | Appendix | `tables/extensive_margin/att_extensive.tex` | `code/03_main_results.R` |
+| Table C.5 | Appendix | `tables/anticipation/att_anticipation.tex` | `code/13_cohort_anticipation.R` |
+| Table C.6 | Appendix | `tables/cohort_battery/cohort_contributions.tex` | `code/13_cohort_anticipation.R` |
+| Table C.7 | Appendix | `tables/anticipation/att_eventdate.tex` | `code/13_cohort_anticipation.R` |
+| Table C.8 | Appendix | `tables/anticipation/cohort_redating_crosstab.tex` | `code/13_cohort_anticipation.R` |
+| Table C.9 | Appendix | `tables/cohort_battery/att_cohort_battery.tex` | `code/13_cohort_anticipation.R` |
 | Table C.10 | Appendix | `tables/hazard/nap_timing_vs_emdat_hazard.tex` | `code/14_hazard_napa.R` (needs EM-DAT) |
 | Table C.11 | Appendix | `tables/hazard/nap_timing_vs_humanitarian_aid.tex` | `code/14_hazard_napa.R` |
 | Table C.12 | Appendix | `tables/hazard/att_hazard_controls.tex` | `code/14_hazard_napa.R` (needs EM-DAT) |
 | Table C.13 | Appendix | `tables/napa/att_napa_falsification.tex` | `code/14_hazard_napa.R` |
 | Table C.14 | Appendix | `tables/napa/att_prior_napa_split.tex` | `code/14_hazard_napa.R` |
-| Table C.15 | Appendix | `tables/napa/prior_napa_ldc_crosstab.tex` | `code/14_hazard_napa.R` |
 | Figure C.4 | Appendix | `figures/placebo/did_placebo_es.png` | `code/04_robustness.R` |
 | Figure C.5 | Appendix | `figures/mitigation/did_mitigation_es.png` | `code/04_robustness.R` |
 | Figure C.6 | Appendix | `figures/randomization/fig_ri_distributions.png` | `code/08_randomization_inference.R` |
-| Table C.16 | Appendix | `tables/cohorts_dropped/honestdid_prepriods.tex` | `code/04_robustness.R` |
-| Table C.17 | Appendix | `tables/cohorts_dropped/honestdid_sd.tex` | `code/04_robustness.R` |
+| Table C.15 | Appendix | `tables/cohorts_dropped/honestdid_prepriods.tex` | `code/04_robustness.R` |
+| Table C.16 | Appendix | `tables/cohorts_dropped/honestdid_sd.tex` | `code/04_robustness.R` |
+| Table C.17 | Appendix | `tables/base_year/pretrend_tests_full.tex` | `code/11_base_year_sensitivity.R` |
 | Table C.18 | Appendix | `tables/base_year/pretrend_cells_2021.tex` | `code/11_base_year_sensitivity.R` |
 | Figure C.7 | Appendix | `figures/base_year/fig_pretrend_cells_by_cohort.png` | `code/11_base_year_sensitivity.R` |
 | Figure C.8 | Appendix | `figures/base_year/fig_es_full_window.png` | `code/11_base_year_sensitivity.R` |
-| Table C.19 | Appendix | `tables/notyettreated/att_notyettreated_wide.tex` | `code/04_robustness.R` |
+| Table C.19 | Appendix | `tables/base_year/base_year_sensitivity_logit.tex` | `code/11_base_year_sensitivity.R` |
+| Table C.20 | Appendix | `tables/notyettreated/att_notyettreated_wide.tex` | `code/04_robustness.R` |
 | Figure C.9 | Appendix | `figures/notyettreated/did_notyettreated_es.png` | `code/04_robustness.R` |
 | Figure C.10 | Appendix | `figures/cohorts_retained/did_combined_cohort_wgi.png` | `code/04_robustness.R` |
-| Table C.20 | Appendix | `tables/cohorts_retained/att_group_retained.tex` | `code/04_robustness.R` |
-| Table C.21 | Appendix | `tables/dcdh/att_dcdh.tex` | `code/04_robustness.R` |
+| Table C.21 | Appendix | `tables/cohorts_retained/att_group_retained.tex` | `code/04_robustness.R` |
+| Table C.22 | Appendix | `tables/dcdh/att_dcdh.tex` | `code/04_robustness.R` |
 | Figure C.11 | Appendix | `figures/dcdh/did_dcdh_es.png` | `code/04_robustness.R` |
-| Table C.22 | Appendix | `tables/bacon/bacon_decomp.tex` | `code/04_robustness.R` |
-| Figure C.12 | Appendix | `figures/bacon/bacon_scatter.png` | `code/04_robustness.R` |
-| Table C.23 | Appendix | `tables/units_zeros/diagnostic_units_zeros.tex` | `code/04_robustness.R` |
-| Table C.24 | Appendix | `tables/cohort_battery/att_drop2024.tex` | `code/13_cohort_anticipation.R` |
-| Table C.25 | Appendix | `tables/cohort_battery/att_balance.tex` | `code/13_cohort_anticipation.R` |
-| Table C.26 | Appendix | `tables/cohort_battery/att_2x2.tex` | `code/13_cohort_anticipation.R` |
-| Table C.27 | Appendix | `tables/cohort_battery/att_conditioning.tex` | `code/13_cohort_anticipation.R` |
-| Table C.28 | Appendix | `tables/anticipation/att_placebo_ladder.tex` | `code/13_cohort_anticipation.R` |
-| Table C.29 | Appendix | `tables/principal_share/principal_retained.tex` | `code/07_principal_and_share.R` |
-| Table C.30 | Appendix | `tables/remarking/att_remarking_counts.tex` | `code/09_remarking_decomposition.R` |
-| Table C.31 | Appendix | `tables/remarking/att_remarking_exclusions.tex` | `code/09_remarking_decomposition.R` |
-| Table C.32 | Appendix | `tables/remarking/tab_remarking_sectors.tex` | `code/09_remarking_decomposition.R` |
-| Figure C.13 | Appendix | `figures/remarking/fig_remarking_sectors.png` | `code/09_remarking_decomposition.R` |
-| Table C.33 | Appendix | `tables/remarking/remarking_flag_shares_by_year.tex` | `code/09_remarking_decomposition.R` |
-| Table C.34 | Appendix | `tables/remarking/remarking_flag_shares_by_group.tex` | `code/09_remarking_decomposition.R` |
-| Table C.35 | Appendix | `tables/remarking/att_remarking_exclusions_regex_comparison.tex` | `code/09_remarking_decomposition.R` |
-| Table C.36 | Appendix | `tables/heterogeneity/donor_type/zero_shares.tex` | `code/05_heterogeneity.R` |
-| Figure C.14 | Appendix | `figures/heterogeneity/donor_type/did_donor_type_es.png` | `code/05_heterogeneity.R` |
-| Figure C.15 | Appendix | `figures/heterogeneity/governance/did_governance_es.png` | `code/05_heterogeneity.R` |
-| Figure C.16 | Appendix | `figures/heterogeneity/ldc/did_ldc_es.png` | `code/05_heterogeneity.R` |
-| Figure C.17 | Appendix | `figures/heterogeneity/income_group/did_income_es.png` | `code/05_heterogeneity.R` |
+| Table C.23 | Appendix | `tables/bacon/bacon_decomp.tex` | `code/04_robustness.R` |
+| Table C.24 | Appendix | `tables/units_zeros/diagnostic_units_zeros.tex` | `code/04_robustness.R` |
+| Table C.25 | Appendix | `tables/cohort_battery/att_2x2.tex` | `code/13_cohort_anticipation.R` |
+| Table C.26 | Appendix | `tables/anticipation/att_placebo_ladder.tex` | `code/13_cohort_anticipation.R` |
+| Table C.27 | Appendix | `tables/principal_share/principal_retained.tex` | `code/07_principal_and_share.R` |
+| Table C.28 | Appendix | `tables/remarking/att_remarking_counts.tex` | `code/09_remarking_decomposition.R` |
+| Table C.29 | Appendix | `tables/remarking/att_remarking_exclusions.tex` | `code/09_remarking_decomposition.R` |
+| Table C.30 | Appendix | `tables/remarking/tab_remarking_sectors.tex` | `code/09_remarking_decomposition.R` |
+| Table C.31 | Appendix | `tables/remarking/remarking_flag_shares_by_group.tex` | `code/09_remarking_decomposition.R` |
+| Table C.32 | Appendix | `tables/remarking/att_remarking_exclusions_regex_comparison.tex` | `code/09_remarking_decomposition.R` |
+| Table C.33 | Appendix | `tables/heterogeneity/donor_type/zero_shares.tex` | `code/05_heterogeneity.R` |
+| Table C.34 | Appendix | `tables/heterogeneity/governance/het_gov_wide.tex` | `code/05_heterogeneity.R` |
+| Table C.35 | Appendix | `tables/heterogeneity/ldc/het_ldc_wide.tex` | `code/05_heterogeneity.R` |
+| Table C.36 | Appendix | `tables/heterogeneity/income_group/het_income_wide.tex` | `code/05_heterogeneity.R` |
+| Figure C.12 | Appendix | `figures/heterogeneity/fig_het_es_panel.png` | `code/05_heterogeneity.R` |
 
 Table 1 (mapping of the IPCC AR6 risk components onto aid-allocation roles) is typed directly in the manuscript and is not produced by code. Every other table and figure is listed above.
-
-Exhibits in `output/` that the paper does not use are regenerated as well (for example `output/figures/climate_finance_evolution.png`, `output/figures/nap_adoption_timeline.png`, `output/tables/finance_change.tex`, `output/tables/nap_regional.tex`, `output/tables/list.tex`).
-
-## Revision history
-
-- **1 October 2026.** Inference on figures and two appendix tables; no point estimate changes.
-  - Every Callaway–Sant'Anna event-study and cohort figure now draws simultaneous (sup-*t*) 95% confidence bands, as `did` does by default: the critical value comes from a seeded multiplier bootstrap (999 draws) on the stored influence functions of the plotted coefficients (`code/functions/sup_t_crit.R`, which reproduces `did`'s own computation), and multiplies the standard errors already stored. One band covers all plotted coefficients of an outcome (or subgroup, or cohort panel). The draws do not touch the random-number stream of any other estimate; every table number, stored fit and permutation draw is unchanged. Each stage log prints the critical values. Figure A.1 keeps pointwise intervals (three separate fits).
-  - Table A.1 (envelope response by recipient size), Figure A.1 and Table C.14 (prior-NAPA split) use multiplier-bootstrap standard errors (999 replications, clustered by recipient, seed 1242) instead of analytical ones, like the other sample splits. The prior-NAPA difference becomes p = 0.070 (was 0.052).
-- **30 September 2026.** Code hardening; no estimate, standard error or test statistic of an existing exhibit changes.
-  - Unit identifiers are locale-independent (`code/functions/make_country_id.R`: ICU `en_US` collation, the order behind the published results, whatever the session's collation).
-  - Every stage stops when the analytical fit or aggregation behind a pre-trend test fails, instead of printing an empty cell; the mitigation falsification test no longer falls back to outcome regression (it stops); the remaining exceptions are listed under "Failed runs".
-  - One `make_wide_table()` (`code/functions/make_wide_table.R`) replaces three copies; the donor-type table's note now states the covariates and the `did`/CRS versions like the other wide tables.
-  - Zero/positive tests on summed CRS amounts use a 1e-9 tolerance (`code/functions/crs_positive.R`), with a check that it changes no count.
-  - Notes: the hazard-controls table states the reference row of each difference and its sign; the model-test table states its one-sided hypotheses in words. Layout: the upper panel of the anticipation table states its constant sample sizes in the note, and the event-date table uses two-line labels, so both print without shrinking.
-  - Every stage deletes the exhibits and fits it owns before re-estimating them and stops on an estimation failure, instead of skipping the exhibit; `run_all.R` calls the `Rscript` of the running R installation.
-  - One minimum-detectable-effect formula (`code/functions/mde.R`) replaces the 2.8 approximation of stage 14 (NAPA check, printed in its log only).
-  - The base-year sensitivity table gains Panels C and D (within-country adaptation share, level and logit), and the logs print the governance and within-share event-study coefficients quoted in the text.
-  - One pre-trend test function (`code/functions/pretrend_test.R`) replaces the copies held by eight stages.
-  - Figures 2 and C.3 are drawn from the fits stored by stage 03: Figure 2 uses the stored dynamic-aggregation bootstrap draw, the one behind the event-time SEs quoted in the text and the HonestDiD inputs, and Figure C.3 the stored group-aggregation draw (Table 2's SE is the simple-aggregation draw). They are now pointwise 95% intervals (they were simultaneous bands from a second bootstrap draw); superseded on 1 October 2026.
-  - Stages 07, 09, 10, 11 and 13 read the headline and main-specification estimates from the stored fits instead of re-estimating them. The pre-trend test inverts the pre-treatment block with `solve()` at full rank and with an SVD pseudo-inverse (degrees of freedom = numerical rank) otherwise, and returns unrounded statistics. Figure C.11 (de Chaisemartin and D'Haultfœuille estimator) is plotted on Figure 2's event-time axis (adoption year at e = 0). New exhibits: cohort-level ATTs of the retained-cohorts specification (`output/tables/cohorts_retained/att_group_retained.tex`) and the pre-trend tests on the panel starting in 2010 (Panel B of the full-window pre-trend table).
-  - Stage 01 stops if a NAP country name fails to match an ISO3 code or if any ISO3 join changes the number of rows, and fixes the panel start at 2009 explicitly. `simple_panel_wgi.csv` no longer carries seven donor-type-specific columns that no stage reads (`commitments_pc`, `disbursements_pc`, `phi_capacity`, `phi_vulnerability`, `c_score`, `v_score`, `c_oriented`).
-  - Stage 08 stores a hash of the assignment design with its permutation draws and recomputes them when it changes.
-  - Table notes no longer refer to file names, script names or code variables. Each stage's console output is saved in `output/logs/`.
-- **29 September 2026.** Three corrections to `code/01_prepare_data.R`; every exhibit was regenerated.
-  1. The NAP Central entry for Paraguay lists two postings in one cell ("May 3, 2020July 14, 2022"). The cell failed to parse and Paraguay was coded as never treated. It is now dated to its first submission (2020), and stage 01 stops if any listed date fails to parse.
-  2. Recipient-years in which a country has no CRS record of any kind were filled with zeros. These are nine countries after they left the DAC List of ODA recipients (91 recipient-years). They are now missing.
-  3. The additional WDI indicators were joined by country name, which left 19 recipients without a World Bank region in the stratified randomization-inference design. They are now joined on ISO3 codes.
-
-  Other changes: two appendix specifications (balanced panel; panel starting in 2010), `did` pre-test restriction counts that match `did`'s own, validation of the cached permutation draws against the current panel, and corrected table notes. The headline ATT on log adaptation commitments is 0.3036 (SE 0.1256); it was 0.2928 (SE 0.1241) in the 23 September version.
-- **23 September 2026.** First public version.
 
 ## Licence
 

@@ -88,7 +88,7 @@ if (utils::packageVersion("did") < "2.5.0") {
 }
 
 # ------------------------------------------------------------------------
-# REPRODUCIBILITY INVARIANT (RNG + forking) -- documented, not changed
+# REPRODUCIBILITY INVARIANT (RNG + forking)
 # ------------------------------------------------------------------------
 # All permutation draws (Design A/B/C, Section 4) are produced by calling
 # set.seed(1242) once per design, immediately before a *sequential* for-loop
@@ -111,12 +111,11 @@ if (utils::packageVersion("did") < "2.5.0") {
 # change the default generator's actual sample() stream (L'Ecuyer-CMRG is a
 # different algorithm from the Mersenne-Twister default), which would
 # silently change every draw produced by the sequential set.seed(1242) +
-# sample() calls above -- a fresh run would then no longer reproduce the
-# already-saved output/tables/randomization/ri_draws.csv. RNGkind("L'Ecuyer-
-# CMRG") + mc.reset.stream() is the correct fix ONLY when random draws are
-# made *inside* forked workers, which is not this script's design (workers
-# are deterministic given the panel they are handed). Left undone
-# intentionally so a future editor does not "fix" this by adding it.
+# sample() calls above -- a fresh run would then not reproduce the
+# saved output/tables/randomization/ri_draws.csv. RNGkind("L'Ecuyer-CMRG") +
+# mc.reset.stream() is needed ONLY when random draws are made *inside* forked
+# workers, which is not this script's design (workers are deterministic given
+# the panel they are handed), so it is deliberately not called.
 # ------------------------------------------------------------------------
 
 set.seed(20240601)  # global seed — local set.seed(1242) calls follow, per README

@@ -7,14 +7,12 @@
 #   data/processed/simple_panel_wgi.csv
 #
 # Outputs (all under output/):
-#   figures/heterogeneity/donor_type/did_donor_type_es.png  (§21)
 #   tables/heterogeneity/donor_type/att_combined_wide.tex   (§21)
-#   figures/heterogeneity/ldc/did_ldc_es.png               (§22)
 #   tables/heterogeneity/ldc/het_ldc_wide.tex              (§22)
-#   figures/heterogeneity/governance/did_governance_es.png (§23)
 #   tables/heterogeneity/governance/het_gov_wide.tex       (§23)
-#   figures/heterogeneity/income_group/did_income_es.png   (§24)
 #   tables/heterogeneity/income_group/het_income_wide.tex  (§24)
+#   tables/heterogeneity/het_capacity.tex                  (§24b, compact H4 table)
+#   figures/heterogeneity/fig_het_es_panel.png             (§24b, 2x2 of the four event studies)
 #   tables/heterogeneity/het_difference_tests.tex          (§25)
 # ==============================================================================
 
@@ -56,6 +54,7 @@ library(countrycode)
 # World Bank's OGHIST workbook (data/raw/oghist/OGHIST.xlsx); readxl is
 # therefore a top-level dependency of this script.
 library(readxl)
+library(cowplot)  # 2x2 heterogeneity event-study panel (pinned in renv.lock)
 source(here("code", "functions", "pretrend_test.R"))      # compute_pretrend_test()
 source(here("code", "functions", "two_line_head.R"))     # two_line_head()
 source(here("code", "functions", "read_headline_fit.R"))  # read_headline_fit()
@@ -77,7 +76,7 @@ set.seed(20240601)  # global seed — local set.seed(1242) calls follow each est
 # multiplier-bootstrap fit clustered by recipient country (did clusters the
 # multiplier bootstrap on `idname` by construction).
 # Analytical twins are retained ONLY where an influence function is required:
-# the pre-trend Wald test and the correlated-sample contrasts of §26.
+# the pre-trend Wald test and the correlated-sample contrasts of §25a.
 # -----------------------------------------------------------------------
 BITERS <- 999L
 
@@ -615,7 +614,7 @@ make_het_wide_table <- function(groups, outcome_var, raw_var,
     }
 
     # Analytical twin first (consumes no random numbers): supplies the
-    # influence function for the pre-trend Wald test and for the §26 contrasts.
+    # influence function for the pre-trend Wald test and for the §25a contrasts.
     gt_g_analytical <- tryCatch(run_gt_g(FALSE),
       error = function(e) { message("  att_gt (analytical) failed: ",
                                      conditionMessage(e)); NULL })
@@ -687,15 +686,14 @@ make_het_wide_table <- function(groups, outcome_var, raw_var,
       pt_pval_num  = pt$pval,
       pt_wpval_num = pt$Wpval_did,
       pt_wpval_did = if (is.na(pt$Wpval_did)) "---" else sprintf("%.3f", pt$Wpval_did),
-      # Unrounded values for §25 difference tests. The wide table below selects
-      # its cells by name, so adding these fields leaves every published
-      # heterogeneity table numerically and textually unchanged.
+      # Unrounded values for the §25 difference tests (the wide table selects
+      # its cells by name).
       att_num      = att,
       se_num       = se,
       n_treated    = n_treated_g,
-      # Analytical influence function of the same subgroup fit, kept for
+      # Analytical influence function of the same subgroup fit, for the
       # correlated-sample contrasts; se_analytic lets the note report how far
-      # the bootstrap SE sits from the analytical one it replaced.
+      # the bootstrap SE sits from the analytical one.
       inf_func     = agg_s_analytical$inf.function$simple.att,
       se_analytic  = agg_s_analytical$overall.se,
       att_analytic = agg_s_analytical$overall.att,
@@ -726,9 +724,9 @@ make_het_wide_table <- function(groups, outcome_var, raw_var,
   } else {
     "CS (2021) DR or regression adjustment (by subgroup N)"
   }
-  # Derived from what was actually used, not hard-coded (the
-  # n >= 40 switch was removed, so this is TRUE for every cell; the check keeps the
-  # label honest if that ever changes again).
+  # Derived from what was actually used, not hard-coded (every cell is
+  # bootstrapped, so this is TRUE for every cell; the check keeps the label
+  # honest if a cell ever is not).
   bootstrap_label <- if (all(unlist(bs_used))) paste0("Yes (multiplier, ", BITERS, " reps)") else
     "Mixed (see text)"
 
@@ -826,9 +824,8 @@ make_het_wide_table <- function(groups, outcome_var, raw_var,
 
 message("\n=== Section 21: Heterogeneity — Donor type ===\n")
 
-dir_figs_h1 <- here("output", "figures", "heterogeneity", "donor_type")
 dir_tabs_h1 <- here("output", "tables",  "heterogeneity", "donor_type")
-dir.create(dir_figs_h1, recursive = TRUE, showWarnings = FALSE)
+dir.create(here("output", "figures", "heterogeneity"), recursive = TRUE, showWarnings = FALSE)
 dir.create(dir_tabs_h1, recursive = TRUE, showWarnings = FALSE)
 
 outcomes_donor <- list(
@@ -839,7 +836,7 @@ outcomes_donor <- list(
 
 did_panel_h1 <- did_panel_full %>% filter(!(cohort_year %in% thin_cohorts))
 
-# --- Event-study figure ---
+# --- Event-study curves (panel (a) of the 2x2 figure, §24b) ---
 h1_dyn <- setNames(vector("list", length(outcomes_donor)),
                    vapply(outcomes_donor, `[[`, character(1L), "var"))
 # Seed set immediately before the estimator (reproduces the published SE)
@@ -889,12 +886,10 @@ if (!all(vapply(h1_dyn, is.null, logical(1L)))) {
     theme_minimal() +
     theme(text             = element_text(family = "serif", size = 11),
           legend.position  = "bottom", panel.grid.minor = element_blank())
-  ggsave(file.path(dir_figs_h1, "did_donor_type_es.png"), p_h1, width = 10, height = 5, dpi = 300)
-  message("Saved: ", file.path(dir_figs_h1, "did_donor_type_es.png"))
 }
 
 # --- Wide table: uses make_wide_table (not het version) ---
-# The return value is captured so that §26 can contrast the three donor
+# The return value is captured so that §25a can contrast the three donor
 # ATTs using the influence functions of these very fits (no re-estimation).
 donor_stats <- make_wide_table(
   did_panel_in  = did_panel_h1,
@@ -914,9 +909,7 @@ message("\n=== Section 21 complete ===\n")
 
 message("\n=== Section 22: Heterogeneity — LDC vs. non-LDC ===\n")
 
-dir_figs_h2 <- here("output", "figures", "heterogeneity", "ldc")
 dir_tabs_h2 <- here("output", "tables",  "heterogeneity", "ldc")
-dir.create(dir_figs_h2, recursive = TRUE, showWarnings = FALSE)
 dir.create(dir_tabs_h2, recursive = TRUE, showWarnings = FALSE)
 
 # PRE-TREATMENT LDC VINTAGE.
@@ -944,7 +937,7 @@ ldc_iso3_2013 <- c(
 )
 stopifnot(length(ldc_iso3_2013) == 49L, !anyDuplicated(ldc_iso3_2013))
 
-# Previous (2024) vintage, kept for the disclosure below only.
+# 2024 vintage of the UN LDC list, used only for the disclosure below.
 ldc_iso3_2024 <- c(
   "AFG", "AGO", "BGD", "BEN", "BFA", "BDI", "KHM", "CAF", "TCD", "COM",
   "COD", "DJI", "ERI", "ETH", "GMB", "GIN", "GNB", "HTI", "KIR", "LAO",
@@ -1003,7 +996,7 @@ het_stats_ldc <- make_het_wide_table(
     length(ldc_iso3_2013))
 )
 
-# Event-study figure
+# Event-study curves (one panel of the 2x2 figure, §24b)
 h2_dyn <- setNames(vector("list", length(ldc_groups)),
                    vapply(ldc_groups, `[[`, character(1L), "label"))
 # Seed set immediately before the estimator (reproduces the published SE)
@@ -1058,8 +1051,6 @@ if (!all(vapply(h2_dyn, is.null, logical(1L)))) {
     theme_minimal() +
     theme(text             = element_text(family = "serif", size = 11),
           legend.position  = "bottom", panel.grid.minor = element_blank())
-  ggsave(file.path(dir_figs_h2, "did_ldc_es.png"), p_h2, width = 10, height = 5, dpi = 300)
-  message("Saved: ", file.path(dir_figs_h2, "did_ldc_es.png"))
 }
 
 message("\n=== Section 22 complete ===\n")
@@ -1071,9 +1062,7 @@ message("\n=== Section 22 complete ===\n")
 
 message("\n=== Section 23: Heterogeneity — High vs. low governance ===\n")
 
-dir_figs_h3 <- here("output", "figures", "heterogeneity", "governance")
 dir_tabs_h3 <- here("output", "tables",  "heterogeneity", "governance")
-dir.create(dir_figs_h3, recursive = TRUE, showWarnings = FALSE)
 dir.create(dir_tabs_h3, recursive = TRUE, showWarnings = FALSE)
 
 ge_baseline <- did_panel_full %>%
@@ -1112,7 +1101,7 @@ het_stats_gov <- make_het_wide_table(
   caption_txt = "Heterogeneity by governance level: ATT on log(adaptation commitments). CS (2021), not-yet-treated controls; median WGI GE split at baseline."
 )
 
-# Event-study figure
+# Event-study curves (one panel of the 2x2 figure, §24b)
 h3_dyn <- setNames(vector("list", length(gov_groups)),
                    vapply(gov_groups, `[[`, character(1L), "label"))
 # Seed set immediately before the estimator (reproduces the published SE)
@@ -1171,8 +1160,6 @@ if (!all(vapply(h3_dyn, is.null, logical(1L)))) {
     theme_minimal() +
     theme(text             = element_text(family = "serif", size = 11),
           legend.position  = "bottom", panel.grid.minor = element_blank())
-  ggsave(file.path(dir_figs_h3, "did_governance_es.png"), p_h3, width = 10, height = 5, dpi = 300)
-  message("Saved: ", file.path(dir_figs_h3, "did_governance_es.png"))
 }
 
 message("\n=== Section 23 complete ===\n")
@@ -1186,9 +1173,7 @@ message("\n=== Section 24: Heterogeneity — Income group ===\n")
 
 het_stats_income <- NULL   # filled only if the income split is estimable
 
-dir_figs_h4 <- here("output", "figures", "heterogeneity", "income_group")
 dir_tabs_h4 <- here("output", "tables",  "heterogeneity", "income_group")
-dir.create(dir_figs_h4, recursive = TRUE, showWarnings = FALSE)
 dir.create(dir_tabs_h4, recursive = TRUE, showWarnings = FALSE)
 
 # PRE-TREATMENT INCOME VINTAGE (FY2013 = July 2012 classification).
@@ -1198,8 +1183,8 @@ dir.create(dir_tabs_h4, recursive = TRUE, showWarnings = FALSE)
 # "Yemen", "Turkiye"). The VINTAGE also matters. The classification
 # shipped with the installed WDI package is a CURRENT cross-section: a recipient
 # that moved from lower-middle to upper-middle income during the estimation
-# window was being assigned its post-treatment group, so the split conditioned
-# partly on an outcome. We now use the World Bank's own historical file
+# window would be assigned its post-treatment group, so the split would condition
+# partly on an outcome. We therefore use the World Bank's own historical file
 # (OGHIST.xlsx, "Country Analytical History" sheet) and read the FY2013 column
 # -- the classification announced in July 2012, i.e. strictly before the first
 # NAP cohort in the estimation sample (2021).
@@ -1398,7 +1383,7 @@ if (!is.null(income_lookup)) {
         income_vintage)
     )
 
-    # Event-study figure
+    # Event-study curves (one panel of the 2x2 figure, §24b)
     h4_dyn <- setNames(vector("list", length(inc_groups)),
                        vapply(inc_groups, `[[`, character(1L), "label"))
     # Seed set immediately before the estimator (reproduces the published SE)
@@ -1452,17 +1437,117 @@ if (!is.null(income_lookup)) {
         theme_minimal() +
         theme(text             = element_text(family = "serif", size = 11),
               legend.position  = "bottom", panel.grid.minor = element_blank())
-      ggsave(file.path(dir_figs_h4, "did_income_es.png"), p_h4, width = 10, height = 5, dpi = 300)
-      message("Saved: ", file.path(dir_figs_h4, "did_income_es.png"))
     }
   } else {
-    stop("Too few income groups with sufficient cohorts: no income figure.")
+    stop("Too few income groups with sufficient cohorts: no income event study.")
   }
 } else {
   stop("Income group data unavailable: Section 24 not run.")
 }
 
 message("\n=== Section 24 complete ===\n")
+
+# ==============================================================================
+# SECTION 8a. §24b Compact capacity table and 2x2 event-study panel
+#
+# Layout only: nothing is re-estimated. het_capacity.tex re-uses the formatted
+# cells that make_het_wide_table() wrote into the three wide tables (ATT with
+# stars, SE, N treated, four-lead pre-trend p), so every value is identical to
+# Tables tab:het_gov_wide, tab:het_ldc_wide and tab:het_income_wide. The 2x2
+# figure re-uses the four plotted objects saved above (p_h1, p_h3, p_h2, p_h4),
+# with harmonised axis titles and text size only.
+# ==============================================================================
+
+message("\n=== Section 24b: compact capacity table and ES panel ===\n")
+
+cap_panels <- list(
+  list(title = "Panel A: Governance (WGI Government Effectiveness, median split at baseline)",
+       stats = het_stats_gov, cells = c("High governance", "Low governance")),
+  list(title = sprintf("Panel B: LDC status (UN list as of 2013, %d economies)",
+                       length(ldc_iso3_2013)),
+       stats = het_stats_ldc, cells = c("LDC", "Non-LDC")),
+  list(title = "Panel C: World Bank income group (FY2013 classification, held fixed)",
+       stats = het_stats_income,
+       cells = c("Low income", "Lower middle income", "Upper middle income"))
+)
+cap_cells <- unlist(lapply(cap_panels, function(pn) pn$stats[pn$cells]), recursive = FALSE)
+if (any(vapply(cap_cells, is.null, logical(1L))))
+  stop("het_capacity: a subgroup fit is missing.")
+# One lead window and restriction count for all seven cells, so the note can
+# state it once (it is the same window as in the three wide tables).
+cap_leads <- unique(lapply(cap_cells, `[[`, "pt_leads"))
+cap_df    <- unique(vapply(cap_cells, function(s) as.integer(s$pt_df), integer(1L)))
+stopifnot(length(cap_leads) == 1L, length(cap_df) == 1L)
+cap_em    <- unique(vapply(cap_cells, `[[`, character(1L), "est_method"))
+cap_ntr   <- vapply(cap_cells, function(s) as.integer(s$n_treated), integer(1L))
+
+cap_lines <- c(
+  "\\begingroup\\small",
+  "\\begin{tabular}{lcccc}",
+  "\\toprule",
+  sprintf("Subgroup & ATT & SE & $N$ treated & Pre-trend $p$ (%d leads) \\\\", length(cap_leads[[1L]])),
+  "\\midrule",
+  unlist(lapply(seq_along(cap_panels), function(k) {
+    pn <- cap_panels[[k]]
+    c(if (k > 1L) "\\addlinespace" else character(0),
+      sprintf("\\multicolumn{5}{l}{\\textit{%s}} \\\\", pn$title),
+      vapply(pn$cells, function(cl) {
+        st <- pn$stats[[cl]]
+        sprintf("\\quad %s & %s & %s & %s & %s \\\\", cl, st$att_fmt, st$se_fmt,
+                st$n_treated_fmt, st$pt_pval)
+      }, character(1L)))
+  })),
+  "\\bottomrule",
+  "\\end{tabular}",
+  "\\endgroup"
+)
+
+cap_est_txt <- if (identical(cap_em, "reg")) {
+  sprintf(paste0("CS (2021) regression adjustment (doubly robust only for a subgroup with at ",
+                 "least 40 treated recipients; none here, %d--%d per cell)"),
+          min(cap_ntr), max(cap_ntr))
+} else {
+  "CS (2021), doubly robust for subgroups with at least 40 treated recipients, regression adjustment otherwise"
+}
+cap_notes <- paste0(
+  "ATT on log(adaptation commitments), estimated separately on each subgroup; full columns in ",
+  "Tables~\\ref{tab:het_gov_wide}, \\ref{tab:het_ldc_wide} and \\ref{tab:het_income_wide}. ",
+  cap_est_txt, ", not-yet-treated controls, WGI GE + log population. ",
+  "ATT/SE: multiplier-bootstrap (", BITERS, " reps, clustered by recipient, seed 1242); ",
+  "pre-trend: separate analytical fit. ",
+  PRETREND_NOTE_AGG(min(cap_leads[[1L]]), max(cap_leads[[1L]]), cap_df), ". ",
+  "Panel A: median of pre-treatment mean WGI GE. Panel B: pre-treatment vintage of the UN LDC ",
+  "list. Panel C: ", income_vintage, "; high-income and unclassified recipients excluded. ",
+  "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
+)
+write_tex_float(
+  file.path(here("output", "tables", "heterogeneity"), "het_capacity.tex"),
+  "NAP effect by baseline capacity: governance, LDC status and income group",
+  "tab:het_capacity", cap_lines, cap_notes,
+  paste0("OECD CRS (Rio adaptation markers); UNFCCC NAP Central; WGI; UN LDC list; ",
+         "World Bank income classification"))
+
+# --- 2x2 panel: donor type, governance, LDC, income -------------------------
+es_plots <- list(p_h1, p_h3, p_h2, p_h4)
+if (!all(vapply(es_plots, inherits, logical(1L), what = "ggplot")))
+  stop("ES panel: one of the four heterogeneity event-study plots is missing.")
+es_plots <- lapply(es_plots, function(pl) pl +
+  labs(x = "Event time (years relative to NAP adoption)", y = "ATT (log points)") +
+  guides(colour = guide_legend(nrow = 1L), shape = guide_legend(nrow = 1L)) +
+  theme(text = element_text(family = "serif", size = 12),
+        legend.text = element_text(size = 11),
+        legend.key.width = unit(10, "pt"),
+        legend.key.spacing.x = unit(6, "pt"),
+        legend.margin = margin(0, 0, 0, 0),
+        plot.margin = margin(20, 6, 4, 6)))
+p_het_panel <- cowplot::plot_grid(
+  plotlist = es_plots, ncol = 2L, align = "hv",
+  labels = c("(a) Donor type", "(b) Governance", "(c) LDC status", "(d) Income group"),
+  label_size = 12, label_fontfamily = "serif", label_fontface = "plain",
+  hjust = 0, label_x = 0.02, label_y = 0.995)
+out_panel <- here("output", "figures", "heterogeneity", "fig_het_es_panel.png")
+ggsave(out_panel, p_het_panel, width = 10, height = 8, dpi = 300, bg = "white")
+message("Saved: ", out_panel)
 
 # ==============================================================================
 # SECTION 8b. §25a Correlated-sample contrasts
@@ -1675,10 +1760,6 @@ if (!is.null(extra_rows) && nrow(extra_rows) == 0L) extra_rows <- NULL
 
 message("\n=== Section 25: Formal subgroup difference tests (H4) ===\n")
 
-# Filled inside the else-branch below; used by §26 (MDE table). Assigned at
-# script top level, so the branch writes into the global environment.
-h4_records <- NULL
-
 dir_tabs_h5 <- here("output", "tables", "heterogeneity")
 
 have_ldc <- !is.null(het_stats_ldc) &&
@@ -1766,20 +1847,28 @@ if (!have_ldc || !have_gov || !have_inc) {
   )
   diff_tab <- rbind(diff_tab, joint_row)
 
-  # Append the correlated-sample contrasts computed in §25a. The four H4
-  # rows and the joint income row above are built exactly as before; only new
-  # rows are added.
+  # Append the correlated-sample contrasts computed in §25a below the four H4
+  # rows and the joint income row.
   if (!is.null(extra_rows)) {
     names(extra_rows) <- names(diff_tab)
     diff_tab <- rbind(diff_tab, extra_rows)
   }
 
-  # Records for the MDE table in §26.
-  h4_records <- lapply(seq_along(contrast_spec), function(i) list(
-    split = contrast_spec[[i]]$split, label = contrast_spec[[i]]$label,
-    res = c(contrast_res[[i]], list(method = "independence (disjoint subsamples)",
-                                    n_units = NA_integer_)),
-    family = "H4"))
+  # MDE column: minimum detectable difference at 80% power (code/functions/mde.R);
+  # joint Wald rows have no single contrast SE, hence "---".
+  fmt_mde <- function(se) if (is.na(se)) "---" else sprintf("%.4f", mde(se))
+  diff_tab$MDE <- c(
+    vapply(contrast_res, function(r) fmt_mde(r$se), character(1L)),
+    "---",
+    if (is.null(extra_rows)) character(0) else c(
+      vapply(extra_records[is_h3], function(r) fmt_mde(r$res$se), character(1L)),
+      if (is.null(joint_h3_row)) character(0) else "---",
+      vapply(extra_records[!is_h3], function(r) fmt_mde(r$res$se), character(1L)))
+  )
+  stopifnot(length(diff_tab$MDE) == nrow(diff_tab))
+  mde_reached <- c(
+    vapply(contrast_res, function(r) abs(r$diff) >= mde(r$se), logical(1L)),
+    vapply(extra_records, function(r) abs(r$res$diff) >= mde(r$res$se), logical(1L)))
 
   for (r in seq_len(nrow(diff_tab))) {
     message(sprintf("  %-36s diff = %8s  SE = %7s  z = %7s  p = %s",
@@ -1787,10 +1876,11 @@ if (!have_ldc || !have_gov || !have_inc) {
                     diff_tab$SE[r], diff_tab$z[r], diff_tab$p[r]))
   }
 
-  names(diff_tab) <- c("Split", "Contrast", "Difference", "SE", "$z$", "$p$-value")
+  names(diff_tab) <- c("Split", "Contrast", "Difference", "SE", "$z$", "$p$-value",
+                       "MDE (80\\% power)")
 
   xtab_h5 <- xtable(diff_tab, label = "tab:het_difftests")
-  align(xtab_h5) <- "lllcccc"
+  align(xtab_h5) <- "lllccccc"
 
   raw_lines_h5 <- capture.output(
     print(xtab_h5, include.rownames = FALSE, booktabs = TRUE,
@@ -1815,7 +1905,13 @@ if (!have_ldc || !have_gov || !have_inc) {
     "high-capacity (positive: larger effect where capacity weaker). H4 rows (LDC/governance/income): SE $=\\sqrt{se_a^2+se_b^2}$ on ",
     "multiplier-bootstrap SEs (", BITERS, " reps, seed 1242), disjoint subsamples. ",
     "H3/mitigation rows: aligned analytical-IF SEs (not bootstrap), same recipient-years. ",
-    "$z$ vs.\\ standard normal; joint stats vs.\\ $\\chi^2$; $p$ two-sided"
+    "$z$ vs.\\ standard normal; joint stats vs.\\ $\\chi^2$; $p$ two-sided. ",
+    "MDE: minimum detectable difference, $(z_{0.975}+z_{0.80}) \\times SE = ",
+    sprintf("%.4f", mde(1)), " \\times SE$, the smallest true difference a two-sided 5\\% ",
+    "test rejects with 80\\% probability; none for the joint tests. ",
+    if (all(!mde_reached)) "No estimated difference reaches its MDE" else
+      sprintf("%d of %d estimated differences reach their MDE", sum(mde_reached),
+              length(mde_reached))
   )
   source_h5 <- paste0("OECD CRS (Rio adaptation markers); UNFCCC NAP Central; ",
                       "WGI; World Bank income classification")
@@ -1841,90 +1937,6 @@ if (!have_ldc || !have_gov || !have_inc) {
 }
 
 message("\n=== Section 25 complete ===\n")
-
-# ==============================================================================
-# SECTION 10. §26 Minimum detectable differences for the heterogeneity
-# family.
-#
-# The heterogeneity discussion opens with what the design
-# could have detected rather than with what it failed to reject. For every
-# contrast in Table~\ref{tab:het_difftests} we report
-#     MDE = (z_{0.975} + z_{0.80}) * se(contrast) = 2.8016 * se,
-# the smallest true difference a two-sided 5% test would reject with 80%
-# probability. Nothing is estimated here; the standard errors are the ones
-# already reported.
-# ==============================================================================
-
-message("\n=== Section 26: minimum detectable differences ===\n")
-
-mde_records <- c(if (is.null(h4_records)) list() else h4_records,
-                 if (length(extra_records) == 0L) list() else extra_records)
-
-if (length(mde_records) == 0L) {
-  stop("No contrasts available: MDE table not written.")
-} else {
-  mde_z <- mde(1)  # MDE multiplier, code/functions/mde.R
-  message(sprintf("  MDE multiplier (80%% power, 5%% two-sided) = %.4f", mde_z))
-
-  mde_tab <- data.frame(
-    Split    = vapply(mde_records, `[[`, character(1L), "split"),
-    Contrast = vapply(mde_records, `[[`, character(1L), "label"),
-    Estimate = vapply(mde_records, function(r)
-      if (is.na(r$res$diff)) "---" else sprintf("%.4f", r$res$diff), character(1L)),
-    SE       = vapply(mde_records, function(r)
-      if (is.na(r$res$se)) "---" else sprintf("%.4f", r$res$se), character(1L)),
-    MDE      = vapply(mde_records, function(r)
-      if (is.na(r$res$se)) "---" else sprintf("%.4f", mde(r$res$se)),
-      character(1L)),
-    Powered  = vapply(mde_records, function(r) {
-      if (is.na(r$res$se) || is.na(r$res$diff)) return("---")
-      if (abs(r$res$diff) >= mde(r$res$se)) "Yes" else "No"
-    }, character(1L)),
-    Inference = vapply(mde_records, function(r) {
-      if (identical(r$family, "H4")) "Independent subsamples" else
-        "Aligned influence functions"
-    }, character(1L)),
-    stringsAsFactors = FALSE
-  )
-  for (r in seq_len(nrow(mde_tab)))
-    message(sprintf("  %-46s diff = %8s  SE = %7s  MDE = %7s  powered: %s",
-                    mde_tab$Contrast[r], mde_tab$Estimate[r], mde_tab$SE[r],
-                    mde_tab$MDE[r], mde_tab$Powered[r]))
-
-  names(mde_tab) <- c("Split", "Contrast", "Estimated difference", "SE",
-                      "MDE (80\\% power)", "$|$Diff$| \\geq$ MDE", "Inference")
-
-  xtab_mde <- xtable(mde_tab, label = "tab:het_mde")
-  align(xtab_mde) <- "lllccccc"
-  raw_mde <- capture.output(
-    print(xtab_mde, include.rownames = FALSE, booktabs = TRUE,
-          sanitize.text.function = identity, size = "\\small", floating = FALSE))
-
-  notes_mde <- paste0(
-    "MDE $= (z_{0.975}+z_{0.80}) \\times se = ", sprintf("%.4f", mde_z),
-    " \\times se$, for the contrasts of Table~\\ref{tab:het_difftests} (not re-estimated). ",
-    "``No'' means the null is uninformative about smaller differences, not equality. Last ",
-    "column: independence (disjoint subsamples) or aligned unit-level IFs (same recipient-",
-    "years). Outcome: log(adaptation commitments); donor-type rows use the donor-group ",
-    "commitments; the falsification row contrasts adaptation with mitigation commitments"
-  )
-
-  out_path_mde <- file.path(dir_tabs_h5, "het_mde.tex")
-  write_tex_float(
-    out_path_mde,
-    paste0("Minimum detectable differences for the heterogeneity and ",
-           "falsification contrasts"),
-    "tab:het_mde", raw_mde, notes_mde,
-    paste0("OECD CRS (Rio adaptation markers); UNFCCC NAP Central; WGI; ",
-           "World Bank income classification"))
-
-  if (dir.exists(here("paper"))) {
-    paper_path_mde <- here("paper", "Tables", "heterogeneity", "het_mde.tex")
-    dir.create(dirname(paper_path_mde), recursive = TRUE, showWarnings = FALSE)
-    file.copy(out_path_mde, paper_path_mde, overwrite = TRUE)
-    message("Saved: ", paper_path_mde)
-  } else message("paper/ not found -- exhibits are left in output/ only")
-}
 
 # ==============================================================================
 # SECTION 11. §27 Zero shares by donor type
@@ -2013,10 +2025,9 @@ if (length(missing_zero_vars) > 0L) {
 #
 # att_gt() silently drops recipient-years with a missing outcome or a missing
 # control, so every specification in this script estimates on a slightly
-# different sample. Those losses are stated here. Counts are reported
-# per specification: recipient-years and recipients lost to a missing outcome,
-# to a missing control (WGI government effectiveness or log population), and in
-# total.
+# different sample. Those losses are printed to the stage log (the text states
+# them): recipient-years lost to a missing outcome, to a missing control (WGI
+# government effectiveness or log population), and in total, per specification.
 # ==============================================================================
 
 message("\n=== Section 28: listwise-deletion losses ===\n")
@@ -2025,7 +2036,7 @@ message("\n=== Section 28: listwise-deletion losses ===\n")
 #'
 #' @param panel data frame with country_id and the columns below
 #' @param outcome_var name of the outcome column
-#' @param label specification label for the table
+#' @param label specification label
 #' @param controls character vector of control column names
 #' @return one-row data frame
 listwise_losses <- function(panel, outcome_var, label,
@@ -2048,10 +2059,10 @@ listwise_losses <- function(panel, outcome_var, label,
 }
 
 # Every split section must have run: a missing one stops the stage rather than
-# silently dropping its rows from the table.
+# silently dropping its rows from the count.
 split_objs <- c("ldc_groups", "gov_groups", "inc_groups")
 if (!all(vapply(split_objs, exists, logical(1L))))
-  stop("Listwise-loss table: missing split object(s) ",
+  stop("Listwise-loss count: missing split object(s) ",
        paste(split_objs[!vapply(split_objs, exists, logical(1L))], collapse = ", "))
 split_specs <- function(groups, prefix) lapply(groups, function(g) list(
   panel = g$panel %>% filter(!(cohort_year %in% thin_cohorts)),
@@ -2070,7 +2081,7 @@ lw_specs <- c(
 )
 
 lw_tab <- do.call(rbind, lapply(lw_specs, function(sp) {
-  if (!sp$y %in% names(sp$panel)) stop("Listwise-loss table: ", sp$y, " missing for ", sp$lbl)
+  if (!sp$y %in% names(sp$panel)) stop("Listwise-loss count: ", sp$y, " missing for ", sp$lbl)
   listwise_losses(sp$panel, sp$y, sp$lbl)
 }))
 
@@ -2080,23 +2091,9 @@ for (r in seq_len(nrow(lw_tab)))
                   lw_tab$`Recipient-years (used)`[r],
                   lw_tab$`Dropped: outcome`[r], lw_tab$`Dropped: controls`[r]))
 
-xtab_lw <- xtable(lw_tab, label = "tab:listwise_losses")
-align(xtab_lw) <- "llcccccc"
-raw_lw <- capture.output(
-  print(xtab_lw, include.rownames = FALSE, booktabs = TRUE,
-        sanitize.text.function = identity, size = "\\small", floating = FALSE))
-
-notes_lw <- paste0(
-  "Recipient-years/recipients lost to listwise deletion, by specification (outcome ",
-  "vs.\\ controls: WGI government effectiveness, log population); \\texttt{did} drops ",
-  "these cells silently, so ``used'' is the estimation sample (see text). Panels are ",
-  "post cohort-$\\geq 5$ restriction, and post subgroup restriction for split rows"
-)
-
-write_tex_float(
-  file.path(dir_tabs_h5, "listwise_losses.tex"),
-  "Listwise-deletion losses by specification",
-  "tab:listwise_losses", raw_lw, notes_lw,
-  "OECD CRS (Rio adaptation markers); UNFCCC NAP Central; WGI; World Bank WDI")
+n_lost <- sum(as.integer(gsub(",", "", lw_tab$`Recipient-years (raw)`, fixed = TRUE)) -
+              as.integer(gsub(",", "", lw_tab$`Recipient-years (used)`, fixed = TRUE)))
+message(sprintf("  Recipient-years lost to listwise deletion, summed over the %d specifications: %d",
+                nrow(lw_tab), n_lost))
 
 message("\n=== 05_heterogeneity.R: complete ===\n")
