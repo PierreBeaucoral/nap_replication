@@ -11,7 +11,6 @@
 # Outputs (all under output/):
 #   figures/cohorts_retained/did_combined_cohort_wgi.png   (§19b robustness)
 #   tables/cohorts_retained/att_combined_wide.tex          (§19c robustness)
-#   figures/notyettreated/did_combined_cohort_wgi.png      (§19d not-yet-treated)
 #   figures/notyettreated/did_notyettreated_es.png         (§19d event study)
 #   tables/notyettreated/att_notyettreated_wide.tex        (§19d not-yet-treated)
 #   tables/units_zeros/diagnostic_units_zeros.tex          (§19e units/zeros sensitivity)
@@ -26,7 +25,6 @@
 #   tables/dcdh/att_dcdh.tex                                (§A dCDH estimator)
 #   figures/dcdh/did_dcdh_es.png                            (§A dCDH event study)
 #   tables/bacon/bacon_decomp.tex                           (§B Goodman-Bacon)
-#   figures/bacon/bacon_scatter.png                         (§B Goodman-Bacon)
 #   tables/outlier_india/att_combined_wide.tex             (§C excluding India)
 #   tables/balanced_panel/att_combined_wide.tex            (§D balanced panel)
 #   tables/panel_2010/att_combined_wide.tex                (§E panel from 2010)
@@ -772,7 +770,6 @@ message(sprintf("Not-yet-treated panel: dropped thin cohorts {%s}; N = %d rows, 
                 paste(thin_cohorts, collapse = ", "),
                 nrow(did_panel_nyt), length(unique(did_panel_nyt$country_id))))
 
-results_group_nyt   <- setNames(vector("list", length(outcomes)), outcome_vars)
 results_dynamic_nyt <- setNames(vector("list", length(outcomes)), outcome_vars)
 
 # Seed rule (reproduces the published SEs): set.seed(1242) before loop
@@ -804,6 +801,9 @@ for (oc in outcomes) {
   )
   if (is.null(gt_nyt)) stop("Not-yet-treated att_gt() failed for ", oc$var)
 
+  # The group aggregation runs before the dynamic one: aggte() re-runs the
+  # multiplier bootstrap, so this order fixes the RNG stream behind the
+  # event-study SEs.
   agg_g_nyt <- tryCatch(aggte(gt_nyt, type = "group",  na.rm = TRUE), error = function(e) NULL)
   agg_d_nyt <- tryCatch(
     aggte(gt_nyt, type = "dynamic", na.rm = TRUE, min_e = -5, max_e = Inf),
@@ -811,25 +811,12 @@ for (oc in outcomes) {
   )
   if (is.null(agg_g_nyt) || is.null(agg_d_nyt))
     stop("Not-yet-treated aggte() failed for ", oc$var)
-  # Figure bands: simultaneous (sup-t) 95%, one band family per outcome curve
-  # (uniform over its cohorts / its event times), on the SEs of these draws.
-  cv_g_nyt <- sup_t_crit(agg_g_nyt$inf.function$selective.inf.func.g, agg_g_nyt$se.egt,
-                         biters = BITERS)
+  # Figure band: simultaneous (sup-t) 95% over the outcome's event times, on
+  # the SEs of these draws.
   cv_d_nyt <- sup_t_crit(agg_d_nyt$inf.function$dynamic.inf.func.e, agg_d_nyt$se.egt,
                          biters = BITERS)
-  message(sprintf("  Not-yet-treated sup-t crit (%s): cohort fig %.4f | event-study %.4f",
-                  oc$label, cv_g_nyt, cv_d_nyt))
+  message(sprintf("  Not-yet-treated sup-t crit (%s): event-study %.4f", oc$label, cv_d_nyt))
 
-  if (!is.null(agg_g_nyt)) {
-    results_group_nyt[[oc$var]] <- data.frame(
-      outcome = oc$label,
-      cohort  = agg_g_nyt$egt,
-      ATT     = round(agg_g_nyt$att.egt, 4),
-      SE      = round(agg_g_nyt$se.egt,  4),
-      Lower   = round(agg_g_nyt$att.egt - cv_g_nyt * agg_g_nyt$se.egt, 4),
-      Upper   = round(agg_g_nyt$att.egt + cv_g_nyt * agg_g_nyt$se.egt, 4)
-    )
-  }
   if (!is.null(agg_d_nyt)) {
     results_dynamic_nyt[[oc$var]] <- data.frame(
       outcome    = oc$label,
@@ -843,15 +830,7 @@ for (oc in outcomes) {
   }
 }
 
-# --- §19d-i cohort plot (all outcomes): notyettreated ---
-make_cohort_plot(
-  results_group = results_group_nyt,
-  outcomes      = outcomes,
-  dir_figs      = dir_figs_nyt,
-  spec_label    = "Not-yet-treated controls (multiplier bootstrap)"
-)
-
-# --- §19d-ii headline event-study: log(adaptation commitments) ---
+# --- §19d-i headline event-study: log(adaptation commitments) ---
 # No in-figure title/subtitle/caption — those live in LaTeX \caption{}.
 es_nyt <- results_dynamic_nyt[["log_commits"]]
 if (!is.null(es_nyt)) {
@@ -873,7 +852,7 @@ if (!is.null(es_nyt)) {
   message("Saved: ", es_path)
 }
 
-# --- §19d-iii wide ATT table (all outcomes), mirroring main spec ---
+# --- §19d-ii wide ATT table (all outcomes), mirroring main spec ---
 make_wide_table(
   did_panel_in  = did_panel_nyt,
   retain_thin   = FALSE,
@@ -993,15 +972,13 @@ for (sp in uz_specs) {
   # --------------------------------------------------------------------
   # The log1p(USD millions) row IS the headline specification:
   # log_commits = log1p(commitments), same panel, same estimator, same
-  # controls, same control group, same seed. Re-fitting it here used to
-  # produce a SECOND standard error for one specification (0.1173 in this
-  # table vs 0.1245 in Table 2). The two fits were never different: aggte()
+  # controls, same control group, same seed. It is READ from
+  # output/fits/headline_adaptation_dr_bs.rds rather than re-fitted: aggte()
   # re-runs the multiplier bootstrap when the att_gt object was fitted with
   # bstrap = TRUE, so the aggregated SE depends on the RNG state at the
-  # aggte() call, which differed between 03 (post-att_gt-mboot state) and
-  # this script (fresh set.seed(1242) state). Seeding before att_gt() does
-  # not pin the aggregated SE; sharing the fit does. This row is therefore
-  # READ from output/fits/headline_adaptation_dr_bs.rds.
+  # aggte() call, and a re-fit here would print a second SE for the same
+  # specification. Seeding before att_gt() does not pin the aggregated SE;
+  # sharing the fit does.
   # --------------------------------------------------------------------
   if (identical(sp$key, "log1p_millions")) {
     fit_head <- read_headline_fit("adaptation")
@@ -1304,8 +1281,7 @@ write_tex_float(
 #   in the console for comparison.
 #
 # THREE EXHIBITS:
-#   tables/cohorts_dropped/honestdid_rm.tex         relative magnitudes, same
-#                                                   layout as before
+#   tables/cohorts_dropped/honestdid_rm.tex         relative magnitudes
 #   tables/cohorts_dropped/honestdid_prepriods.tex  breakdown Mbar for
 #                                                   numPrePeriods in {4, 6, 8}
 #   tables/cohorts_dropped/honestdid_sd.tex         smoothness restriction
@@ -1522,8 +1498,7 @@ fmt_ci_hd <- function(lb, ub) {
 }
 
 # (i) Relative magnitudes — tables/cohorts_dropped/honestdid_rm.tex
-#     Layout is unchanged (Mbar rows + breakdown row, one column per outcome)
-#     so the manuscript compiles without edits.
+#     Layout: Mbar rows + breakdown row, one column per outcome.
 make_honestdid_table <- function(hd_all, Mbarvec, outcomes, dir_tabs) {
 
   n_mbar   <- length(Mbarvec)
@@ -2532,15 +2507,13 @@ message("\n=== Section A complete ===\n")
 #      column.
 #  (b) bacon() needs a STRONGLY BALANCED panel — subset to countries observed in
 #      all years first.
-# A failure stops the stage (no table or figure is written).
+# A failure stops the stage (no table is written).
 # ==============================================================================
 
 message("\n=== Section B (28): Goodman-Bacon decomposition ===\n")
 
 dir_tabs_bacon <- file.path(here("output", "tables"),  "bacon")
-dir_figs_bacon <- file.path(here("output", "figures"), "bacon")
 dir.create(dir_tabs_bacon, recursive = TRUE, showWarnings = FALSE)
-dir.create(dir_figs_bacon, recursive = TRUE, showWarnings = FALSE)
 
 dpd <- did_panel_full %>% filter(!(cohort_year %in% thin_cohorts))
 
@@ -2641,30 +2614,6 @@ if (is.null(bd)) {
     notes_text    = notes_bacon,
     source_text   = source_bacon
   )
-
-  # --- §B scatter: weight (x) vs estimate (y), coloured/shaped by comparison type,
-  # with a dashed horizontal line at the overall TWFE weighted estimate.
-  # No in-figure title; serif font; legend at bottom.
-  bd_plot <- bd %>%
-    mutate(type = factor(type, levels = type_order))
-
-  p_bacon <- ggplot(bd_plot, aes(x = weight, y = estimate,
-                                 colour = type, shape = type)) +
-    geom_hline(yintercept = overall_twfe, colour = "grey30",
-               linetype = "dashed", linewidth = 0.5) +
-    geom_point(size = 2.6, alpha = 0.85) +
-    scale_colour_brewer(palette = "Set2") +
-    labs(title = NULL, subtitle = NULL, caption = NULL,  # titles go in the LaTeX caption
-         x = "Weight", y = "2x2 DID estimate",
-         colour = NULL, shape = NULL) +
-    theme_minimal() +
-    theme(text             = element_text(family = "serif", size = 12),
-          legend.position  = "bottom",
-          panel.grid.minor = element_blank())
-
-  ggsave(file.path(dir_figs_bacon, "bacon_scatter.png"),
-         p_bacon, width = 9, height = 5.5, dpi = 300)
-  message("Saved: ", file.path(dir_figs_bacon, "bacon_scatter.png"))
 }
 
 message("\n=== Section B complete ===\n")

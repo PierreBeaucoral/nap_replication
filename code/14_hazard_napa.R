@@ -34,7 +34,6 @@
 #                                                           kept, not rebuilt)
 #   output/tables/hazard/nap_timing_vs_humanitarian_aid.tex
 #   output/tables/hazard/nap_timing_vs_emdat_hazard.tex   (needs EM-DAT; idem)
-#   output/tables/napa/prior_napa_ldc_crosstab.tex
 #   output/tables/napa/att_prior_napa_split.tex
 #   output/tables/napa/att_napa_falsification.tex
 ##############################################################################
@@ -520,8 +519,8 @@ if (emdat_available) {
   cov_all     <- mean(emdat_panel$n_events_all > 0, na.rm = TRUE)
   cov_climate <- mean(emdat_panel$n_events_climate > 0, na.rm = TRUE)
   # Missing-value audit, CLIMATE set: among recipient-years with >= 1 event,
-  # what share have NO event reporting affected / damage (i.e. would have
-  # been silently coded 0 under the old sum(na.rm=TRUE) logic)?
+  # what share have NO event reporting affected / damage (i.e. would be
+  # silently coded 0 by a plain sum(na.rm = TRUE))?
   event_years_climate <- emdat_panel %>% filter(n_events_climate > 0)
   share_missing_affected_climate <- mean(event_years_climate$n_events_climate_w_affected == 0)
   share_missing_damage_climate   <- mean(event_years_climate$n_events_climate_w_damage == 0)
@@ -668,8 +667,8 @@ if (!emdat_available) {
     n_dropped_hazard_na, nrow(did_panel_main), 100 * n_dropped_hazard_na / nrow(did_panel_main)
   ))
 
-  # Damage row: after the §2 missing/
-  # zero fix, log_damage_climate_lag1 is genuinely NA (not log1p(0) = 0) for
+  # Damage row: given the §2 missing/zero
+  # handling, log_damage_climate_lag1 is genuinely NA (not log1p(0) = 0) for
   # recipient-years where events occurred but none reported a damage value.
   # This additionally restricts the damage row's sample -- reported here and
   # in the table note so the row's smaller N is not silently absorbed into
@@ -749,8 +748,7 @@ if (!emdat_available) {
   # matches baseline's (dropping early years drops observations, not whole
   # units), so compute_att_difference()'s own same_units check -- which only
   # compares unit ids, not time coverage -- would wrongly take the aligned-IF
-  # branch. Rather than modify the verbatim-copied helper (05:428-475) to add
-  # time-window awareness it was never designed for, the independence
+  # branch. That helper has no notion of time coverage, so the independence
   # approximation is computed directly here (replicating that helper's own
   # fallback formula) and forced for this one comparison, with the reason
   # stated explicitly.
@@ -1077,7 +1075,7 @@ run_orthogonality_battery <- function(lag1_var, lag2_var, out_path, caption_titl
     "; dropping 2020--2022 ",
     if (is.na(wald_nocovid$p)) "could not be tested" else paste0(
       "gives $p = ", fmt3(wald_nocovid$p), "$ (",
-      if (reject_full && !reject_nocovid) "no longer significant -- COVID-sensitive"
+      if (reject_full && !reject_nocovid) "not significant -- COVID-sensitive"
       else if (reject_full && reject_nocovid) "still significant -- not just COVID"
       else "still not significant", ")"
     ), ". "
@@ -1172,8 +1170,8 @@ if (emdat_available) {
 # archived page PDF (data/raw/napa/Submitted_NAPAs_UNFCCC.pdf). This script
 # does NOT attempt to scrape the page itself: a live curl/system() call in
 # an analysis script is fragile (environment-dependent, network-dependent,
-# silently stale) and unnecessary now that a verified, provenance-documented
-# source file exists. If the file is absent the script stops: there is no
+# silently stale) and unnecessary given the verified, provenance-documented
+# source file. If the file is absent the script stops: there is no
 # fallback list. See data/raw/napa/README.md for the primary-source
 # retrieval method.
 ##############################################################################
@@ -1235,7 +1233,7 @@ stopifnot(length(ldc_iso3_2013) == 49L, !anyDuplicated(ldc_iso3_2013))
 # by whether the country had submitted a NAPA before its NAP, and estimate
 # the NAP effect in each cell (same spec as the LDC split in 05: CS (2021),
 # doubly-robust, never-treated control, multiplier-bootstrap SE -- see 05 §22 for the
-# split machinery this mirrors; 05 itself was not edited).
+# split machinery this mirrors).
 #
 # Because every
 # verified NAPA year is <= 2017 and every main-sample cohort is 2021-2024,
@@ -1261,61 +1259,26 @@ adopters_prior_napa <- did_panel_napa %>%
 message("Adopters in the main sample by prior-NAPA status:")
 print(count(adopters_prior_napa, prior_napa), row.names = FALSE)
 
-# --- Cross-tab: prior_napa x LDC status, with per-cell treated-unit counts -
-cross_tab <- adopters_prior_napa %>%
-  count(prior_napa, is_ldc, name = "n_treated") %>%
-  mutate(
-    prior_napa_lbl = ifelse(prior_napa == 1L, "Prior NAPA", "No prior NAPA"),
-    is_ldc_lbl     = ifelse(is_ldc == 1L, "LDC (2013 list)", "Non-LDC")
-  )
-message("\nPrior-NAPA x LDC-status cross-tab (treated-unit counts, main sample):")
-print(cross_tab %>% select(prior_napa_lbl, is_ldc_lbl, n_treated), row.names = FALSE)
-
+# --- Cross-tab: prior_napa x LDC status, treated-unit counts (stage log; the
+# text quotes them) ---------------------------------------------------------
 cross_tab_full <- expand.grid(prior_napa = c(0L, 1L), is_ldc = c(0L, 1L)) %>%
-  left_join(cross_tab, by = c("prior_napa", "is_ldc")) %>%
+  left_join(count(adopters_prior_napa, prior_napa, is_ldc, name = "n_treated"),
+            by = c("prior_napa", "is_ldc")) %>%
   mutate(
     n_treated      = coalesce(n_treated, 0L),
     prior_napa_lbl = ifelse(prior_napa == 1L, "Prior NAPA", "No prior NAPA"),
     is_ldc_lbl     = ifelse(is_ldc == 1L, "LDC (2013 list)", "Non-LDC")
   ) %>%
   arrange(prior_napa, is_ldc)
-
-cross_tab_lines <- c(
-  "\\begin{tabular}{lcc}",
-  "\\toprule",
-  " & LDC (2013 list) & Non-LDC \\\\",
-  "\\midrule",
-  paste0("Prior NAPA & ",
-         cross_tab_full$n_treated[cross_tab_full$prior_napa == 1 & cross_tab_full$is_ldc == 1],
-         " & ",
-         cross_tab_full$n_treated[cross_tab_full$prior_napa == 1 & cross_tab_full$is_ldc == 0],
-         " \\\\"),
-  paste0("No prior NAPA & ",
-         cross_tab_full$n_treated[cross_tab_full$prior_napa == 0 & cross_tab_full$is_ldc == 1],
-         " & ",
-         cross_tab_full$n_treated[cross_tab_full$prior_napa == 0 & cross_tab_full$is_ldc == 0],
-         " \\\\"),
-  "\\bottomrule",
-  "\\end{tabular}"
-)
-write_tex_float(
-  out_path      = here("output", "tables", "napa", "prior_napa_ldc_crosstab.tex"),
-  caption_title = "Prior-NAPA status by LDC classification, main-sample NAP adopters",
-  label         = "tab:prior_napa_ldc_crosstab",
-  tabular_lines = cross_tab_lines,
-  notes_text    = paste0(
-    "Treated-unit counts (main-sample NAP adopters, cohorts $\\geq 5$) by prior-NAPA status ",
-    "and LDC classification (UN 2013 list, the classification of the LDC heterogeneity split). See main ",
-    "text: the two partitions nearly coincide, so this split is the LDC split under another ",
-    "name. NAPA list: ", napa_source_note
-  ),
-  source_text = paste0("UNFCCC NAP Central; ", napa_source_short)
-)
+message("\nPrior-NAPA x LDC-status cross-tab (treated-unit counts, main sample):")
+for (r in seq_len(nrow(cross_tab_full)))
+  message(sprintf("  %-14s x %-16s %d", cross_tab_full$prior_napa_lbl[r],
+                  cross_tab_full$is_ldc_lbl[r], cross_tab_full$n_treated[r]))
 
 napa_split_spec <- function(panel_in, keep_treated_flag) {
   panel_split <- panel_in %>%
     filter(cohort_year == 0 | prior_napa == keep_treated_flag)
-  # Global state as before (later sections re-seed anyway); the bootstrap fit
+  # Global seed set as in 05's splits (later sections re-seed anyway); the bootstrap fit
   # and its simple aggregation draw inside withr::with_seed(1242), seeded
   # immediately before the estimator as in 05's sample splits, so the reported
   # SE is ONE multiplier-bootstrap draw (999 reps, clustered by recipient) and
@@ -1481,7 +1444,7 @@ did_panel_placebo <- did_panel_full %>%
   filter(year <= placebo_cutoff_year) %>%
   mutate(cohort_year = napa_cohort_year)  # overwrite: NAPA is now the falsification "treatment"
 
-# Verify the design fix: no real NAP adoption falls inside the restricted window.
+# Verify the design: no real NAP adoption falls inside the restricted window.
 stopifnot(all(is.na(did_panel_placebo$nap_year) |
              did_panel_placebo$nap_year > placebo_cutoff_year |
              did_panel_placebo$nap_year < first_year))
@@ -1654,6 +1617,5 @@ message("  data/processed/emdat_panel.csv (if EM-DAT present)")
 message("  output/tables/hazard/att_hazard_controls.tex (if EM-DAT present)")
 message("  output/tables/hazard/nap_timing_vs_humanitarian_aid.tex")
 message("  output/tables/hazard/nap_timing_vs_emdat_hazard.tex (if EM-DAT present)")
-message("  output/tables/napa/prior_napa_ldc_crosstab.tex")
 message("  output/tables/napa/att_prior_napa_split.tex")
 message("  output/tables/napa/att_napa_falsification.tex")

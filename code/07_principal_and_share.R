@@ -10,7 +10,6 @@
 #   output/tables/principal_share/principal_retained.tex     (tab:principal_retained)
 #   output/tables/principal_share/within_share_wide.tex      (tab:within_share_wide)
 #   output/tables/principal_share/share_reconciliation.tex   (tab:share_reconciliation)
-#   output/figures/principal_share/fig_principal_es.png
 #   output/figures/principal_share/fig_within_share_es.png
 #   output/figures/principal_share/fig_share_reconciliation.png
 #   (mirrored to paper/Tables/principal_share/, paper/Figures/principal_share/)
@@ -686,47 +685,6 @@ write_tex_float(
   "tab:principal_wide", tab_lines_r2, notes_r2, source_r2
 )
 copy_to_paper(out_path_r2, "Tables")
-
-# --- fig_principal_es.png: combined event study, headline vs principal ------
-# Simultaneous (sup-t) 95% bands, one band family per curve (sup_t_crit()).
-cv_fit_headline  <- sup_t_crit(fit_headline$agg_d$inf.function$dynamic.inf.func.e,
-                               fit_headline$agg_d$se.egt)
-cv_fit_principal <- sup_t_crit(fit_principal$agg_d$inf.function$dynamic.inf.func.e,
-                               fit_principal$agg_d$se.egt)
-message(sprintf("  fig_principal_es sup-t crit: headline %.4f | principal only %.4f",
-                cv_fit_headline, cv_fit_principal))
-dyn_headline  <- data.frame(outcome = "Principal + significant (headline)",
-                            event_time = fit_headline$agg_d$egt,
-                            ATT = fit_headline$agg_d$att.egt, SE = fit_headline$agg_d$se.egt,
-                            Lower = fit_headline$agg_d$att.egt - cv_fit_headline * fit_headline$agg_d$se.egt,
-                            Upper = fit_headline$agg_d$att.egt + cv_fit_headline * fit_headline$agg_d$se.egt)
-dyn_principal <- data.frame(outcome = "Principal only",
-                            event_time = fit_principal$agg_d$egt,
-                            ATT = fit_principal$agg_d$att.egt, SE = fit_principal$agg_d$se.egt,
-                            Lower = fit_principal$agg_d$att.egt - cv_fit_principal * fit_principal$agg_d$se.egt,
-                            Upper = fit_principal$agg_d$att.egt + cv_fit_principal * fit_principal$agg_d$se.egt)
-dyn_r2 <- bind_rows(dyn_headline, dyn_principal) %>%
-  mutate(outcome = factor(outcome, levels = c("Principal + significant (headline)", "Principal only")))
-
-p_r2 <- ggplot(dyn_r2, aes(x = event_time, y = ATT, colour = outcome, shape = outcome, group = outcome)) +
-  geom_hline(yintercept = 0, colour = "grey50", linetype = "dashed") +
-  geom_vline(xintercept = -0.5, colour = "grey30", linetype = "dotted") +
-  geom_linerange(aes(ymin = Lower, ymax = Upper), position = position_dodge(width = 0.4),
-                linewidth = 0.6, alpha = 0.8) +
-  geom_point(size = 2.5, position = position_dodge(width = 0.4)) +
-  scale_colour_manual(values = c("Principal + significant (headline)" = "#2E86C1", "Principal only" = "#C0392B")) +
-  scale_shape_manual(values = c("Principal + significant (headline)" = 16, "Principal only" = 17)) +
-  labs(title = NULL, subtitle = NULL, caption = NULL,
-      x = "Years relative to NAP adoption", y = "ATT estimate (log points)",
-      colour = NULL, shape = NULL) +
-  theme_minimal() +
-  theme(text = element_text(family = "serif", size = 12), legend.position = "bottom",
-       legend.text = element_text(size = 10), panel.grid.minor = element_blank())
-
-fig_path_r2 <- here("output", "figures", "principal_share", "fig_principal_es.png")
-ggsave(fig_path_r2, p_r2, width = 12, height = 7, dpi = 300)
-message("Saved: ", fig_path_r2)
-copy_to_paper(fig_path_r2, "Figures")
 
 # ------------------------------------------------------------------------
 # tab:principal_retained -- principal-only under the retained-cohorts spec

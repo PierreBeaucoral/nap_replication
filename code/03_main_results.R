@@ -1,12 +1,11 @@
 # ==============================================================================
 # 03_main_results.R
-# Main CS (2021) estimation — cohorts_dropped specification + pre-trends figure.
-# Paper: Beaucoral, Goujon and Marchand (2026) — §4 (pre-trends), §5 (main
+# Main CS (2021) estimation — cohorts_dropped specification.
+# Paper: Beaucoral, Goujon and Marchand (2026) — §5 (main
 # results: tab:combined_wide_main, fig:did_combined_es, fig:did_combined_cohort)
 #
 # Inputs : data/processed/simple_panel_wgi.csv
 # Outputs:
-#   output/figures/pretrends_analysis.png                      (§4 pre-trends)
 #   output/figures/cohorts_dropped/did_combined_es_wgi.png     (Figure 2, fig:did_combined_es)
 #   output/figures/cohorts_dropped/did_combined_cohort_wgi.png (Figure C.3, fig:did_combined_cohort)
 #   output/tables/cohorts_dropped/att_combined_wide.tex        (Table 2, tab:combined_wide_main)
@@ -430,43 +429,6 @@ write_tex_float(
     yr_span(coh_tab$cohort_year[coh_tab$in_main == "No"]), " cohorts"),
   source_text   = "UNFCCC NAP Central tracking tool"
 )
-
-# ==============================================================================
-# SECTION 3. Pre-trends figure — paper Figure pretrends_analysis
-# Output: output/figures/pretrends_analysis.png  (final name — no rename shim)
-# labs(title = NULL, subtitle = NULL): titles go in the LaTeX \caption{}
-# ==============================================================================
-
-message("\n=== Building pre-trends figure ===\n")
-
-yearly_averages <- aggregated %>%
-  group_by(year, treated) %>%
-  summarise(
-    avg_commitments  = mean(commitments,  na.rm = TRUE),
-    avg_disbursements = mean(disbursements, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-p6 <- ggplot(yearly_averages, aes(x = year)) +
-  geom_line(aes(y = avg_commitments,  color = "Commitments",  linetype = factor(treated)), linewidth = 1) +
-  geom_line(aes(y = avg_disbursements, color = "Disbursements", linetype = factor(treated)), linewidth = 1) +
-  geom_point(aes(y = avg_commitments,  color = "Commitments",  shape = factor(treated)), size = 2) +
-  geom_point(aes(y = avg_disbursements, color = "Disbursements", shape = factor(treated)), size = 2) +
-  scale_color_manual(values = c("Commitments" = "#2E86C1", "Disbursements" = "#E67E22")) +
-  scale_linetype_manual(values = c("0" = "dashed", "1" = "solid"),
-                        labels = c("Control", "Treated"), name = "Group") +
-  scale_shape_manual(values = c("0" = 1, "1" = 16),
-                     labels = c("Control", "Treated"), name = "Group") +
-  # No title, subtitle, or caption — those go in LaTeX \caption{}
-  labs(title = NULL, subtitle = NULL, caption = NULL,
-       x = "Year", y = "USD (Millions)", color = "Type") +
-  theme_minimal() +
-  theme(text = element_text(family = "serif", size = 12),
-        legend.position = "bottom")
-
-ggsave(here("output", "figures", "pretrends_analysis.png"),
-       p6, width = 12, height = 8, dpi = 300)
-message("Saved: output/figures/pretrends_analysis.png")
 
 # ==============================================================================
 # SECTION 4. Outcomes list

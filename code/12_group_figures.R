@@ -2,14 +2,10 @@
 # 12_group_figures.R
 # Builds the two descriptive group figures --
 # Figures/adaptation_marginal.pdf (main text, \label{fig:adapt_marginal}) and
-# Figures/adopter_vs_never.pdf (appendix, \label{fig:adopter_groups}). The
-# original versions (July 2026) were made outside the pipeline; this script
-# recreates them from the processed panel on
-# disk and reproduces the numbers already locked into the manuscript's captions
-# (verified below; do not edit those captions from this script).
+# Figures/adopter_vs_never.pdf (appendix, \label{fig:adopter_groups}) -- from
+# the processed panel, and prints the values quoted in their captions.
 #
-# STATUS: wired into run_all.R as stage 12 (see run_all.R header/pipeline list).
-# Self-contained given that 01_prepare_data.R has produced
+# Stage 12 of run_all.R. Self-contained given that 01_prepare_data.R has produced
 # data/processed/simple_panel_wgi.csv; duplicates small pieces of 02's
 # theme_paper() rather than sourcing 02, per the project's convention that
 # stage scripts do not source one another (see 04_robustness.R §1).
@@ -17,14 +13,10 @@
 # Inputs : data/processed/simple_panel_wgi.csv
 # Outputs:
 #   output/figures/group/adaptation_marginal.pdf   (Figure, main text)
-#   output/figures/group/adaptation_marginal.png   (preview mirror)
 #   output/figures/group/adopter_vs_never.pdf      (Figure, appendix)
-#   output/figures/group/adopter_vs_never.png      (preview mirror)
 #   -> copied (flattened, no "group/" subfolder) to:
 #      paper/Figures/adaptation_marginal.pdf
-#      paper/Figures/adaptation_marginal.png
 #      paper/Figures/adopter_vs_never.pdf
-#      paper/Figures/adopter_vs_never.png
 #
 # ============================================================
 # Paper-to-Code Naming Map
@@ -221,12 +213,9 @@ p_marginal_B <- ggplot(idx_long, aes(x = year, y = value, colour = series,
 p_marginal <- combine_panels(p_marginal_A, p_marginal_B)
 
 fig_marginal_pdf <- here("output", "figures", "group", "adaptation_marginal.pdf")
-fig_marginal_png <- here("output", "figures", "group", "adaptation_marginal.png")
 ggsave(fig_marginal_pdf, p_marginal, width = 7.5, height = 8, device = cairo_pdf)
-ggsave(fig_marginal_png, p_marginal, width = 7.5, height = 8, dpi = 300)
 message("Saved: ", fig_marginal_pdf)
 copy_to_paper_flat(fig_marginal_pdf)
-copy_to_paper_flat(fig_marginal_png)
 
 ##############################################################################
 # §3. Figure: adopter_vs_never.pdf
@@ -308,12 +297,9 @@ p_groups_B <- ggplot(yearly_groups, aes(x = year, y = idx_mean,
 p_groups <- combine_panels(p_groups_A, p_groups_B)
 
 fig_groups_pdf <- here("output", "figures", "group", "adopter_vs_never.pdf")
-fig_groups_png <- here("output", "figures", "group", "adopter_vs_never.png")
 ggsave(fig_groups_pdf, p_groups, width = 7.5, height = 8, device = cairo_pdf)
-ggsave(fig_groups_png, p_groups, width = 7.5, height = 8, dpi = 300)
 message("Saved: ", fig_groups_pdf)
 copy_to_paper_flat(fig_groups_pdf)
-copy_to_paper_flat(fig_groups_png)
 
 message("\n=== 12_group_figures.R complete ===\n")
 # Values quoted in the captions of fig:adapt_marginal and fig:adopter_groups.

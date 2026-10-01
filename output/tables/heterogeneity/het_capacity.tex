@@ -1,0 +1,32 @@
+\begin{table}[H]
+\centering
+\caption{NAP effect by baseline capacity: governance, LDC status and income group}
+\label{tab:het_capacity}
+\begingroup\small
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lcccc}
+\toprule
+Subgroup & ATT & SE & $N$ treated & Pre-trend $p$ (4 leads) \\
+\midrule
+\multicolumn{5}{l}{\textit{Panel A: Governance (WGI Government Effectiveness, median split at baseline)}} \\
+\quad High governance & 0.2909 & (0.2496) & 19 & 0.099 \\
+\quad Low governance & 0.3001** & (0.1219) & 21 & 0.293 \\
+\addlinespace
+\multicolumn{5}{l}{\textit{Panel B: LDC status (UN list as of 2013, 49 economies)}} \\
+\quad LDC & 0.2693* & (0.1585) & 18 & 0.986 \\
+\quad Non-LDC & 0.4181* & (0.2343) & 22 & 0.374 \\
+\addlinespace
+\multicolumn{5}{l}{\textit{Panel C: World Bank income group (FY2013 classification, held fixed)}} \\
+\quad Low income & 0.2701 & (0.1700) & 15 & 0.893 \\
+\quad Lower middle income & 0.3719 & (0.2463) & 14 & 0.966 \\
+\quad Upper middle income & 0.4067 & (0.3788) & 10 & 0.176 \\
+\bottomrule
+\end{tabular}
+}
+\endgroup
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: ATT on log(adaptation commitments), estimated separately on each subgroup; full columns in Tables~\ref{tab:het_gov_wide}, \ref{tab:het_ldc_wide} and \ref{tab:het_income_wide}. CS (2021) regression adjustment (doubly robust only for a subgroup with at least 40 treated recipients; none here, 10--22 per cell), not-yet-treated controls, WGI GE + log population. ATT/SE: multiplier-bootstrap (999 reps, clustered by recipient, seed 1242); pre-trend: separate analytical fit. Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-5 \leq e \leq -2$; 4 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular. Panel A: median of pre-treatment mean WGI GE. Panel B: pre-treatment vintage of the UN LDC list. Panel C: the World Bank historical income classification, FY2013 (July 2012) column; high-income and unclassified recipients excluded. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central; WGI; UN LDC list; World Bank income classification.
+\end{minipage}
+\end{table}

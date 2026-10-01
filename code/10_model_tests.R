@@ -23,9 +23,7 @@
 # Outputs:
 #   output/tables/model_tests/lemma2_size.tex     (tab:lemma2_size)
 #   output/tables/model_tests/alpha_half.tex      (tab:alpha_half)
-#   output/figures/model_tests/fig_lemma2_size.png
-#   -> copied to paper/Tables/model_tests/ and paper/Figures/model_tests/ when a
-#      paper/ folder exists
+#   -> copied to paper/Tables/model_tests/ when a paper/ folder exists
 #
 # Stage 10 of run_all.R. Reads data/processed/simple_panel_wgi.csv and the
 # headline fits that 03_main_results.R stores in output/fits/ (the main-spec
@@ -60,7 +58,6 @@
 
 library(data.table)
 library(dplyr)
-library(ggplot2)
 library(here)
 library(did)
 
@@ -85,19 +82,15 @@ BITERS <- 999L
 # Output directories
 # -----------------------------------------------------------------------
 dir_tabs <- here("output", "tables",  "model_tests")
-dir_figs <- here("output", "figures", "model_tests")
 dir.create(dir_tabs, recursive = TRUE, showWarnings = FALSE)
-dir.create(dir_figs, recursive = TRUE, showWarnings = FALSE)
 # A failed run must not leave the previous run's exhibits in place: they are
 # deleted before anything is estimated, and an estimation failure stops the stage.
-unlink(list.files(c(dir_tabs, dir_figs), pattern = "\\.(tex|png|pdf)$", full.names = TRUE))
+unlink(list.files(dir_tabs, pattern = "\\.(tex|png|pdf)$", full.names = TRUE))
 
 has_paper  <- dir.exists(here("paper"))  # FALSE in the stand-alone replication package
 paper_tabs <- here("paper", "Tables",  "model_tests")
-paper_figs <- here("paper", "Figures", "model_tests")
 if (has_paper) {
   dir.create(paper_tabs, recursive = TRUE, showWarnings = FALSE)
-  dir.create(paper_figs, recursive = TRUE, showWarnings = FALSE)
 }
 
 # ==============================================================================
@@ -554,34 +547,6 @@ write_tex_float(
 )
 
 # ==============================================================================
-# SECTION 6. TEST 1 — figure fig_lemma2_size.png (ATT by tercile, 95% CI)
-# ==============================================================================
-
-crit_95 <- qnorm(0.975)
-terc_df <- data.frame(
-  tercile = factor(c("T1\n(smallest)", "T2\n(middle)", "T3\n(largest)"),
-                   levels = c("T1\n(smallest)", "T2\n(middle)", "T3\n(largest)")),
-  att = c(t1_terc_fits$T1$att, t1_terc_fits$T2$att, t1_terc_fits$T3$att),
-  se  = c(t1_terc_fits$T1$se,  t1_terc_fits$T2$se,  t1_terc_fits$T3$se)
-) %>%
-  mutate(lower = att - crit_95 * se, upper = att + crit_95 * se)
-
-p_lemma2 <- ggplot(terc_df, aes(x = tercile, y = att)) +
-  geom_hline(yintercept = 0, colour = "grey40", linetype = "dashed", linewidth = 0.4) +
-  geom_pointrange(aes(ymin = lower, ymax = upper), size = 0.7, linewidth = 0.8,
-                  colour = "#2E86C1") +
-  labs(title = NULL, subtitle = NULL, caption = NULL,
-       x = expression(paste("Tercile of pre-treatment recipient size (", omega[i],
-                            ", share of total commitments)")),
-       y = "ATT \u2014 log(Total commitments)") +
-  theme_minimal(base_family = "serif", base_size = 12) +
-  theme(panel.grid.minor = element_blank())
-
-ggsave(file.path(dir_figs, "fig_lemma2_size.png"), p_lemma2,
-       width = 7, height = 5, dpi = 300)
-message("Saved: ", file.path(dir_figs, "fig_lemma2_size.png"))
-
-# ==============================================================================
 # SECTION 7. TEST 2 — sign(alpha_i - 1/2) via s_i, and the main-spec sign test
 # ==============================================================================
 
@@ -720,9 +685,8 @@ write_tex_float(
 )
 
 # ==============================================================================
-# SECTION 9. Copy exhibits into paper/Tables/model_tests and
-#            paper/Figures/model_tests (run_all.R is not modified — this
-#            standalone script performs its own copy step).
+# SECTION 9. Copy exhibits into paper/Tables/model_tests (this stage
+#            performs its own copy step, so it can be run on its own).
 # ==============================================================================
 
 message("\n=== Section 9: copying exhibits into paper/ ===\n")
@@ -737,9 +701,7 @@ copy_dir <- function(src, dst) {
 
 if (has_paper) {
   n_tab_copied <- copy_dir(dir_tabs, paper_tabs)
-  n_fig_copied <- copy_dir(dir_figs, paper_figs)
   message(sprintf("Copied %d table(s) to %s", n_tab_copied, paper_tabs))
-  message(sprintf("Copied %d figure(s) to %s", n_fig_copied, paper_figs))
 } else message("paper/ not found -- exhibits are left in output/ only")
 
 message("\n=== 10_model_tests.R complete ===\n")

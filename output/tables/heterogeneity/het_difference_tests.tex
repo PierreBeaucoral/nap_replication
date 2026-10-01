@@ -3,30 +3,30 @@
 \caption{Formal tests of differences in the NAP effect across subgroups, donor types and outcomes (H3, H4)}
 \label{tab:het_difftests}
 % latex table generated in R 4.6.1 by xtable 1.8-8 package
-% Thu Oct  1 12:41:11 2026
+% Thu Oct  1 14:51:47 2026
 \begingroup\small
 \adjustbox{max width=\textwidth}{%
-\begin{tabular}{llcccc}
+\begin{tabular}{llccccc}
   \toprule
-Split & Contrast & Difference & SE & $z$ & $p$-value \\ 
+Split & Contrast & Difference & SE & $z$ & $p$-value & MDE (80\% power) \\ 
   \midrule
-LDC status & LDC $-$ Non-LDC & -0.1488 & 0.2829 & -0.526 & 0.599 \\ 
-  Governance (WGI GE, median split) & Low governance $-$ High governance & 0.0091 & 0.2778 & 0.033 & 0.974 \\ 
-  Income group & Low income $-$ Upper middle income & -0.1366 & 0.4152 & -0.329 & 0.742 \\ 
-  Income group & Lower middle income $-$ Upper middle income & -0.0348 & 0.4518 & -0.077 & 0.939 \\ 
-  Income group & Joint: all three income ATTs equal ($\chi^2 = 0.182$, 2 df) & --- & --- & --- & 0.913 \\ 
-  Donor type (H3) & DAC bilateral $-$ multilateral & -0.2353 & 0.3361 & -0.700 & 0.484 \\ 
-  Donor type (H3) & DAC bilateral $-$ other donors & 0.2900 & 0.1670 & 1.736 & 0.083 \\ 
-  Donor type (H3) & Multilateral $-$ other donors & 0.5253 & 0.3267 & 1.608 & 0.108 \\ 
-  Donor type (H3) & Joint: all three donor-type ATTs equal ($\chi^2 = 4.676$, 2 df) & --- & --- & --- & 0.097 \\ 
-  Falsification & Adaptation $-$ mitigation commitments & 0.1478 & 0.1444 & 1.024 & 0.306 \\ 
+LDC status & LDC $-$ Non-LDC & -0.1488 & 0.2829 & -0.526 & 0.599 & 0.7925 \\ 
+  Governance (WGI GE, median split) & Low governance $-$ High governance & 0.0091 & 0.2778 & 0.033 & 0.974 & 0.7784 \\ 
+  Income group & Low income $-$ Upper middle income & -0.1366 & 0.4152 & -0.329 & 0.742 & 1.1632 \\ 
+  Income group & Lower middle income $-$ Upper middle income & -0.0348 & 0.4518 & -0.077 & 0.939 & 1.2658 \\ 
+  Income group & Joint: all three income ATTs equal ($\chi^2 = 0.182$, 2 df) & --- & --- & --- & 0.913 & --- \\ 
+  Donor type (H3) & DAC bilateral $-$ multilateral & -0.2353 & 0.3361 & -0.700 & 0.484 & 0.9416 \\ 
+  Donor type (H3) & DAC bilateral $-$ other donors & 0.2900 & 0.1670 & 1.736 & 0.083 & 0.4680 \\ 
+  Donor type (H3) & Multilateral $-$ other donors & 0.5253 & 0.3267 & 1.608 & 0.108 & 0.9152 \\ 
+  Donor type (H3) & Joint: all three donor-type ATTs equal ($\chi^2 = 4.676$, 2 df) & --- & --- & --- & 0.097 & --- \\ 
+  Falsification & Adaptation $-$ mitigation commitments & 0.1478 & 0.1444 & 1.024 & 0.306 & 0.4044 \\ 
    \bottomrule
 \end{tabular}
 }
 \endgroup
 \par\vspace{4pt}
 \begin{minipage}{\linewidth}\footnotesize
-Notes: Each row tests equality of two ATTs from the paired heterogeneity table (not re-estimated). H4 rows: CS\,(2021), reg.\ adjustment on log(adaptation commitments); H3 (donor-type) rows: headline specification (DR) on the donor-group commitments; falsification row: adaptation minus mitigation. H4 differences = low- minus high-capacity (positive: larger effect where capacity weaker). H4 rows (LDC/governance/income): SE $=\sqrt{se_a^2+se_b^2}$ on multiplier-bootstrap SEs (999 reps, seed 1242), disjoint subsamples. H3/mitigation rows: aligned analytical-IF SEs (not bootstrap), same recipient-years. $z$ vs.\ standard normal; joint stats vs.\ $\chi^2$; $p$ two-sided.\par
+Notes: Each row tests equality of two ATTs from the paired heterogeneity table (not re-estimated). H4 rows: CS\,(2021), reg.\ adjustment on log(adaptation commitments); H3 (donor-type) rows: headline specification (DR) on the donor-group commitments; falsification row: adaptation minus mitigation. H4 differences = low- minus high-capacity (positive: larger effect where capacity weaker). H4 rows (LDC/governance/income): SE $=\sqrt{se_a^2+se_b^2}$ on multiplier-bootstrap SEs (999 reps, seed 1242), disjoint subsamples. H3/mitigation rows: aligned analytical-IF SEs (not bootstrap), same recipient-years. $z$ vs.\ standard normal; joint stats vs.\ $\chi^2$; $p$ two-sided. MDE: minimum detectable difference, $(z_{0.975}+z_{0.80}) \times SE = 2.8016 \times SE$, the smallest true difference a two-sided 5\% test rejects with 80\% probability; none for the joint tests. No estimated difference reaches its MDE.\par
 Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central; WGI; World Bank income classification.
 \end{minipage}
 \end{table}

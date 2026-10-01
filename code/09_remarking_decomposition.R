@@ -23,19 +23,16 @@
 #     needs each activity's marking status in years it was UNMARKED too.
 #     One gzip-compressed CSV per year, 2009-2024. Delete the folder to
 #     force a raw-data reread.)
-#   output/tables/remarking/att_remarking_margins.tex      (tab:remarking_margins)
+#   output/tables/remarking/att_remarking_margins.tex      (tab:remarking_margins; Panel B = linked/unlinked split)
 #   output/tables/remarking/att_remarking_counts.tex       (tab:remarking_counts)
 #   output/tables/remarking/att_remarking_exclusions.tex   (tab:remarking_exclusions)
 #   output/tables/remarking/tab_remarking_sectors.tex      (tab:remarking_sectors)
-#   output/tables/remarking/remarking_flag_shares_by_year.tex   (descriptive)
 #   output/tables/remarking/remarking_flag_shares_by_group.tex  (descriptive)
 #   output/tables/remarking/id_linkage_diagnostic.csv      (diagnostic)
 #   output/tables/remarking/reconciliation_check.csv       (diagnostic)
 #   output/tables/remarking/remarking_results.rds          (all result objects)
-#   output/figures/remarking/fig_remarking_sectors.png     (Fig: sector composition)
-#   -- all .tex and .png outputs above are additionally copied to
-#      paper/Tables/remarking/ and paper/Figures/remarking/ when a paper/
-#      folder exists (not in the stand-alone replication package).
+#   -- all .tex outputs above are additionally copied to paper/Tables/remarking/
+#      when a paper/ folder exists (not in the stand-alone replication package).
 #
 # ============================================================
 # Paper-to-Code Naming Map
@@ -66,8 +63,6 @@
 
 library(data.table)
 library(dplyr)
-library(tidyr)
-library(ggplot2)
 library(xtable)
 library(here)
 library(did)
@@ -87,15 +82,13 @@ set.seed(20240601)  # global seed; local set.seed(1242) immediately before each 
 t_script_start <- Sys.time()
 
 dir.create(here("output", "tables",  "remarking"), recursive = TRUE, showWarnings = FALSE)
-dir.create(here("output", "figures", "remarking"), recursive = TRUE, showWarnings = FALSE)
 # A failed run must not leave the previous run's exhibits in place: they are
 # deleted before anything is estimated, and an estimation failure stops the stage.
-unlink(list.files(here("output", c("tables", "figures"), "remarking"),
+unlink(list.files(here("output", "tables", "remarking"),
                   pattern = "\\.(tex|png|pdf)$", full.names = TRUE))
 has_paper <- dir.exists(here("paper"))  # FALSE in the stand-alone replication package
 if (has_paper) {
   dir.create(here("paper",  "Tables",  "remarking"), recursive = TRUE, showWarnings = FALSE)
-  dir.create(here("paper",  "Figures", "remarking"), recursive = TRUE, showWarnings = FALSE)
 }
 dir.create(here("data",   "processed"),            recursive = TRUE, showWarnings = FALSE)
 
@@ -493,12 +486,11 @@ log_msg("%d / %d activity rows (%.2f%%) lack a resolvable %s and are treated as 
 
 log_msg("Section 5: constructing NAP-support / readiness / fund flags")
 
-# Title regex (co-occurrence rule). The original single regex included the
-# bare token "planning", which matches family planning / urban planning /
-# land-use planning titles that have nothing to do with NAP support. Fix:
-# flag directly on the NAP/readiness core phrasing; flag the generic word
-# "planning" only when it co-occurs with an adaptation/climate/NAP/resilience
-# term in the SAME title (title_pattern_planning_only tracks the marginal
+# Title regex (co-occurrence rule). The bare token "planning" matches family
+# planning / urban planning / land-use planning titles that have nothing to do
+# with NAP support, so the flag fires directly on the NAP/readiness core
+# phrasing and on the generic word "planning" only when it co-occurs with an
+# adaptation/climate/NAP/resilience term in the SAME title (title_pattern_planning_only tracks the marginal
 # contribution of this second branch alone, for the flag-share diagnostics).
 title_pattern_core     <- "national adaptation plan|adaptation plan|\\bnap\\b|nap-|readiness"
 title_pattern_planning <- "planning"
@@ -510,9 +502,9 @@ flag_title_planning_hit  <- grepl(title_pattern_planning, title_lc) & grepl(titl
 activities[, flag_title               := flag_title_core_hit | flag_title_planning_hit]
 activities[, flag_title_planning_only := flag_title_planning_hit & !flag_title_core_hit]
 
-# Pre-fix (broad) title regex, retained ONLY to build the before/after
-# regex-sensitivity comparison in Section 9b -- not used for any headline
-# exhibit.
+# Broad title regex (bare "planning" token; the "_old" objects below), used ONLY
+# for the broad-vs-narrow regex-sensitivity comparison in Section 9b -- not used
+# for any headline exhibit.
 title_pattern_old <- "national adaptation plan|nap |readiness|nap-|adaptation plan|planning"
 activities[, flag_title_old := grepl(title_pattern_old, title_lc)]
 
@@ -603,8 +595,7 @@ act_year[, margin4 := fcase(
 log_msg("Activity-year table: %d rows, %d distinct activities", nrow(act_year), uniqueN(act_year$activity_id))
 
 # ==============================================================================
-# SECTION 6b. SINGLETON-ID SHARE DIAGNOSTIC (feeds tab:remarking_margins and
-# tab:remarking_margins_unlinked notes)
+# SECTION 6b. SINGLETON-ID SHARE DIAGNOSTIC (feeds the tab:remarking_margins notes)
 # ==============================================================================
 
 log_msg("Section 6b: singleton-id share among marked rows (overall and post-adoption treated cells)")
@@ -779,8 +770,8 @@ excl_ry <- marked_act[, .(
   commit_excl_fund      = sum(commit_sum[flag_fund == 0L],    na.rm = TRUE),
   commit_excl_all       = sum(commit_sum[flag_title == 0L & flag_purpose == 0L & flag_fund == 0L], na.rm = TRUE),
   commit_multi_excl_fund = sum(commit_sum[donor_type_multi == 1L], na.rm = TRUE),
-  # Pre-fix (old, broad) title/purpose flags -- diagnostic only, feeds the
-  # regex-sensitivity comparison in Section 9b.
+  # Broad title/purpose flags -- diagnostic only, feed the regex-sensitivity
+  # comparison in Section 9b.
   commit_excl_title_old   = sum(commit_sum[flag_title_old == 0L], na.rm = TRUE),
   commit_excl_purpose_old = sum(commit_sum[flag_purpose_old == 0L], na.rm = TRUE),
   commit_excl_all_old     = sum(commit_sum[flag_title_old == 0L & flag_purpose_old == 0L & flag_fund == 0L], na.rm = TRUE)
@@ -865,72 +856,56 @@ flag_shares_group[, `:=`(
 log_msg("Flag-coverage shares by group:\n%s",
         paste(capture.output(print(flag_shares_group)), collapse = "\n"))
 
-# Write descriptive tex tables (supplementary; not paper-mandatory table names)
-flag_row_labels <- c(
-  "Total marked commitments (USD M)", "Title-flagged (\\%)",
-  "Purpose-flagged (\\%)", "Fund-flagged (\\%)",
-  "  of which: planning-only title (\\%)",
-  "  of which: purpose 15110 alone (\\%)",
-  "  of which: purpose 43010 alone (\\%)"
+# Descriptive table (label tab:remarking_flag_shares_by_group): Panel A = the
+# by-year shares (years as rows), Panel B = the by-group shares.
+flag_cells <- function(d, i) c(
+  sprintf("%.1f", d$commit_total[i]),
+  sprintf("%.1f", d$share_title_pct[i]),
+  sprintf("%.1f", d$share_purpose_pct[i]),
+  sprintf("%.1f", d$share_fund_pct[i]),
+  sprintf("%.1f", d$share_title_planning_only_pct[i]),
+  sprintf("%.1f", d$share_purpose_15110_pct[i]),
+  sprintf("%.1f", d$share_purpose_43010_pct[i])
 )
-
-flag_year_tex <- build_wide_tex_table(
-  row_labels = flag_row_labels,
-  col_labels = as.character(flag_shares_year$year),
-  col_data   = lapply(seq_len(nrow(flag_shares_year)), function(i) c(
-    sprintf("%.1f", flag_shares_year$commit_total[i]),
-    sprintf("%.1f", flag_shares_year$share_title_pct[i]),
-    sprintf("%.1f", flag_shares_year$share_purpose_pct[i]),
-    sprintf("%.1f", flag_shares_year$share_fund_pct[i]),
-    sprintf("%.1f", flag_shares_year$share_title_planning_only_pct[i]),
-    sprintf("%.1f", flag_shares_year$share_purpose_15110_pct[i]),
-    sprintf("%.1f", flag_shares_year$share_purpose_43010_pct[i])
-  )),
-  tex_label = "tab:remarking_flag_shares_by_year"
-)
-write_tex_float(
-  out_path      = here("output", "tables", "remarking", "remarking_flag_shares_by_year.tex"),
-  caption_title = "Share of adaptation-marked commitments flagged as NAP-support, readiness, or climate-fund activity, by year",
-  label         = "tab:remarking_flag_shares_by_year",
-  tabular_lines = flag_year_tex,
-  notes_text    = paste0(
-    "Title-flag: title matches core NAP/adaptation-plan/readiness phrasing, or generic ",
-    "``planning'' co-occurring with an adaptation/climate/NAP/resilience term. Purpose-flag: ",
-    "CRS 41010 only. Fund-flag: GCF, Adaptation Fund, or GEF (LDC Fund under GEF). ``Of which'' ",
-    "rows are diagnostic: ``planning-only title'' = matched only via the generic co-occurrence; ",
-    "``purpose 15110/43010 alone'' = shares under the narrowed rule's excluded codes ",
-    "(Table~\\ref{tab:remarking_exclusions_regex_comparison} has the ATT sensitivity). ",
-    "Categories not mutually exclusive"
-  ),
-  source_text = "OECD CRS activity-level microdata, Rio adaptation marker 1 or 2"
-)
-
-flag_group_tex <- build_wide_tex_table(
-  row_labels = flag_row_labels,
-  col_labels = flag_shares_group$group,
-  col_data   = lapply(seq_len(nrow(flag_shares_group)), function(i) c(
-    sprintf("%.1f", flag_shares_group$commit_total[i]),
-    sprintf("%.1f", flag_shares_group$share_title_pct[i]),
-    sprintf("%.1f", flag_shares_group$share_purpose_pct[i]),
-    sprintf("%.1f", flag_shares_group$share_fund_pct[i]),
-    sprintf("%.1f", flag_shares_group$share_title_planning_only_pct[i]),
-    sprintf("%.1f", flag_shares_group$share_purpose_15110_pct[i]),
-    sprintf("%.1f", flag_shares_group$share_purpose_43010_pct[i])
-  )),
-  tex_label = "tab:remarking_flag_shares_by_group"
+flag_rows <- function(d, labels) vapply(seq_len(nrow(d)), function(i)
+  paste0("\\quad ", labels[i], " & ", paste(flag_cells(d, i), collapse = " & "), " \\\\"),
+  character(1L))
+flag_combined_tex <- c(
+  "\\begingroup\\small",
+  "\\begin{tabular}{lccccccc}",
+  "\\toprule",
+  " & Total marked & \\multicolumn{3}{c}{Flagged (\\%)} & \\multicolumn{3}{c}{Of which, diagnostic (\\%)} \\\\",
+  "\\cmidrule(lr){3-5}\\cmidrule(lr){6-8}",
+  " & commitments (USD M) & Title & Purpose & Fund & Planning-only title & Purpose 15110 alone & Purpose 43010 alone \\\\",
+  "\\midrule",
+  "\\multicolumn{8}{l}{\\textit{Panel A: By year}} \\\\",
+  flag_rows(flag_shares_year, as.character(flag_shares_year$year)),
+  "\\addlinespace",
+  "\\multicolumn{8}{l}{\\textit{Panel B: By treatment group, all years pooled}} \\\\",
+  flag_rows(flag_shares_group, flag_shares_group$group),
+  "\\bottomrule",
+  "\\end{tabular}",
+  "\\endgroup"
 )
 write_tex_float(
   out_path      = here("output", "tables", "remarking", "remarking_flag_shares_by_group.tex"),
-  caption_title = "Share of adaptation-marked commitments flagged as NAP-support, readiness, or climate-fund activity, by treatment group",
+  caption_title = "Share of adaptation-marked commitments flagged as NAP-support, readiness, or climate-fund activity, by year and by treatment group",
   label         = "tab:remarking_flag_shares_by_group",
-  tabular_lines = flag_group_tex,
+  tabular_lines = flag_combined_tex,
   notes_text    = paste0(
-    "Groups follow the main estimation sample: treated = ", sum(group_lookup$cohort_year >= 2021),
+    "Panel A pools recipients by year; Panel B pools years by treatment group. ",
+    "Title-flag: title matches core NAP/adaptation-plan/readiness phrasing, or generic ",
+    "``planning'' co-occurring with an adaptation/climate/NAP/resilience term. Purpose-flag: ",
+    "CRS 41010 only. Fund-flag: GCF, Adaptation Fund, or GEF (LDC Fund under GEF). ",
+    "``Of which'' columns are diagnostic: ``planning-only title'' = matched only via the ",
+    "generic co-occurrence; ``purpose 15110/43010 alone'' = shares under the narrowed rule's ",
+    "excluded codes (Table~\\ref{tab:remarking_exclusions_regex_comparison} has the ATT ",
+    "sensitivity). Categories not mutually exclusive. Panel B groups follow the main ",
+    "estimation sample: treated = ", sum(group_lookup$cohort_year >= 2021),
     " adopters with adoption year $\\geq$ 2021, never-treated = ", sum(group_lookup$cohort_year == 0),
-    "; thin-cohort adopters are not in the main sample and are not shown. All years pooled. See Table~\\ref{tab:remarking_flag_shares_by_year} for the title/purpose flag definitions ",
-    "and the diagnostic ``of which'' rows"
+    "; thin-cohort adopters are not in the main sample and are not shown"
   ),
-  source_text   = "OECD CRS activity-level microdata; UNFCCC NAP Central"
+  source_text   = "OECD CRS activity-level microdata, Rio adaptation marker 1 or 2; UNFCCC NAP Central"
 )
 
 # ==============================================================================
@@ -1166,12 +1141,12 @@ for (i in seq_along(exclusion_specs)) {
 }
 names(exclusion_results) <- vapply(exclusion_specs, `[[`, character(1L), "label")
 
-## --- Objective 3b: regex-sensitivity diagnostic -- old (pre-fix) vs.\ new --
+## --- Objective 3b: regex-sensitivity diagnostic -- broad vs. narrow ---------
 ## title/purpose flags for the three affected exclusion outcomes only. "Excl.
 ## fund-flagged" and "Multilateral cell, excl. fund-flagged" do not depend on
-## the title/purpose flags, so they are identical before and after by
+## the title/purpose flags, so they are identical under both definitions by
 ## construction and are not re-estimated here.
-log_msg("Section 11c-ii: regex-sensitivity diagnostic (old vs.\\ new title/purpose flags)")
+log_msg("Section 11c-ii: regex-sensitivity diagnostic (broad vs. narrow title/purpose flags)")
 
 exclusion_old_specs <- list(
   list(var = "log_commit_excl_title_old",   raw = "commit_excl_title_old",   label = "Excl. title-flagged"),
@@ -1182,12 +1157,12 @@ exclusion_old_specs <- list(
 exclusion_old_results <- vector("list", length(exclusion_old_specs))
 for (i in seq_along(exclusion_old_specs)) {
   sp <- exclusion_old_specs[[i]]
-  log_msg("  Estimating [old regex]: %s (%s)", sp$label, sp$var)
+  log_msg("  Estimating [broad regex]: %s (%s)", sp$label, sp$var)
   res <- estimate_cs_outcome(did_panel_126_df, sp$var)
   res$label <- sp$label
   res$mean_pre <- pretreat_mean(did_panel_126_df, sp$raw)
   exclusion_old_results[[i]] <- res
-  log_msg("    [old] ATT=%.4f SE=%.4f t=%.3f pretrend p=%.3f (df=%d) did-Wpval=%.3f mean_pre=%.2f",
+  log_msg("    [broad] ATT=%.4f SE=%.4f t=%.3f pretrend p=%.3f (df=%d) did-Wpval=%.3f mean_pre=%.2f",
           res$att, res$se, res$t, res$pretrend_pval, res$pretrend_df, res$did_wpval, res$mean_pre)
 }
 names(exclusion_old_results) <- vapply(exclusion_old_specs, `[[`, character(1L), "label")
@@ -1195,7 +1170,7 @@ names(exclusion_old_results) <- vapply(exclusion_old_specs, `[[`, character(1L),
 for (lbl in names(exclusion_old_results)) {
   old_r <- exclusion_old_results[[lbl]]
   new_r <- exclusion_results[[lbl]]
-  log_msg("  Before/after [%s]: old ATT=%.4f (SE=%.4f) -> new ATT=%.4f (SE=%.4f), delta ATT=%+.4f",
+  log_msg("  Broad vs. narrow [%s]: broad ATT=%.4f (SE=%.4f), narrow ATT=%.4f (SE=%.4f), difference %+.4f",
           lbl, old_r$att, old_r$se, new_r$att, new_r$se, new_r$att - old_r$att)
 }
 
@@ -1229,11 +1204,40 @@ fmt_col_margin <- function(res) c(
   sprintf("%.3f", res$did_wpval)
 )
 
-margins_tex <- build_wide_tex_table(
-  row_labels = row_labels_est,
-  col_labels = vapply(margin_specs, `[[`, character(1L), "label"),
-  col_data   = lapply(margin_results, fmt_col_margin),
-  tex_label  = "tab:remarking_margins"
+# tab:remarking_margins: Panel A = the four-way decomposition; Panel B = the
+# split of its "new" column into linked and unlinked activities. Cells are the fmt_col_margin() strings of the same fits.
+margin_b_labels  <- c("New (linked)", "Unlinked (singleton, always new)")
+margin_b_results <- unname(margin4_results[margin_b_labels])
+if (any(vapply(margin_b_results, is.null, logical(1L))))
+  stop("tab:remarking_margins Panel B: linked/unlinked fit missing.")
+margin_panel_rows <- function(cells, n_cols) vapply(seq_along(row_labels_est), function(j) {
+  v <- vapply(cells, `[`, character(1L), j)
+  paste0(row_labels_est[j], " & ",
+         paste(c(v, rep("", n_cols - length(v))), collapse = " & "), " \\\\")
+}, character(1L))
+margin_a_labels <- vapply(margin_specs, `[[`, character(1L), "label")
+n_margin_cols   <- length(margin_a_labels)
+stopifnot(length(margin_b_labels) <= n_margin_cols)
+margins_tex <- c(
+  "\\begingroup\\small",
+  paste0("\\begin{tabular}{l", strrep("c", n_margin_cols), "}"),
+  "\\toprule",
+  sprintf("\\multicolumn{%d}{l}{\\textit{Panel A: New, continuing and re-marked activities}} \\\\",
+          n_margin_cols + 1L),
+  paste0(" & ", paste(esc_header(margin_a_labels), collapse = " & "), " \\\\"),
+  "\\midrule",
+  margin_panel_rows(lapply(margin_results, fmt_col_margin), n_margin_cols),
+  "\\midrule",
+  sprintf(paste0("\\multicolumn{%d}{l}{\\textit{Panel B: ``New'' activities split into linked ",
+                 "and unlinked (singleton) activities}} \\\\"), n_margin_cols + 1L),
+  paste0(" & ", paste(c(esc_header(margin_b_labels),
+                        rep("", n_margin_cols - length(margin_b_labels))), collapse = " & "),
+         " \\\\"),
+  "\\midrule",
+  margin_panel_rows(lapply(margin_b_results, fmt_col_margin), n_margin_cols),
+  "\\bottomrule",
+  "\\end{tabular}",
+  "\\endgroup"
 )
 write_tex_float(
   out_path      = here("output", "tables", "remarking", "att_remarking_margins.tex"),
@@ -1244,46 +1248,16 @@ write_tex_float(
     "CS\\,(2021) DR, never-treated controls, headline specification; cohorts $<5$ treated ",
     "dropped (", n_countries_est, "-country sample). SE: multiplier-bootstrap (999 reps, ",
     "seed 1242; \\texttt{did} 2.5.0; CRS Apr.\\ 2026). ",
-    pretrend_note_res(margin_results, names(margin_results)), ". ",
+    pretrend_note_res(c(margin_results, margin_b_results),
+                      c(names(margin_results), margin_b_labels)), ". ",
+    "Panel B splits Panel A's ``new'' column into ``new (linked)'' (activity identifiable ",
+    "across years by its CRS ",
+    c(ProjectNumber = "project number", CrsID = "CRS identifier")[[chosen_id]],
+    ") and ``unlinked'' (no such identifier; new by construction); the other columns are ",
+    "unchanged. ",
     "Category definitions and singleton shares: see Section~\\ref{sec:remarking} and ",
     "Appendix~\\ref{app:remarking}. ``New'' ATT is an upper bound on genuinely new activity. ",
     "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
-  ),
-  source_text = "OECD CRS activity-level microdata (Rio adaptation marker 1 or 2); UNFCCC NAP Central"
-)
-
-## --- Table 1b (diagnostic): four-bucket margin, unlinked isolated ----------
-combined4_labels <- c(
-  "Headline (all marked)", "New (linked)", "Unlinked (singleton, always new)",
-  "Continuing, already marked", "Re-marked (previously unmarked)"
-)
-combined4_results <- list(
-  margin_results[["Headline (all marked)"]],
-  margin4_results[["New (linked)"]],
-  margin4_results[["Unlinked (singleton, always new)"]],
-  margin_results[["Continuing, already marked"]],
-  margin_results[["Re-marked (previously unmarked)"]]
-)
-
-margins4_tex <- build_wide_tex_table(
-  row_labels = row_labels_est,
-  col_labels = combined4_labels,
-  col_data   = lapply(combined4_results, fmt_col_margin),
-  tex_label  = "tab:remarking_margins_unlinked"
-)
-write_tex_float(
-  out_path      = here("output", "tables", "remarking", "att_remarking_margins_unlinked.tex"),
-  caption_title = "Margin decomposition with unlinked (singleton) activities isolated as a fourth bucket",
-  label         = "tab:remarking_margins_unlinked",
-  tabular_lines = margins4_tex,
-  notes_text    = paste0(
-    "Same sample, controls, estimator as Table~\\ref{tab:remarking_margins}. Splits its ",
-    "``new'' bucket into ``new (linked)'' (activity identifiable across years by its CRS ",
-    c(ProjectNumber = "project number", CrsID = "CRS identifier")[[chosen_id]],
-    ") and ``unlinked'' (no such identifier; new by construction). ``Continuing''/``re-marked'' are ",
-    "identical to Table~\\ref{tab:remarking_margins}. Singleton shares: see ",
-    "Appendix~\\ref{app:remarking}", ginv_note_res(combined4_results, combined4_labels),
-    ". * $p<0.10$, ** $p<0.05$, *** $p<0.01$"
   ),
   source_text = "OECD CRS activity-level microdata (Rio adaptation marker 1 or 2); UNFCCC NAP Central"
 )
@@ -1354,17 +1328,17 @@ write_tex_float(
     "CS\\,(2021) DR, same specification as Table~\\ref{tab:remarking_margins}. SE: ",
     "multiplier-bootstrap (999 reps, seed 1242; \\texttt{did} 2.5.0; CRS Apr.\\ 2026). ",
     "Title/purpose/fund-flag definitions: see notes to ",
-    "Table~\\ref{tab:remarking_flag_shares_by_year}. ``Multilateral cell, excl.\\ ",
+    "Table~\\ref{tab:remarking_flag_shares_by_group}. ``Multilateral cell, excl.\\ ",
     "fund-flagged'' recomputes log multilateral adaptation commitments without the ",
     "fund-flagged activities. ",
-    "Flag coverage: Tables~\\ref{tab:remarking_flag_shares_by_year}--",
-    "\\ref{tab:remarking_flag_shares_by_group}", ginv_note_res(exclusion_results, names(exclusion_results)),
+    "Flag coverage: by year, Panel~A of Table~\\ref{tab:remarking_flag_shares_by_group}; ",
+    "by treatment group, its Panel~B", ginv_note_res(exclusion_results, names(exclusion_results)),
     ". * $p<0.10$, ** $p<0.05$, *** $p<0.01$"
   ),
   source_text = "OECD CRS activity-level microdata (Rio adaptation marker 1 or 2); UNFCCC NAP Central"
 )
 
-## --- Table 3b (diagnostic): old vs.\ new title/purpose regex, before/after -
+## --- Table 3b (diagnostic): broad vs. narrow title/purpose regex -------------
 exclusions_compare_labels <- c(
   "Excl. title-flagged [broad]", "Excl. title-flagged [narrow]",
   "Excl. purpose-flagged [broad]", "Excl. purpose-flagged [narrow]",
@@ -1550,42 +1524,6 @@ write_tex_float(
   source_text = "OECD CRS activity-level microdata (Rio adaptation marker 1 or 2)"
 )
 
-## --- Figure: stacked bar of sector composition ------------------------------
-plot_df <- sector_table %>%
-  select(sector_label, treated_pre, treated_post, never_pre, never_post) %>%
-  pivot_longer(cols = -sector_label, names_to = "cell", values_to = "share") %>%
-  mutate(
-    group_lab = case_when(
-      cell == "treated_pre"  ~ "Treated -- pre",
-      cell == "treated_post" ~ "Treated -- post",
-      cell == "never_pre"    ~ "Never-treated -- pre",
-      cell == "never_post"   ~ "Never-treated -- post"
-    ),
-    group_lab = factor(group_lab, levels = c("Treated -- pre", "Treated -- post",
-                                             "Never-treated -- pre", "Never-treated -- post")),
-    sector_label = gsub("\\\\&", "&", sector_label),
-    sector_label = factor(sector_label, levels = rev(unique(sector_label)))
-  )
-
-p_sectors <- ggplot(plot_df, aes(x = group_lab, y = share, fill = sector_label)) +
-  geom_col(position = "stack", colour = "white", linewidth = 0.15) +
-  scale_fill_viridis_d(option = "D") +
-  # No title/subtitle/caption inside the plot
-  labs(title = NULL, subtitle = NULL, caption = NULL,
-       x = NULL, y = "Share of adaptation-marked commitments (%)", fill = NULL) +
-  theme_minimal(base_family = "serif", base_size = 12) +
-  theme(
-    legend.position  = "bottom",
-    legend.text      = element_text(size = 9),
-    axis.text.x      = element_text(angle = 20, hjust = 1),
-    panel.grid.minor = element_blank()
-  ) +
-  guides(fill = guide_legend(nrow = 3))
-
-ggsave(here("output", "figures", "remarking", "fig_remarking_sectors.png"),
-       p_sectors, width = 12, height = 7, dpi = 300)
-log_msg("Saved: output/figures/remarking/fig_remarking_sectors.png")
-
 # ==============================================================================
 # SECTION 14. SAVE DIAGNOSTIC/RESULT OBJECTS AND COPY EXHIBITS TO paper/
 # ==============================================================================
@@ -1619,12 +1557,7 @@ saveRDS(
 if (has_paper) {
   tex_files <- list.files(here("output", "tables", "remarking"), pattern = "\\.tex$", full.names = TRUE)
   file.copy(tex_files, here("paper", "Tables", "remarking"), overwrite = TRUE)
-
-  png_files <- list.files(here("output", "figures", "remarking"), pattern = "\\.png$", full.names = TRUE)
-  file.copy(png_files, here("paper", "Figures", "remarking"), overwrite = TRUE)
-
-  log_msg("Copied %d table(s) to paper/Tables/remarking/ and %d figure(s) to paper/Figures/remarking/",
-          length(tex_files), length(png_files))
+  log_msg("Copied %d table(s) to paper/Tables/remarking/", length(tex_files))
 } else log_msg("paper/ not found -- exhibits are left in output/ only")
 
 log_msg("=== 09_remarking_decomposition.R: COMPLETE in %.1f min ===",

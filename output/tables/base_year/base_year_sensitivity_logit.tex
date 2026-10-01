@@ -1,0 +1,26 @@
+\begin{table}[H]
+\centering
+\caption{Sensitivity of the within-country adaptation share (logit) to the 2021 cohort's base year}
+\label{tab:base_year_logit}
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lcccccc}
+\toprule
+Specification & ATT & SE & $t$ & $N$ treated & Wald $p$ (leads $\geq -5$) & Wald $p$ (full window) \\
+\midrule
+Main spec & 0.2591** & (0.1159) & 2.236 & 40 & 0.242 & 0.113 \\
+Drop 2021 cohort & 0.1648 & (0.1650) & 0.998 & 29 & 0.085 & 0.014 \\
+Drop 2022 cohort & 0.3494** & (0.1377) & 2.538 & 30 & 0.231 & 0.161 \\
+Drop 2023 cohort & 0.3132*** & (0.1189) & 2.635 & 29 & 0.181 & 0.030 \\
+Drop 2024 cohort & 0.2023* & (0.1208) & 1.675 & 32 & 0.245 & 0.032 \\
+Anticipation = 1 (base $g-2$) & 0.0706 & (0.1933) & 0.365 & 40 & 0.675 & 0.284 \\
+Anticipation = 2 (base $g-3$) & -0.1782 & (0.2025) & -0.880 & 40 & 0.551 & 0.292 \\
+Drop calendar year 2020 & 0.0856 & (0.1424) & 0.601 & 40 & 0.186 & 0.137 \\
+\bottomrule
+\end{tabular}
+}
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: Outcome: logit of the within-country adaptation share of Table~\ref{tab:within_share_wide}, $\log[(E+0.5)/(S-E+0.5)]$, with $E$ the recipient's adaptation-marked and $S$ its total commitments; the main-spec row is the estimate of that table. Specifications and columns as in Table~\ref{tab:base_year_sensitivity}. CS(2021) DR, never-treated controls, WGI GE + log population, cohorts $\geq 5$. ATT/SE from the multiplier-bootstrap fit (999 reps, seed 1242; \texttt{did} 2.5.0); Wald $p$ from the analytical fit's dynamic aggregation (as in the pre-trend table). ``Anticipation $=1$'' (``$=2$'') resets the base period to $g-2$ ($g-3$). The leads-$\geq -5$ test uses the leads left after the base period: with one year of anticipation it keeps three leads ($-5 \leq e \leq -3$; 3 restrictions), where Table~\ref{tab:att_anticipation} keeps four ($-6 \leq e \leq -3$); with two years of anticipation it keeps two leads ($-5 \leq e \leq -4$; 2 restrictions), where Table~\ref{tab:att_anticipation} keeps four ($-7 \leq e \leq -4$). * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}
