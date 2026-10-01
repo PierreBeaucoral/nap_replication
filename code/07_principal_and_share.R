@@ -15,10 +15,10 @@
 #   output/figures/principal_share/fig_share_reconciliation.png
 #   (mirrored to paper/Tables/principal_share/, paper/Figures/principal_share/)
 #
-# This script is self-contained: it reloads and rebuilds the DiD panel from
-# data/processed/simple_panel_wgi.csv exactly as 03_main_results.R /
-# 04_robustness.R do (no sourcing: each stage script is self-contained, and
-# duplication is the convention in this project; see 04_robustness.R §1).
+# The DiD panel is rebuilt from data/processed/simple_panel_wgi.csv exactly as
+# 03_main_results.R / 04_robustness.R do. The headline and adaptation-share
+# columns are read from the fits 03 stores in output/fits/, not re-estimated;
+# the pre-trend test and the fit reader are sourced from code/functions/.
 # ==============================================================================
 
 # ============================================================
@@ -27,7 +27,7 @@
 # Paper Notation        | Code Name                | Description
 # $Y_{it}$               | log_commits               | Headline: log1p(principal + significant Rio-marker commitments)
 # $Y_{it}^{principal}$   | lcommitments_principal    | log1p(principal-only, Rio marker = 2)
-# $Y_{it}^{share}$       | share_adapt               | Country i's adaptation commitments as % of the 144-country pool, year t
+# $Y_{it}^{share}$       | share_adapt               | Country i's adaptation commitments as % of the full-panel pool, year t
 # $S_{it}$               | share_within              | 100 * commitments / commitments_all (% of country's own total ODA that is adaptation-marked)
 # $\text{logit}(S_{it})$ | logit_within              | log((commitments+0.5)/(commitments_all-commitments+0.5))
 # $G_i$                  | cohort_year               | Year of first NAP adoption (0 = never)
@@ -35,12 +35,12 @@
 # $\hat\theta^{simp}$    | agg_s$overall.att          | Calendar-time simple ATT
 # $\hat\theta^{dyn}(e)$  | agg_d$att.egt              | Dynamic ATT by event time e
 # $X_{it}$                | ge_est, log_population    | Controls: WGI GE + log population
-# $W$ (joint pre-trend)   | compute_pretrend_wald()$stat | Corrected joint Wald using dynamic.inf.func.e
+# $W$ (joint pre-trend)   | compute_pretrend_test()$stat | Joint Wald, full dynamic.inf.func.e covariance
 # $p_{did}$                | gt_main$Wpval             | did package's own internal pre-test p-value
 # $\Delta = \theta_{head}-\theta_{princ}$ | diff  | Headline-minus-principal ATT difference (Part A)
 # ============================================================
 
-# Defensive: some transitive dependencies of did/ggplot2 on this machine pull
+# Defensive: some transitive dependencies of did/ggplot2 can pull
 # in rgl, which hangs headless runs unless told to use the null device (see
 # 04_robustness.R). This script
 # does not load DIDmultiplegtDYN itself, but setting this first is cheap
@@ -65,6 +65,11 @@ if (utils::packageVersion("did") < "2.5.0") {
     "  or install.packages(\"did\") to get >= 2.5.0, then rerun this script."),
     utils::packageVersion("did")))
 }
+source(here("code", "functions", "pretrend_test.R"))      # compute_pretrend_test()
+source(here("code", "functions", "read_headline_fit.R"))  # read_headline_fit()
+source(here("code", "functions", "make_country_id.R"))    # make_country_id()
+source(here("code", "functions", "crs_positive.R"))       # crs_positive()
+source(here("code", "functions", "sup_t_crit.R"))         # sup_t_crit()
 
 set.seed(20240601)  # global seed — local set.seed(1242) calls follow each estimator
 
@@ -73,6 +78,13 @@ set.seed(20240601)  # global seed — local set.seed(1242) calls follow each est
 # ------------------------------------------------------------------------
 dir.create(here("output", "tables",  "principal_share"), recursive = TRUE, showWarnings = FALSE)
 dir.create(here("output", "figures", "principal_share"), recursive = TRUE, showWarnings = FALSE)
+dir.create(here("output", "fits"), recursive = TRUE, showWarnings = FALSE)
+# A failed run must not leave the previous run's results in place: the
+# exhibits and fits this stage owns are deleted before anything is re-estimated.
+WITHIN_FITS <- here("output", "fits", c("within_share_dr_bs.rds", "within_logit_dr_bs.rds"))
+unlink(c(WITHIN_FITS,
+         list.files(here("output", c("tables", "figures"), "principal_share"),
+                    pattern = "\\.(tex|png|pdf)$", full.names = TRUE)))
 
 # ------------------------------------------------------------------------
 # Escape LaTeX-special characters in TABLE COLUMN HEADERS only.
@@ -146,7 +158,7 @@ write_tex_float <- function(out_path, caption_title, label,
 # Mirrors run_all.R's final assembly step (output/ -> paper/), scoped to a
 # single file, exactly as 05_heterogeneity.R §25 does for het_difference_tests.tex.
 # This script owns only the principal_share/ subtree, so it copies its own
-# outputs directly rather than depending on run_all.R (not edited by this task).
+# outputs directly when run on its own, without run_all.R.
 # ------------------------------------------------------------------------
 copy_to_paper <- function(out_path, kind = c("Tables", "Figures")) {
   kind <- match.arg(kind)
@@ -175,7 +187,7 @@ aggregated <- as.data.frame(aggregated)
 
 did_panel <- aggregated
 did_panel <- did_panel %>%
-  mutate(country_id = as.integer(factor(recipient_name)))
+  mutate(country_id = make_country_id(recipient_name))
 
 first_year <- min(did_panel$year)
 
@@ -269,25 +281,25 @@ stopifnot(
 #   same "no reported commitments of any kind that year" case that makes
 #   share_within undefined. logit_within is therefore set to NA under the
 #   identical commitments_all == 0 condition, not left at its spurious 0.
-n_within_undefined <- sum(did_panel_full$commitments_all == 0)
+n_within_undefined <- sum(!crs_positive(did_panel_full$commitments_all))
 message(sprintf(
   "share_within: %d / %d country-year cells (%.2f%%) have commitments_all == 0 and are set to NA.",
   n_within_undefined, nrow(did_panel_full), 100 * n_within_undefined / nrow(did_panel_full)))
 
 did_panel_full <- did_panel_full %>%
   mutate(
-    share_within = if_else(commitments_all > 0, 100 * commitments / commitments_all, NA_real_),
+    share_within = if_else(crs_positive(commitments_all), 100 * commitments / commitments_all, NA_real_),
     logit_within = if_else(
-      commitments_all > 0,
+      crs_positive(commitments_all),
       log((commitments + 0.5) / (commitments_all - commitments + 0.5)),
       NA_real_
     )
   )
 did_panel_tab_main <- did_panel_tab_main %>%
   mutate(
-    share_within = if_else(commitments_all > 0, 100 * commitments / commitments_all, NA_real_),
+    share_within = if_else(crs_positive(commitments_all), 100 * commitments / commitments_all, NA_real_),
     logit_within = if_else(
-      commitments_all > 0,
+      crs_positive(commitments_all),
       log((commitments + 0.5) / (commitments_all - commitments + 0.5)),
       NA_real_
     )
@@ -306,67 +318,18 @@ message(sprintf("  Share of pre-treatment cells with share_within < 50%%: %.1f%%
                 100 * mean(pretreat_share_within < 50, na.rm = TRUE)))
 
 # ==============================================================================
-# SECTION 3. Corrected joint pre-trend Wald test
-#
-# 03/04/05_*.R's compute_pretrend_test() never locates the dynamic-aggregation
-# influence function (it looks for inf.function$inf.func.egt / $inf.func /
-# $inffunc / $inf.func.egt, none of which did >= 2.5.0 populates) and silently
-# falls back to a diagonal covariance approximation. The correct covariance
-# uses inf.function$dynamic.inf.func.e (with a dimension check); did's own
-# att_gt()$Wpval is an alternative. This script implements BOTH and reports
-# them side by side. (03/04/05 were corrected the same way on 2026-09-14.)
+# SECTION 3. Joint pre-trend Wald test: compute_pretrend_test(), sourced at the
+# top from code/functions/pretrend_test.R (the helper every stage uses); did's
+# own att_gt()$Wpval is reported beside it.
 # ==============================================================================
 
-# canonical pre-trend wording — keep byte-identical across scripts.
-# This script's compute_pretrend_wald() has NO generalized-inverse fallback (it
-# returns NA on a singular pre-treatment covariance instead of using
-# MASS::ginv(), unlike 03/04/05/09/13's compute_pretrend_test()), so the
-# generalized-inverse clause in the other scripts' PRETREND_NOTE_AGG is
-# dropped here rather than claimed falsely.
+# canonical pre-trend wording — keep byte-identical across scripts
 PRETREND_NOTE_AGG <- function(min_e, max_e, k) sprintf(
-  "Pre-trend $\\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($%d \\leq e \\leq %d$; %d restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit",
+  "Pre-trend $\\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($%d \\leq e \\leq %d$; %d restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular",
   min_e, max_e, k)
 PRETREND_NOTE_DID <- "\\texttt{did} pre-test $p$: \\texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year"
 PRETREND_NOTE <- function(min_e, max_e, k) paste0(PRETREND_NOTE_AGG(min_e, max_e, k), ". ", PRETREND_NOTE_DID)
 
-compute_pretrend_wald <- function(agg_d) {
-  if (is.null(agg_d)) return(list(stat = NA_real_, pval = NA_real_, df = 0L))
-
-  keep    <- which(!is.na(agg_d$se.egt) & agg_d$se.egt > 1e-10)
-  pre_pos <- which(agg_d$egt[keep] < 0)
-  if (length(pre_pos) == 0L) return(list(stat = NA_real_, pval = NA_real_, df = 0L))
-
-  pre_beta <- agg_d$att.egt[keep][pre_pos]
-  IF       <- agg_d$inf.function$dynamic.inf.func.e
-
-  if (is.null(IF) || ncol(IF) != length(agg_d$egt)) {
-    warning("compute_pretrend_wald(): dynamic.inf.func.e missing or the wrong ",
-            "shape (expected ncol == length(egt)) -- falling back to the ",
-            "diagonal-covariance approximation for this test only.")
-    pre_se    <- agg_d$se.egt[keep][pre_pos]
-    sigma_pre <- diag(pre_se^2, nrow = length(pre_pos))
-  } else {
-    n          <- nrow(IF)
-    # Var-cov of the full event-time ATT vector from the multiplier/analytical
-    # influence function: Sigma = E[IF IF'] / n (matches the did package's own
-    # internal construction of se.egt = sqrt(diag(Sigma))).
-    sigma_full <- crossprod(IF) / n^2
-    sigma_pre  <- sigma_full[keep, keep][pre_pos, pre_pos, drop = FALSE]
-  }
-
-  W <- tryCatch(
-    as.numeric(t(pre_beta) %*% solve(sigma_pre) %*% pre_beta),
-    error = function(e) {
-      message("  compute_pretrend_wald(): sigma_pre is singular -- ", conditionMessage(e))
-      NA_real_
-    }
-  )
-  list(
-    stat = if (is.na(W)) NA_real_ else round(W, 3),
-    pval = if (is.na(W)) NA_real_ else round(pchisq(W, df = length(pre_pos), lower.tail = FALSE), 3),
-    df   = length(pre_pos)
-  )
-}
 
 # ==============================================================================
 # SECTION 4. Shared estimation helper: fit_main_spec()
@@ -376,7 +339,7 @@ compute_pretrend_wald <- function(agg_d) {
 #   retained-cohorts robustness spec), control_group = "nevertreated",
 #   anticipation = 0, base_period = "universal", panel = TRUE,
 #   allow_unbalanced_panel = TRUE. A separate analytical fit (bstrap = FALSE)
-#   feeds the pre-trend test, exactly as in 03_main_results.R's make_wide_table()
+#   feeds the pre-trend test, exactly as in make_wide_table() (code/functions/make_wide_table.R)
 #   (so bootstrap SE noise never touches the pre-trend statistic). When the
 #   bootstrap fit is not requested (bstrap_flag = FALSE, e.g. the retained-
 #   cohorts spec), the analytical fit IS the main fit — no duplicate
@@ -417,17 +380,12 @@ fit_main_spec <- function(did_panel_in, yname, est_method = "dr",
   } else {
     gt_main <- gt_analytical  # reuse — no duplicate computation
   }
-  if (is.null(gt_main)) return(NULL)
+  if (is.null(gt_main) || is.null(gt_analytical)) stop("att_gt() failed for ", yname)
 
-  agg_s <- tryCatch(aggte(gt_main, type = "simple", na.rm = TRUE), error = function(e) NULL)
-  agg_d <- tryCatch(
-    aggte(gt_main, type = "dynamic", na.rm = TRUE, min_e = -5, max_e = Inf),
-    error = function(e) NULL
-  )
-  agg_d_analytical <- if (!is.null(gt_analytical)) tryCatch(
-    aggte(gt_analytical, type = "dynamic", na.rm = TRUE, min_e = -5, max_e = Inf),
-    error = function(e) NULL
-  ) else NULL
+  agg_s <- aggte(gt_main, type = "simple", na.rm = TRUE)
+  agg_d <- aggte(gt_main, type = "dynamic", na.rm = TRUE, min_e = -5, max_e = Inf)
+  agg_d_analytical <- aggte(gt_analytical, type = "dynamic", na.rm = TRUE,
+                            min_e = -5, max_e = Inf)
 
   list(gt_main = gt_main, gt_analytical = gt_analytical,
        agg_s = agg_s, agg_d = agg_d, agg_d_analytical = agg_d_analytical)
@@ -441,14 +399,8 @@ summarize_fit <- function(fit, did_panel_in, raw_var, is_share = FALSE,
                           estimator_label = "CS (2021), doubly-robust",
                           bootstrap_label = "Yes (multiplier, 999 reps)") {
 
-  na_out <- list(att_fmt = "---", se_fmt = "---", t_fmt = "---",
-                mean_pre_fmt = "---", effect_fmt = "---",
-                n_obs = "---", n_country = "---", n_treated_fmt = "---",
-                zero_fmt = "---", pt_stat_fmt = "---", pt_pval_fmt = "---",
-                wpval_fmt = "---", estimator_label = estimator_label,
-                bootstrap_label = bootstrap_label,
-                att_num = NA_real_, se_num = NA_real_, agg_s = NULL)
-  if (is.null(fit) || is.null(fit$agg_s)) return(na_out)
+  # A failed fit stops the run: no column is ever written as "---".
+  if (is.null(fit) || is.null(fit$agg_s)) stop("summarize_fit(): the fit or its aggregation failed")
 
   att <- fit$agg_s$overall.att
   se  <- fit$agg_s$overall.se
@@ -457,8 +409,10 @@ summarize_fit <- function(fit, did_panel_in, raw_var, is_share = FALSE,
     if (abs(t_v) > 2.576) "***" else if (abs(t_v) > 1.960) "**" else
     if (abs(t_v) > 1.645) "*"   else ""
 
-  pt    <- compute_pretrend_wald(fit$agg_d_analytical)
-  wpval <- fit$gt_main$Wpval %||% NA_real_
+  # A stored headline fit carries its own pre-trend test; otherwise it is
+  # computed on the analytical fit, with did's pre-test from the same fit.
+  pt    <- fit$pretrend %||% compute_pretrend_test(fit$agg_d_analytical, fit$gt_analytical)
+  wpval <- pt$Wpval_did
 
   n_obs     <- sum(!is.na(did_panel_in[[raw_var]]))   # cells where the outcome is defined
   n_country <- n_distinct(did_panel_in$country_id)
@@ -467,11 +421,7 @@ summarize_fit <- function(fit, did_panel_in, raw_var, is_share = FALSE,
   pre_rows <- did_panel_in %>% filter(cohort_year > 0, year < cohort_year, !is.na(.data[[raw_var]]))
   mean_pre <- mean(pre_rows[[raw_var]], na.rm = TRUE)
 
-  # Exact `== 0` is safe here: raw_var is a sum of CRS commitment rows built
-  # with if_else(is.na(.), 0, .) in 01_prepare_data.R -- a "no rows matched"
-  # cell is a literal 0.0, not a near-zero float from cancellation, so this is
-  # not the float-equality pattern the numerical-discipline rule warns against.
-  zero_share <- 100 * mean(did_panel_in[[raw_var]] == 0, na.rm = TRUE)
+  zero_share <- 100 * mean(!crs_positive(did_panel_in[[raw_var]]), na.rm = TRUE)
 
   mean_pre_fmt <- if (is_share) sprintf("%.2f pp", mean_pre) else sprintf("%.1f", mean_pre)
   # Implied USD effect only where the ATT is significant at 5% (|t| > 1.960),
@@ -497,8 +447,48 @@ summarize_fit <- function(fit, did_panel_in, raw_var, is_share = FALSE,
     bootstrap_label = bootstrap_label,
     att_num       = att,
     se_num        = se,
-    agg_s         = fit$agg_s
+    agg_s         = fit$agg_s,
+    pt            = pt
   )
+}
+
+#' Pre-trend note for a set of table columns, derived from their tests
+#'
+#' The lead window and the restriction count come from the tests themselves
+#' (compute_pretrend_test()$leads and $df); columns whose block was singular
+#' are named.
+#'
+#' @param stats_list list of summarize_fit() outputs, one per column
+#' @param labels column labels, same length
+#' @return a character string (no trailing period)
+pretrend_note_cols <- function(stats_list, labels) {
+  pts   <- lapply(stats_list, `[[`, "pt")
+  leads <- unique(lapply(pts, function(p) sort(as.integer(p$leads))))
+  dfs   <- unique(vapply(pts, function(p) as.integer(p$df), integer(1L)))
+  if (length(leads) != 1L || length(leads[[1L]]) == 0L)
+    stop("pretrend_note_cols(): the columns do not share one pre-trend lead window")
+  ginv <- vapply(pts, function(p) isTRUE(p$ginv_used), logical(1L))
+  paste0(PRETREND_NOTE_AGG(min(leads[[1L]]), max(leads[[1L]]),
+                           if (length(dfs) == 1L) dfs else length(leads[[1L]])),
+         if (any(ginv)) paste0("; the block was singular for ",
+                               paste(labels[ginv], collapse = ", "),
+                               " and a generalized inverse was used") else "",
+         ". ", PRETREND_NOTE_DID)
+}
+
+#' Why did returned no pre-test for these columns, derived from the fits
+#'
+#' @param stats_list list of summarize_fit() outputs, one per column
+#' @param labels column labels, same length
+#' @return "" when every column has did's statistic, else a sentence
+did_pretest_reason <- function(stats_list, labels) {
+  rs <- vapply(stats_list, function(s)
+    if (is.na(s$pt$Wpval_did)) sub("^not computed: ", "", s$pt$wpval_reason) else NA_character_,
+    character(1L))
+  if (all(is.na(rs))) return("")
+  body <- if (!anyNA(rs) && length(unique(rs)) == 1L) rs[[1L]] else
+    paste(sprintf("%s, %s", labels[!is.na(rs)], rs[!is.na(rs)]), collapse = "; ")
+  paste0("\\texttt{did}'s pre-test not computed: ", body, ". ")
 }
 
 # ------------------------------------------------------------------------
@@ -555,45 +545,32 @@ message("\n=== Section 4 helpers ready (fit_main_spec / summarize_fit / build_wi
 
 message("\n=== Section 5: reference fits (log_commits, share_adapt) ===\n")
 
-fit_headline <- fit_main_spec(did_panel_tab_main, "log_commits",
-                              est_method = "dr", bstrap_flag = TRUE, biters = 999L)
-fit_share    <- fit_main_spec(did_panel_tab_main, "share_adapt",
-                              est_method = "dr", bstrap_flag = TRUE, biters = 999L)
-
-stopifnot(!is.null(fit_headline), !is.null(fit_headline$agg_s),
-         !is.null(fit_share),    !is.null(fit_share$agg_s))
+#' A stored 03 headline fit in fit_main_spec()'s output format
+#'
+#' The headline and share columns are the fits 03 stores (one fit, one SE),
+#' never re-estimated here. The stored fit must have been estimated on this
+#' panel: same recipients, same non-missing outcome cells.
+#'
+#' @param stem stored-fit stem ("adaptation", "share", ...)
+#' @param yvar outcome column of that fit
+#' @return list(gt_main, gt_analytical, agg_s, agg_s_analytical, agg_d,
+#'   agg_d_analytical, pretrend)
+stored_as_fit <- function(stem, yvar) {
+  f <- read_headline_fit(stem)
+  stopifnot(identical(f$outcome, yvar),
+            identical(f$ids, sort(unique(did_panel_tab_main$country_id))),
+            identical(as.integer(f$n_obs), sum(!is.na(did_panel_tab_main[[yvar]]))))
+  list(gt_main = f$gt_boot, gt_analytical = f$gt_analytical,
+       agg_s = f$agg_simple, agg_s_analytical = f$agg_simple_analytic,
+       agg_d = f$agg_dynamic, agg_d_analytical = f$agg_dyn_analytic,
+       pretrend = f$pretrend)
+}
+fit_headline <- stored_as_fit("adaptation", "log_commits")
+fit_share    <- stored_as_fit("share", "share_adapt")
 
 message(sprintf("  log_commits : ATT = %.4f  SE = %.4f", fit_headline$agg_s$overall.att, fit_headline$agg_s$overall.se))
 message(sprintf("  share_adapt : ATT = %.4f  SE = %.4f", fit_share$agg_s$overall.att,    fit_share$agg_s$overall.se))
 
-# HARD REQUIREMENT: the headline column must reproduce Table 2
-# (output/tables/cohorts_dropped/att_combined_wide.tex) exactly, since this
-# script re-fits the same main spec on the same panel with the same seed.
-# If it does not, something about the panel construction or estimator call
-# has silently diverged from 03_main_results.R -- stop rather than publish a
-# table that looks like Table 2 but is not.
-# Reference values are read from the fits 03_main_results.R stored in
-# output/fits/ (one fit, one SE), never hardcoded: a panel revision (e.g. the
-# 2026-09-15 restoration of recipient code 860) must not trip this check.
-ref_head  <- readRDS(here("output", "fits", "headline_adaptation_dr_bs.rds"))
-ref_share <- readRDS(here("output", "fits", "headline_share_dr_bs.rds"))
-tol_att <- 1e-3
-tol_se  <- 2e-3
-att_ok <- abs(fit_headline$agg_s$overall.att - ref_head$att)  < tol_att &&
-  abs(fit_headline$agg_s$overall.se  - ref_head$se)   < tol_se &&
-  abs(fit_share$agg_s$overall.att    - ref_share$att) < tol_att &&
-  abs(fit_share$agg_s$overall.se     - ref_share$se)  < tol_se
-if (!att_ok) {
-  stop(sprintf(paste0(
-    "Headline reproduction check FAILED.\n",
-    "  log_commits : got ATT = %.4f, SE = %.4f (stored 03 fit: ", sprintf("%.4f / %.4f", ref_head$att, ref_head$se), ")\n",
-    "  share_adapt : got ATT = %.4f, SE = %.4f (stored 03 fit: ", sprintf("%.4f / %.4f", ref_share$att, ref_share$se), ")\n",
-    "  Panel construction or att_gt() call has diverged from 03_main_results.R -- ",
-    "investigate before trusting any table produced by this script."),
-    fit_headline$agg_s$overall.att, fit_headline$agg_s$overall.se,
-    fit_share$agg_s$overall.att,    fit_share$agg_s$overall.se))
-}
-message("  Headline reproduction check: PASSED (matches Table 2 to within tolerance).")
 
 # ==============================================================================
 # SECTION 6. Part A -- principal-marker-only outcome, full Table-2 analogue
@@ -629,10 +606,10 @@ stats_principal <- summarize_fit(fit_principal, did_panel_tab_main, raw_var = "c
 # uncentered second-moment convention used by compute_pretrend_test's
 # crossprod(IF)/n^2 in 03/04/05/10/11). Uses the headline's ANALYTICAL
 # (bstrap = FALSE) fit so the check is not contaminated by multiplier-
-# bootstrap resampling noise -- the bootstrap SE (0.1245) is expected to
-# differ from either analytical formula.
-stopifnot(!is.null(fit_headline$gt_analytical))
-agg_s_head_analytical <- aggte(fit_headline$gt_analytical, type = "simple", na.rm = TRUE)
+# bootstrap resampling noise -- the bootstrap SE is expected to differ from
+# either analytical formula.
+stopifnot(!is.null(fit_headline$agg_s_analytical))
+agg_s_head_analytical <- fit_headline$agg_s_analytical
 IF_head <- agg_s_head_analytical$inf.function$simple.att
 stopifnot(!is.null(IF_head))
 n_head      <- length(IF_head)
@@ -693,9 +670,10 @@ tab_lines_r2 <- build_wide_table(
 
 notes_r2 <- paste0(
  "CS\\,(2021) DR, never-treated controls; multiplier-bootstrap SE (999 reps, seed 1242). ",
-  "``Headline'' = log1p(commitments), Rio marker $\\in\\{1,2\\}$; ``Principal only'' = ",
-  "log1p(commitments\\_principal), Rio marker $=2$ only. ",
-  PRETREND_NOTE(-5L, -2L, 4L), ". ",
+  "``Headline'' = $\\log(1+\\text{adaptation-marked commitments})$, Rio marker $\\in\\{1,2\\}$; ",
+  "``Principal only'' = $\\log(1+\\text{principal-marked commitments})$, Rio marker $=2$ only. ",
+  pretrend_note_cols(list(stats_headline, stats_principal),
+                     c("Principal + significant (headline)", "Principal only")), ". ",
   "Implied effects: back-transform on pre-treatment mean; suppressed if insig.\\ at 5\\%. ",
   "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
 )
@@ -710,16 +688,23 @@ write_tex_float(
 copy_to_paper(out_path_r2, "Tables")
 
 # --- fig_principal_es.png: combined event study, headline vs principal ------
+# Simultaneous (sup-t) 95% bands, one band family per curve (sup_t_crit()).
+cv_fit_headline  <- sup_t_crit(fit_headline$agg_d$inf.function$dynamic.inf.func.e,
+                               fit_headline$agg_d$se.egt)
+cv_fit_principal <- sup_t_crit(fit_principal$agg_d$inf.function$dynamic.inf.func.e,
+                               fit_principal$agg_d$se.egt)
+message(sprintf("  fig_principal_es sup-t crit: headline %.4f | principal only %.4f",
+                cv_fit_headline, cv_fit_principal))
 dyn_headline  <- data.frame(outcome = "Principal + significant (headline)",
                             event_time = fit_headline$agg_d$egt,
                             ATT = fit_headline$agg_d$att.egt, SE = fit_headline$agg_d$se.egt,
-                            Lower = fit_headline$agg_d$att.egt - fit_headline$agg_d$crit.val.egt * fit_headline$agg_d$se.egt,
-                            Upper = fit_headline$agg_d$att.egt + fit_headline$agg_d$crit.val.egt * fit_headline$agg_d$se.egt)
+                            Lower = fit_headline$agg_d$att.egt - cv_fit_headline * fit_headline$agg_d$se.egt,
+                            Upper = fit_headline$agg_d$att.egt + cv_fit_headline * fit_headline$agg_d$se.egt)
 dyn_principal <- data.frame(outcome = "Principal only",
                             event_time = fit_principal$agg_d$egt,
                             ATT = fit_principal$agg_d$att.egt, SE = fit_principal$agg_d$se.egt,
-                            Lower = fit_principal$agg_d$att.egt - fit_principal$agg_d$crit.val.egt * fit_principal$agg_d$se.egt,
-                            Upper = fit_principal$agg_d$att.egt + fit_principal$agg_d$crit.val.egt * fit_principal$agg_d$se.egt)
+                            Lower = fit_principal$agg_d$att.egt - cv_fit_principal * fit_principal$agg_d$se.egt,
+                            Upper = fit_principal$agg_d$att.egt + cv_fit_principal * fit_principal$agg_d$se.egt)
 dyn_r2 <- bind_rows(dyn_headline, dyn_principal) %>%
   mutate(outcome = factor(outcome, levels = c("Principal + significant (headline)", "Principal only")))
 
@@ -779,8 +764,9 @@ tab_lines_r2b <- build_wide_table(
 notes_r2b <- paste0(
  "CS\\,(2021) OR, never-treated controls; analytical (IF) SE; all cohorts retained ",
   "(2015--2024, incl.\\ $<$ ", thin_threshold, " treated units). Pre-trend statistics: see ",
-  "notes to Table~\\ref{tab:principal_wide}. \\texttt{did}'s pre-test not computed: ",
-  "pre-treatment covariance singular with all cohorts retained. ",
+  "notes to Table~\\ref{tab:principal_wide}. ",
+  did_pretest_reason(list(stats_headline_retained, stats_principal_retained),
+                     c("headline", "principal only")),
   "Implied effects: back-transform on pre-treatment mean; suppressed if insig.\\ at 5\\%. ",
   "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
 )
@@ -816,6 +802,22 @@ stats_share_within <- summarize_fit(fit_share_within, did_panel_tab_main,
 stats_logit_within <- summarize_fit(fit_logit_within, did_panel_tab_main,
                                     raw_var = "share_within", is_share = TRUE)
 
+# Store the two within-share fits (one fit, one SE): 11_base_year_sensitivity.R
+# reads them for the main-specification row of its within-share panel.
+for (w in list(list(fit = fit_share_within, stats = stats_share_within, y = "share_within", i = 1L),
+               list(fit = fit_logit_within, stats = stats_logit_within, y = "logit_within", i = 2L))) {
+  saveRDS(list(outcome = w$y, gt_boot = w$fit$gt_main, gt_analytical = w$fit$gt_analytical,
+               agg_simple = w$fit$agg_s, agg_dynamic = w$fit$agg_d,
+               agg_dyn_analytic = w$fit$agg_d_analytical,
+               att = w$fit$agg_s$overall.att, se = w$fit$agg_s$overall.se,
+               pretrend = w$stats$pt, ids = sort(unique(did_panel_tab_main$country_id)),
+               n_obs = sum(!is.na(did_panel_tab_main[[w$y]])),
+               provenance = list(script = "code/07_principal_and_share.R",
+                                 created = format(Sys.time(), "%Y-%m-%d %H:%M:%S"))),
+          WITHIN_FITS[w$i])
+  message("  [fit] Saved: ", WITHIN_FITS[w$i])
+}
+
 tab_lines_r4 <- build_wide_table(
   stats_list = list(stats_share_within, stats_logit_within),
   col_labels = c("Within-country share (%, level)", "Within-country share (logit)")
@@ -823,9 +825,9 @@ tab_lines_r4 <- build_wide_table(
 
 notes_r4 <- paste0(
   "CS\\,(2021) DR, never-treated controls; multiplier-bootstrap SE (999 reps, seed 1242). ",
-  "share\\_within $=100 \\times$ commitments/commitments\\_all; logit\\_within ",
-  "$= \\log[(\\text{commitments}+0.5)/(\\text{commitments\\_all}-\\text{commitments}+0.5)]$; ",
-  "both NA if commitments\\_all $=0$. Mean/zero-share rows use share\\_within (pp) levels. ",
+  "Level: $100 \\times E/S$, with $E$ the recipient's adaptation-marked commitments and ",
+  "$S$ its total commitments; logit: $\\log[(E+0.5)/(S-E+0.5)]$; both undefined when $S=0$. ",
+  "Mean and zero-share rows use the level share (pp). ",
   "Pre-trend statistics: see Table~\\ref{tab:principal_wide} notes. ",
   "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
 )
@@ -840,16 +842,30 @@ write_tex_float(
 copy_to_paper(out_path_r4, "Tables")
 
 # --- fig_within_share_es.png: faceted (scales differ, level % vs logit) -----
+# Simultaneous (sup-t) 95% bands, one band family per panel (sup_t_crit()).
+cv_fit_share_within <- sup_t_crit(fit_share_within$agg_d$inf.function$dynamic.inf.func.e,
+                                  fit_share_within$agg_d$se.egt)
+cv_fit_logit_within <- sup_t_crit(fit_logit_within$agg_d$inf.function$dynamic.inf.func.e,
+                                  fit_logit_within$agg_d$se.egt)
+message(sprintf("  fig_within_share_es sup-t crit: level %.4f | logit %.4f",
+                cv_fit_share_within, cv_fit_logit_within))
 dyn_share_within <- data.frame(outcome = "Level (%)",
                                event_time = fit_share_within$agg_d$egt,
                                ATT = fit_share_within$agg_d$att.egt, SE = fit_share_within$agg_d$se.egt,
-                               Lower = fit_share_within$agg_d$att.egt - fit_share_within$agg_d$crit.val.egt * fit_share_within$agg_d$se.egt,
-                               Upper = fit_share_within$agg_d$att.egt + fit_share_within$agg_d$crit.val.egt * fit_share_within$agg_d$se.egt)
+                               Lower = fit_share_within$agg_d$att.egt - cv_fit_share_within * fit_share_within$agg_d$se.egt,
+                               Upper = fit_share_within$agg_d$att.egt + cv_fit_share_within * fit_share_within$agg_d$se.egt)
 dyn_logit_within <- data.frame(outcome = "Logit",
                                event_time = fit_logit_within$agg_d$egt,
                                ATT = fit_logit_within$agg_d$att.egt, SE = fit_logit_within$agg_d$se.egt,
-                               Lower = fit_logit_within$agg_d$att.egt - fit_logit_within$agg_d$crit.val.egt * fit_logit_within$agg_d$se.egt,
-                               Upper = fit_logit_within$agg_d$att.egt + fit_logit_within$agg_d$crit.val.egt * fit_logit_within$agg_d$se.egt)
+                               Lower = fit_logit_within$agg_d$att.egt - cv_fit_logit_within * fit_logit_within$agg_d$se.egt,
+                               Upper = fit_logit_within$agg_d$att.egt + cv_fit_logit_within * fit_logit_within$agg_d$se.egt)
+# Event-time coefficients behind fig_within_share_es, quoted in the text.
+es_within <- list("level, pp" = fit_share_within$agg_d, logit = fit_logit_within$agg_d)
+for (nm in names(es_within))
+  message(sprintf("  Within-share event study [%s]: %s", nm,
+                  paste(sprintf("e=%d %.4f (SE %.4f)", as.integer(es_within[[nm]]$egt),
+                                es_within[[nm]]$att.egt, es_within[[nm]]$se.egt),
+                        collapse = "; ")))
 dyn_r4 <- bind_rows(dyn_share_within, dyn_logit_within) %>%
   mutate(outcome = factor(outcome, levels = c("Level (%)", "Logit")))
 
@@ -888,18 +904,18 @@ message("\n=== Section 8 (Part C): share_adapt construction + reconciliation ===
 # `aggregated` at that point is the SAME object later written verbatim to
 # data/processed/simple_panel_wgi.csv (l.980) -- i.e. this script's
 # did_panel_full. There is no filter() on `aggregated` between the listwise
-# deletion on ge_est + population (§15, l.835-838, which fixes the panel at
-# 144 recipient countries) and the share_adapt computation (§18) -- confirmed
+# deletion on ge_est + population (§15, which fixes the full panel) and the
+# share_adapt computation (§18) -- confirmed
 # by grep (no `filter(` on the bare `aggregated` object in that range; the
 # filter() calls that DO appear there operate on the raw CRS donor-level
 # lists used to build commitments_all / commitments_principal / commitments_oda
 # etc., not on `aggregated` itself). So:
-#   DENOMINATOR = sum(commitments) over the 144-country panel that has
+#   DENOMINATOR = sum(commitments) over the full panel of recipients that have
 #     non-missing WGI governance-effectiveness AND non-missing population data
 #     (the listwise-deletion sample), by calendar year -- NOT the full universe
 #     of all OECD CRS recipient countries (smaller/data-poor recipients that
 #     lack WGI or population coverage are excluded before this point), and NOT
-#     restricted to the 126-country / 40-adopter DiD ESTIMATION sample (that
+#     restricted to the DiD ESTIMATION sample (that
 #     further restriction -- dropping thin cohorts -- happens only downstream,
 #     in 03/04/05/07's did_panel construction).
 n_pool_by_year <- did_panel_full %>% group_by(year) %>%
@@ -929,10 +945,10 @@ message(sprintf("  Pre-treatment mean share_adapt among treated units: %.3f pp (
                 mean(pretreat_share_adapt_treated, na.rm = TRUE), length(pretreat_share_adapt_treated)))
 
 # --- C.2: reconciliation exhibit --------------------------------------------
-# (a) observed pooled share held by the 58 ever-adopters (any cohort_year > 0,
+# (a) observed pooled share held by all ever-adopters (any cohort_year > 0,
 #     including thin cohorts not in the main estimation sample)
-# (b) observed pooled share held by the 40 main-sample adopters (cohort not thin)
-# (c) counterfactual pooled share for the 40 main-sample adopters implied by the
+# (b) observed pooled share held by the main-sample adopters (cohort not thin)
+# (c) counterfactual pooled share for the main-sample adopters implied by the
 #     main-spec share ATT: for each treated country-year, subtract the
 #     event-time dynamic ATT (fit_share$agg_d, from Section 5 -- same panel,
 #     same seed as Table 2) from the observed share, leaving pre-treatment
@@ -1020,25 +1036,28 @@ raw_lines_r7 <- capture.output(
   print(xtab_r7, include.rownames = FALSE, booktabs = TRUE,
        sanitize.text.function = identity, size = "\\small", floating = FALSE)
 )
+n_col_r7 <- ncol(recon_tab)  # footer rows span the whole table
 footer_r7 <- c(
-  sprintf("\\multicolumn{4}{l}{Total reallocation, correct (treated-cell-weighted): %.2f pp over %d treated cells} \\\\",
-         reallocation_correct, n_treated_cells_r7),
-  sprintf("\\multicolumn{4}{l}{Total reallocation, naive ($n_{\\text{adopters}} \\times$ simple ATT): %d $\\times$ %.4f = %.2f pp} \\\\",
-         n_distinct(adopters40_cf$recipient_name), fit_share$agg_s$overall.att, reallocation_naive),
-  sprintf("\\multicolumn{4}{l}{Observed change in the %d-adopter share, %d$\\to$%d: %.2f pp; implied counterfactual change: %.2f pp} \\\\",
-         n_main_lab, min(recon_by_year$year), max(recon_by_year$year), obs_change_b, cf_change_c)
+  sprintf("\\multicolumn{%d}{l}{Total reallocation, correct (treated-cell-weighted): %.2f pp over %d treated cells} \\\\",
+         n_col_r7, reallocation_correct, n_treated_cells_r7),
+  sprintf("\\multicolumn{%d}{l}{Total reallocation, naive ($n_{\\text{adopters}} \\times$ simple ATT): %d $\\times$ %.4f = %.2f pp} \\\\",
+         n_col_r7, n_distinct(adopters40_cf$recipient_name), fit_share$agg_s$overall.att, reallocation_naive),
+  sprintf("\\multicolumn{%d}{l}{Observed change in the %d-adopter share, %d$\\to$%d: %.2f pp; implied counterfactual change: %.2f pp} \\\\",
+         n_col_r7, n_main_lab, min(recon_by_year$year), max(recon_by_year$year), obs_change_b, cf_change_c)
 )
 bottom_idx_r7 <- which(grepl("^\\s*\\\\bottomrule", raw_lines_r7))[1]
 stopifnot(!is.na(bottom_idx_r7))
 raw_lines_r7 <- append(raw_lines_r7, c("\\midrule", footer_r7), after = bottom_idx_r7 - 1L)
 
 notes_r7 <- paste0(
-  "share\\_adapt denominator: see main-text footnote (145-country listwise-deletion panel). ",
-  "Counterfactual column subtracts the main-spec event-time ATT, cell by cell, from each ",
-  "treated country's observed share. Naive $n\\times$ATT is not the correct arithmetic; ",
-  "treated-cell-weighted total sums att\\_adj over all ", n_treated_cells_r7,
+  "Global-share denominator: total adaptation-marked commitments of the ",
+  n_distinct(did_panel_full$recipient_name), "-recipient panel in each year (see ",
+  "main-text footnote). Counterfactual column subtracts the main-specification ",
+  "event-time ATT, cell by cell, from each treated country's observed share. Naive ",
+  "$n\\times$ATT is not the correct arithmetic; the treated-cell-weighted total sums ",
+  "the event-time ATT over all ", n_treated_cells_r7,
   " treated country-years (cumulative, not bounded by 100 pp). Last column: single-year ",
-  "sum of ATT-adjusted cells"
+  "sum of the ATT adjustments"
 )
 source_r7 <- "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
 

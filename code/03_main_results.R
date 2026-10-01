@@ -1,18 +1,19 @@
 # ==============================================================================
 # 03_main_results.R
 # Main CS (2021) estimation — cohorts_dropped specification + pre-trends figure.
-# Paper: Beaucoral, Goujon and Marchand (2026) — §4 (pre-trends), §5 (main results, Table 2, Figures 2 and B.4)
+# Paper: Beaucoral, Goujon and Marchand (2026) — §4 (pre-trends), §5 (main
+# results: tab:combined_wide_main, fig:did_combined_es, fig:did_combined_cohort)
 #
 # Inputs : data/processed/simple_panel_wgi.csv
 # Outputs:
-#   output/figures/pretrends_analysis.png                     (§4 pre-trends)
-#   output/figures/cohorts_dropped/did_combined_es_wgi.png    (Figure 2)
-#   output/figures/cohorts_dropped/did_combined_cohort_wgi.png(Figure B.4)
-#   output/tables/cohorts_dropped/att_combined_wide.tex       (Table 2 main)
-#   output/tables/nap_cohorts.tex                             (appendix cohorts)
-#
-# NOTE: per-outcome did_es_*, did_cohort_*, did_cohort_es_* figures
-#   are built in memory but NOT written to disk (not used in paper).
+#   output/figures/pretrends_analysis.png                      (§4 pre-trends)
+#   output/figures/cohorts_dropped/did_combined_es_wgi.png     (Figure 2, fig:did_combined_es)
+#   output/figures/cohorts_dropped/did_combined_cohort_wgi.png (Figure C.3, fig:did_combined_cohort)
+#   output/tables/cohorts_dropped/att_combined_wide.tex        (Table 2, tab:combined_wide_main)
+#   output/tables/extensive_margin/att_extensive.tex           (tab:extensive_margin)
+#   output/tables/nap_cohorts.tex                              (tab:nap_cohorts_app)
+#   output/fits/headline_*_dr_bs.rds, extensive_margin_dr_bs.rds (read by later stages)
+# Figures 2 and C.3 are drawn from the stored fits (Section 10b), never refitted.
 # ==============================================================================
 
 # ============================================================
@@ -45,9 +46,13 @@ if (utils::packageVersion("did") < "2.5.0") {
     utils::packageVersion("did")))
 }
 library(countrycode)
-# NOTE: MASS is NOT attached via library() -- MASS::select() would mask
-# dplyr::select() used throughout this script. compute_pretrend_test() below
-# calls MASS::ginv() by full namespace instead (singular-covariance fallback).
+source(here("code", "functions", "pretrend_test.R"))  # compute_pretrend_test()
+source(here("code", "functions", "two_line_head.R"))     # two_line_head()
+source(here("code", "functions", "mde.R"))            # mde()
+source(here("code", "functions", "make_country_id.R"))    # make_country_id()
+source(here("code", "functions", "crs_positive.R"))       # crs_positive()
+source(here("code", "functions", "make_wide_table.R"))    # make_wide_table()
+source(here("code", "functions", "sup_t_crit.R"))         # sup_t_crit()
 
 set.seed(20240601)  # global seed — local set.seed(1242) calls follow each estimator
 
@@ -67,6 +72,10 @@ dir.create(here("output", "figures", "cohorts_dropped"), recursive = TRUE, showW
 dir.create(here("output", "tables",  "cohorts_dropped"), recursive = TRUE, showWarnings = FALSE)
 # Saved headline fits (one .rds per main outcome) consumed by later stages.
 dir.create(here("output", "fits"), recursive = TRUE, showWarnings = FALSE)
+# A failed run must never leave the previous run's fits for later stages to
+# read: the fits this stage owns are deleted before they are re-estimated.
+unlink(Sys.glob(here("output", "fits",
+                     c("headline_*_dr_bs.rds", "extensive_margin_dr_bs.rds"))))
 dir.create(here("output", "tables", "extensive_margin"), recursive = TRUE, showWarnings = FALSE)
 
 # -----------------------------------------------------------------------
@@ -106,16 +115,28 @@ PRETREND_NOTE <- function(min_e, max_e, k) paste0(PRETREND_NOTE_AGG(min_e, max_e
 #' @param labels optional column labels, same length, for per-column disclosure
 #' @param wpval_reason machine-derived reason did returned no statistic
 #' @param ginv_used TRUE if the aggregated test used a generalized inverse
+#' @param df degrees of freedom of the aggregated test(s) (compute_pretrend_test()$df),
+#'   one per column; below full rank they are fewer than the leads
 #' @return a character string for the table note
 wpval_reconciliation <- function(pre_egt, df_did, n_clusters,
                                  wpval_did = NA_real_, pval_wald = NA_real_,
                                  labels = NULL, wpval_reason = NA_character_,
-                                 ginv_used = FALSE) {
+                                 ginv_used = FALSE, df = length(pre_egt)) {
   # Compact pre-trend disclosure for table notes (byte-identical
   # in 03/04/05). The averaging mechanism and the interpretation of each
   # result are stated once in the main text; the note keeps the restriction
   # counts and the per-column verdicts, which the text does not repeat table
   # by table.
+
+  # Column labels are interpolated into LaTeX prose, so they must be escaped
+  # here: "Adaptation share (% of global)" would otherwise comment out the rest
+  # of the note.
+  esc_lab <- function(x) {
+    x <- gsub("\\\\", "", x)
+    x <- gsub("([%#&_])", "\\\\\\1", x)
+    x
+  }
+  if (!is.null(labels)) labels <- esc_lab(labels)
 
   # --- lead window, rendered from the vector actually used -----------------
   n_lead <- length(pre_egt)
@@ -129,22 +150,20 @@ wpval_reconciliation <- function(pre_egt, df_did, n_clusters,
     # canonical wording: the lead window itself is disclosed via
     # min/max of pre_egt, not re-derived from the (possibly non-contiguous)
     # lead_list string built above.
-    paste0(PRETREND_NOTE_AGG(min(as.integer(pre_egt)), max(as.integer(pre_egt)), n_lead),
+    # Restrictions = the test's df (the rank actually inverted), not the lead
+    # count; if the df differ across columns the lead count is quoted and the
+    # singular columns are flagged just below.
+    df_u <- unique(as.integer(df[!is.na(df)]))
+    paste0(PRETREND_NOTE_AGG(min(as.integer(pre_egt)), max(as.integer(pre_egt)),
+                             if (length(df_u) == 1L) df_u else n_lead),
            if (isTRUE(any(ginv_used)))
-             "; for this column the block was singular and a generalized inverse was used"
+             paste0("; the block was singular",
+                    if (!is.null(labels) && length(labels) == length(ginv_used))
+                      paste0(" for ", paste(labels[ginv_used], collapse = ", ")) else "",
+                    " and a generalized inverse was used")
            else "",
            ". ")
   }
-
-  # Column labels are interpolated into LaTeX prose, so they must be escaped
-  # here: "Adaptation share (% of global)" would otherwise comment out the rest
-  # of the note.
-  esc_lab <- function(x) {
-    x <- gsub("\\\\", "", x)
-    x <- gsub("([%#&_])", "\\\\\\1", x)
-    x
-  }
-  if (!is.null(labels)) labels <- esc_lab(labels)
 
   wp <- suppressWarnings(as.numeric(wpval_did))
   pw <- suppressWarnings(as.numeric(pval_wald))
@@ -183,6 +202,11 @@ wpval_reconciliation <- function(pre_egt, df_did, n_clusters,
                sub(sing_re, "\\1", wpval_reason[[1L]]), " cells; rank ",
                paste(sprintf("%s %s", labels, sub(sing_re, "\\2", wpval_reason)),
                      collapse = ", "), ")")
+      else if (!is.null(labels) && length(wpval_reason) == length(labels))
+        paste(sprintf("%s, %s", labels,
+                      ifelse(is.na(wpval_reason), "no reason recorded",
+                             sub("^not computed: ", "", wpval_reason))),
+              collapse = "; ")
       else "reason varies by column (see text)"
     did_txt <- paste0(did_head, " not computed: ", reason_txt,
                       ". ")
@@ -207,9 +231,6 @@ wpval_reconciliation <- function(pre_egt, df_did, n_clusters,
   }
   paste0(head_txt, did_txt)
 }
-
-# Null-coalescing operator (used in compute_pretrend_test)
-`%||%` <- function(a, b) if (!is.null(a)) a else b
 
 # ==============================================================================
 # Helper: write_tex_float()
@@ -279,11 +300,14 @@ did_panel <- aggregated
 
 # Numeric unit ID required by att_gt()
 did_panel <- did_panel %>%
-  mutate(country_id = as.integer(factor(recipient_name)))
+  mutate(country_id = make_country_id(recipient_name))
 
 # Build gname (cohort = year of first NAP adoption).
 # att_gt() requires gname to be CONSTANT within each unit across all years.
-first_year <- min(did_panel$year)
+# The panel window is fixed at 2009 (first year of Rio adaptation-marker
+# reporting); 01_prepare_data.R filters and asserts it, and this re-checks it.
+first_year <- 2009L
+stopifnot(min(did_panel$year) == first_year)
 
 country_gname <- did_panel %>%
   group_by(recipient_name) %>%
@@ -377,6 +401,7 @@ n_adopters <- sum(cohort_sizes$n_treated)
 n_never    <- did_panel %>% filter(cohort_year == 0) %>% distinct(recipient_name) %>% nrow()
 coh_tab    <- cohort_sizes %>%
   mutate(in_main = ifelse(n_treated >= thin_threshold, "Yes", "No"))
+yr_span <- function(y) paste(range(y), collapse = "--")  # e.g. "2021--2024"
 nap_cohort_tabular <- c(
   "\\begin{tabular}{lcc}",
   "\\toprule",
@@ -399,8 +424,10 @@ write_tex_float(
     " adopters in the estimation sample; a further ", n_never,
     " never-adopting countries serve as controls. The main specification ",
     "retains adoption cohorts with at least ", thin_threshold,
-    " treated units (2021--2024); the retained-cohorts robustness specification ",
-    "(Section~\\ref{sec:robust}) additionally includes the smaller 2015--2020 cohorts"),
+    " treated units (", yr_span(coh_tab$cohort_year[coh_tab$in_main == "Yes"]),
+    "); the retained-cohorts robustness specification ",
+    "(Section~\\ref{sec:robust}) additionally includes the smaller ",
+    yr_span(coh_tab$cohort_year[coh_tab$in_main == "No"]), " cohorts"),
   source_text   = "UNFCCC NAP Central tracking tool"
 )
 
@@ -469,416 +496,17 @@ outcomes <- list(
 )
 
 # ==============================================================================
-# SECTION 5. Helper: run_did_estimation()
-# Encapsulates the full CS(2021) multi-outcome loop for one cohort strategy.
-# Seed rule (reproduces the published SEs): set.seed(1242) stays immediately before the att_gt loop.
-# ==============================================================================
-
-run_did_estimation <- function(did_panel_in, retain_thin_cohorts,
-                               outcomes, thin_cohorts, thin_threshold = 5L) {
-
-  cohort_tag <- if (retain_thin_cohorts) "cohorts_retained" else "cohorts_dropped"
-  dir_figs   <- file.path(here("output", "figures"), cohort_tag)
-  dir_tabs   <- file.path(here("output", "tables"),  cohort_tag)
-  dir.create(dir_figs, recursive = TRUE, showWarnings = FALSE)
-  dir.create(dir_tabs, recursive = TRUE, showWarnings = FALSE)
-  message(sprintf("\n=== run_did_estimation: %s ===", cohort_tag))
-  message(sprintf("    Figures -> %s  |  Tables -> %s", dir_figs, dir_tabs))
-
-  did_panel <- did_panel_in
-  if (!retain_thin_cohorts && length(thin_cohorts) > 0) {
-    message(sprintf("Dropping cohorts with < %d treated units: %s",
-                    thin_threshold, paste(thin_cohorts, collapse = ", ")))
-    did_panel <- did_panel %>% filter(!(cohort_year %in% thin_cohorts))
-  } else if (retain_thin_cohorts && length(thin_cohorts) > 0) {
-    message(sprintf("Retaining thin cohorts (%s). Asymptotic SE (bstrap = FALSE).",
-                    paste(thin_cohorts, collapse = ", ")))
-  } else {
-    message("No thin cohorts at threshold = ", thin_threshold)
-  }
-
-  use_bstrap <- if (retain_thin_cohorts) FALSE else TRUE
-  use_dr     <- if (retain_thin_cohorts) "reg" else "dr"
-  message(sprintf("Bootstrap: %s  |  est_method: %s", use_bstrap, use_dr))
-
-  outcome_vars     <- sapply(outcomes, `[[`, "var")
-  missing_outcomes <- setdiff(outcome_vars, names(did_panel))
-  if (length(missing_outcomes) > 0) {
-    stop("Outcome column(s) missing from did_panel: ",
-         paste(missing_outcomes, collapse = ", "),
-         "\nCheck that share_adapt and log-transformed columns were created and merged.")
-  }
-  message("Pre-flight OK — outcome columns present: ", paste(outcome_vars, collapse = ", "))
-
-  results_simple  <- list()
-  results_group   <- list()
-  results_dynamic <- list()
-
-  # Seed rule (reproduces the published SEs): seed immediately before estimator loop
-  set.seed(1242)
-
-  for (oc in outcomes) {
-
-    message(sprintf("\n--- Estimating: %s ---", oc$label))
-
-    # WHAT THIS FIT IS FOR. This pass exists ONLY to
-    # draw Figures 2 and B.4, which show SIMULTANEOUS confidence bands
-    # (cband = TRUE); the stored fits written by make_wide_table() below use
-    # cband = FALSE and therefore cannot supply them. Every NUMBER the paper
-    # reports comes from those stored fits, never from here. The replication
-    # count is pinned to BITERS (999, as everywhere else), and the seed is set immediately before EACH
-    # outcome's estimator call rather than once before the five-outcome loop,
-    # so each panel of the figure is reproducible on its own. The point
-    # estimates are identical to the stored fits BY CONSTRUCTION (the
-    # multiplier bootstrap affects only standard errors), and §10b asserts
-    # exactly that rather than trusting it; with the seed and replication count
-    # aligned, the aggregated standard errors coincide too, so Figures 2 and B.4
-    # and Table 2 report the same numbers.
-    set.seed(1242)
-    gt_obj <- tryCatch(
-      att_gt(
-        yname         = oc$var,
-        tname         = "year",
-        idname        = "country_id",
-        gname         = "cohort_year",
-        xformla       = ~ ge_est + log_population,
-        data          = did_panel,
-        est_method    = use_dr,
-        bstrap        = use_bstrap,
-        biters        = BITERS,
-        cband         = use_bstrap,
-        control_group = "nevertreated",
-        anticipation  = 0,
-        base_period   = "universal",
-        panel         = TRUE,
-        allow_unbalanced_panel = TRUE
-      ),
-      error = function(e) {
-        message("  att_gt failed for ", oc$var, ": ", conditionMessage(e)); NULL
-      }
-    )
-    if (is.null(gt_obj)) next
-
-    # Simple ATT
-    agg_s <- tryCatch(aggte(gt_obj, type = "simple", na.rm = TRUE), error = function(e) NULL)
-    if (!is.null(agg_s)) {
-      results_simple[[oc$var]] <- data.frame(
-        outcome = oc$label,
-        ATT     = round(agg_s$overall.att, 4),
-        SE      = round(agg_s$overall.se,  4),
-        t_stat  = round(agg_s$overall.att / agg_s$overall.se, 3)
-      )
-      message(sprintf("  Simple ATT = %.4f (SE = %.4f)", agg_s$overall.att, agg_s$overall.se))
-    }
-
-    # By-cohort ATT
-    agg_g <- tryCatch(aggte(gt_obj, type = "group", na.rm = TRUE), error = function(e) NULL)
-    if (!is.null(agg_g)) {
-      results_group[[oc$var]] <- data.frame(
-        outcome = oc$label,
-        cohort  = agg_g$egt,
-        ATT     = round(agg_g$att.egt,  4),
-        SE      = round(agg_g$se.egt,   4),
-        Lower   = round(agg_g$att.egt - agg_g$crit.val.egt * agg_g$se.egt, 4),
-        Upper   = round(agg_g$att.egt + agg_g$crit.val.egt * agg_g$se.egt, 4)
-      )
-      # (Figure B.4 is drawn from results_group below.)
-    }
-
-    # Dynamic ATT (event study)
-    agg_d <- tryCatch(
-      aggte(gt_obj, type = "dynamic", na.rm = TRUE,
-            min_e = -5,
-            max_e = Inf),
-      error = function(e) NULL
-    )
-    if (!is.null(agg_d)) {
-      results_dynamic[[oc$var]] <- data.frame(
-        outcome    = oc$label,
-        event_time = agg_d$egt,
-        ATT        = round(agg_d$att.egt, 4),
-        SE         = round(agg_d$se.egt,  4),
-        Lower      = round(agg_d$att.egt - agg_d$crit.val.egt * agg_d$se.egt, 4),
-        Upper      = round(agg_d$att.egt + agg_d$crit.val.egt * agg_d$se.egt, 4),
-        color      = oc$color
-      )
-      # Per-outcome event-study plot built in memory only — not used in paper
-      p_dyn <- ggdid(agg_d) +
-        geom_vline(xintercept = -0.5, linetype = "dashed", colour = "grey40") +
-        labs(title    = paste("Event Study —", oc$label),
-             subtitle = "Controls: WGI gov. effectiveness, log population",
-             x        = "Years relative to NAP adoption", y = "ATT",
-             caption  = "CS (2021); outcome regression; never-treated controls") +
-        theme_minimal() +
-        theme(text       = element_text(family = "serif", size = 11),
-              plot.title = element_text(face = "bold", size = 13, hjust = 0.5))
-    }
-
-    # Cohort-specific event study (faceted)
-    es_raw <- data.frame(
-      cohort   = gt_obj$group,
-      cal_time = gt_obj$t,
-      att      = gt_obj$att,
-      se       = gt_obj$se
-    ) %>%
-      filter(!is.na(se), se > 0) %>%
-      mutate(
-        event_time = cal_time - cohort,
-        cohort_lab = paste0("Cohort ", cohort),
-        ci_lo      = att - 1.96 * se,
-        ci_hi      = att + 1.96 * se
-      )
-    # Per-outcome cohort event-study plot built in memory only — not used in paper
-    p_cs_ev <- ggplot(es_raw, aes(x = event_time, y = att)) +
-      geom_hline(yintercept = 0, colour = "grey50", linetype = "dashed") +
-      geom_vline(xintercept = -0.5, colour = "grey30", linetype = "dotted") +
-      geom_ribbon(aes(ymin = ci_lo, ymax = ci_hi), alpha = 0.15, fill = oc$color) +
-      geom_line(colour = oc$color, linewidth = 0.8) +
-      geom_point(colour = oc$color, size = 2) +
-      facet_wrap(~ cohort_lab, scales = "free_y") +
-      labs(
-        title    = paste("Cohort Event Studies —", oc$label),
-        subtitle = "Controls: WGI gov. effectiveness, log population",
-        x        = "Years relative to NAP adoption", y = "ATT",
-        caption  = "CS (2021); outcome regression; never-treated controls; 95% CI (±1.96 SE)"
-      ) +
-      theme_minimal() +
-      theme(text             = element_text(family = "serif", size = 11),
-            plot.title       = element_text(face = "bold", size = 13, hjust = 0.5),
-            strip.text       = element_text(face = "bold"),
-            panel.grid.minor = element_blank())
-  }
-
-  # --- Combined event-study overlay (paper Figure 2, cohorts_dropped) ---
-  if (length(results_dynamic) == 0) {
-    message("No dynamic results — skipping combined plot.")
-    return(invisible(list(simple  = results_simple,
-                          group   = results_group,
-                          dynamic = results_dynamic)))
-  }
-
-  dynamic_all <- bind_rows(results_dynamic) %>%
-    mutate(outcome = factor(outcome, levels = sapply(outcomes, `[[`, "label")))
-
-  palette_vec <- setNames(sapply(outcomes, `[[`, "color"),
-                          sapply(outcomes, `[[`, "label"))
-  dodge_w <- 0.4
-
-  p_combined <- ggplot(dynamic_all,
-                       aes(x = event_time, y = ATT,
-                           colour = outcome, shape = outcome,
-                           group  = outcome)) +
-    geom_hline(yintercept = 0, colour = "grey50", linetype = "dashed") +
-    geom_vline(xintercept = -0.5, colour = "grey30", linetype = "dotted") +
-    geom_linerange(aes(ymin = Lower, ymax = Upper),
-                   position = position_dodge(width = dodge_w),
-                   linewidth = 0.6, alpha = 0.8) +
-    geom_point(size = 2.5, position = position_dodge(width = dodge_w)) +
-    scale_colour_manual(values = palette_vec) +
-    scale_shape_manual(values = c(16, 17, 15, 18, 8)) +
-    # No title, subtitle, or caption — those go in LaTeX \caption{}
-    labs(
-      title    = NULL, subtitle = NULL, caption = NULL,
-      x        = "Years relative to NAP adoption",
-      y        = "ATT estimate",
-      colour   = NULL, shape = NULL
-    ) +
-    theme_minimal() +
-    theme(
-      text             = element_text(family = "serif", size = 12),
-      legend.position  = "bottom",
-      legend.text      = element_text(size = 10),
-      panel.grid.minor = element_blank()
-    )
-  print(p_combined)
-  ggsave(file.path(dir_figs, "did_combined_es_wgi.png"),
-         p_combined, width = 12, height = 7, dpi = 300)
-
-  # att_simple_all.tex and att_dynamic_all.tex are NOT written to disk —
-  # they are not used by the manuscript. Objects remain in memory below.
-  simple_all <- bind_rows(results_simple) %>%
-    mutate(
-      stars   = case_when(
-        abs(t_stat) > 2.576 ~ "***",
-        abs(t_stat) > 1.960 ~ "**",
-        abs(t_stat) > 1.645 ~ "*",
-        TRUE                ~ ""
-      ),
-      ATT_fmt = paste0(sprintf("%.4f", ATT), stars)
-    )
-
-  message(sprintf("\n--- Completed: %s | Figures -> %s | Tables -> %s ---",
-                  cohort_tag, dir_figs, dir_tabs))
-
-  invisible(list(simple  = results_simple,
-                 group   = results_group,
-                 dynamic = results_dynamic))
-}
-
-# ==============================================================================
-# SECTION 6. Main estimation — cohorts_dropped (bootstrap SE)
-# ==============================================================================
-
-message("\n=== Main estimation: cohorts_dropped (bootstrap SE) ===\n")
-
-res_main <- run_did_estimation(
-  did_panel_in        = did_panel,
-  retain_thin_cohorts = FALSE,
-  outcomes            = outcomes,
-  thin_cohorts        = thin_cohorts,
-  thin_threshold      = thin_threshold
-)
-
-# ==============================================================================
-# SECTION 7. Helper: compute_pretrend_test()
-# Wald chi-sq on all pre-treatment event-time ATTs using influence-function
-# covariance (analytical, not bootstrap).
-# ==============================================================================
-
-compute_pretrend_test <- function(agg_d, gt_obj = NULL, anticipation = 0) {
-  # `anticipation` (default 0, i.e. the behaviour every other call site relies
-  # on) excludes the event times the estimator itself treats as TREATED. Under
-  # att_gt(anticipation = k) the cells e = -1, ..., -k are post-treatment by
-  # construction and e = -k-1 is the normalised base period, so a pre-trend
-  # test must be restricted to e < -k. Truncating the aggregation instead
-  # (aggte(max_e = -k-1)) is not an option: did errors out when a dynamic
-  # aggregation contains no post-treatment period.
-  # Covariance: did (>= 2.5.0) stores the dynamic-aggregation influence
-  # function at agg_d$inf.function$dynamic.inf.func.e (n x K, aligned with
-  # agg_d$egt). The full covariance is crossprod(IF)/n^2, and the joint Wald
-  # test uses the whole pre-treatment block, not a diagonal approximation
-  # (which would ignore covariance across pre-treatment event-time ATTs). A
-  # generalized inverse (MASS::ginv) is used, with a message, if the block is
-  # singular. did's own group-time pre-test (gt_obj$W,
-  # gt_obj$Wpval — computed on the disaggregated ATT(g,t) cells, independent of
-  # bstrap) is captured alongside for comparison and reported as a separate
-  # table row ("Pre-trend p (did Wpval)").
-  keep    <- which(!is.na(agg_d$se.egt) & agg_d$se.egt > 1e-10)
-  pre_pos <- which(agg_d$egt[keep] < -anticipation)
-  if (length(pre_pos) == 0)
-    return(list(stat = NA_real_, pval = NA_real_, df = 0L, n_leads = 0L,
-                leads = integer(0), ginv_used = FALSE,
-                W_did = NA_real_, Wpval_did = NA_real_, df_did = NA_integer_,
-                wpval_reason = NA_character_))
-
-  pre_beta <- agg_d$att.egt[keep][pre_pos]
-
-  IF <- agg_d$inf.function$dynamic.inf.func.e
-  stopifnot(is.matrix(IF), ncol(IF) == length(agg_d$egt))
-  n          <- nrow(IF)
-  sigma_full <- crossprod(IF) / n^2
-  # Guard: catches IF/egt column misalignment (would silently corrupt every
-  # downstream pre-trend test) by cross-checking the covariance diagonal
-  # against did's own agg_d$se.egt.
-  stopifnot(max(abs(sqrt(diag(sigma_full)) - agg_d$se.egt), na.rm = TRUE) < 1e-6)
-  sigma_pre  <- sigma_full[keep, keep][pre_pos, pre_pos, drop = FALSE]
-
-  # A generalized inverse is used only if the direct solve fails. When it is,
-  # the statistic no longer has length(pre_pos) degrees of freedom: the correct
-  # reference is the NUMERICAL RANK of the pre-treatment covariance, because a
-  # Moore-Penrose inverse tests only the directions the data can identify.
-  # Using the full lead count there would overstate df and understate the
-  # p-value. Both the rank and the fact that a generalized inverse was used are
-  # returned, so the table note can disclose them.
-  # tryCatch returns BOTH the inverse and the flag, so nothing is assigned into
-  # an enclosing environment (`<<-` is prohibited by this project's standards).
-  inv_res <- tryCatch(
-    list(inv = solve(sigma_pre), ginv = FALSE),
-    error = function(e) {
-      message("compute_pretrend_test: pre-treatment covariance is singular — ",
-              "using MASS::ginv() generalized inverse instead of a direct solve()")
-      list(inv = MASS::ginv(sigma_pre), ginv = TRUE)
-    }
-  )
-  inv_sigma_pre <- inv_res$inv
-  ginv_used     <- isTRUE(inv_res$ginv)
-  W <- as.numeric(t(pre_beta) %*% inv_sigma_pre %*% pre_beta)
-
-  df_use <- length(pre_pos)
-  if (ginv_used) {
-    sv <- svd(sigma_pre)$d
-    df_use <- sum(sv > max(dim(sigma_pre)) * .Machine$double.eps * max(sv))
-    message(sprintf(paste0("compute_pretrend_test: df set to the numerical rank ",
-                           "of the pre-treatment covariance (%d of %d leads)"),
-                    df_use, length(pre_pos)))
-  }
-
-  W_did     <- NA_real_
-  Wpval_did <- NA_real_
-  df_did    <- NA_integer_
-  if (!is.null(gt_obj)) {
-    if (!is.null(gt_obj$W))     W_did     <- as.numeric(gt_obj$W)
-    if (!is.null(gt_obj$Wpval)) Wpval_did <- as.numeric(gt_obj$Wpval)
-    # Restrictions behind did's own pre-test: did 2.5.0 (att_gt) drops the
-    # pre-treatment cells whose standard error is NA (the base-period cells)
-    # before inverting V[pre, pre], so q counts only cells with a usable SE.
-    df_did <- sum(gt_obj$t < gt_obj$group & !is.na(gt_obj$se))
-  }
-
-  # Why did returned no statistic, derived from the fit rather than guessed.
-  # did declines the pre-test when (i) it never formed the analytical variance
-  # matrix (bstrap without cband), (ii) there are no estimable pre-treatment
-  # cells, or (iii) rcond(preV) underflows. Case (iii) is the one that fires on
-  # thin subgroups: the pre-treatment block has more cells than the subgroup's
-  # recipient-level influence functions can span.
-  wpval_reason <- NA_character_
-  if (!is.null(gt_obj) && is.na(Wpval_did)) {
-    pre_idx <- which(gt_obj$group > gt_obj$t & !is.na(gt_obj$se))  # the cells did inverts
-    if (is.null(gt_obj$V)) {
-      wpval_reason <- paste0("did does not form the analytical variance matrix ",
-                             "for this fit, so its pre-test is unavailable by ",
-                             "construction")
-    } else if (length(pre_idx) == 0L) {
-      wpval_reason <- "there are no estimable pre-treatment group-time cells"
-    } else {
-      preV <- as.matrix(gt_obj$V[pre_idx, pre_idx])
-      rc   <- tryCatch(rcond(preV), error = function(e) NA_real_)
-      rk   <- tryCatch({ sv <- svd(preV)$d
-                         sum(sv > max(dim(preV)) * .Machine$double.eps * max(sv)) },
-                       error = function(e) NA_integer_)
-      wpval_reason <- sprintf(paste0("not computed: pre-treatment covariance ",
-                                     "singular (%d cells, numerical rank %s)"),
-                              nrow(preV),
-                              if (is.na(rk)) "unavailable" else as.character(rk))
-    }
-  }
-
-  list(
-    stat         = round(W, 3),
-    pval         = round(pchisq(W, df = df_use, lower.tail = FALSE), 3),
-    df           = df_use,
-    n_leads      = length(pre_pos),
-    leads        = as.integer(agg_d$egt[keep][pre_pos]),
-    ginv_used    = ginv_used,
-    W_did        = if (is.na(W_did))     NA_real_ else round(W_did, 3),
-    Wpval_did    = if (is.na(Wpval_did)) NA_real_ else round(Wpval_did, 3),
-    df_did       = as.integer(df_did),
-    wpval_reason = wpval_reason
-  )
-}
-
-# ==============================================================================
 # SECTION 7b. Helpers — save the headline fit so that every downstream
 # script reports ONE ATT and ONE SE per specification.
 #
-# WHY THIS EXISTS (diagnosed 2026-09-15; the discrepancy is not bootstrap
-# Monte Carlo noise): Table 2 reported SE 0.1245 for log(adaptation
-# commitments) while the §19e units/zeros diagnostic reported 0.1173 for the
-# byte-identical specification. The two fits are identical -- same panel, same
-# est_method, same seed immediately before att_gt(), same 999 replications --
-# and they return the same ATT to 6 decimals. The SEs differ because
-# `aggte()` RUNS ITS OWN multiplier bootstrap when the att_gt object was
-# fitted with bstrap = TRUE, so the aggregated SE depends on the RNG state at
-# the aggte() call, not on the RNG state at the att_gt() call:
-#   03 make_wide_table : set.seed(1242) -> att_gt(bstrap) -> aggte(simple)
-#                        [RNG state at aggte = post-att_gt-mboot]    -> 0.1245
-#   04 §19e            : set.seed(1242) -> att_gt(bstrap)
-#                        -> set.seed(1242) -> att_gt(analytical, consumes no RNG)
-#                        -> aggte(simple) [RNG state = fresh 1242]   -> 0.1173
-# "Re-seed immediately before each att_gt()" therefore does NOT pin the
-# reported SE. The fix is structural, not a seeding tweak: fit and aggregate
-# once here, saveRDS the result, and have every other script read the saved
-# aggregation instead of re-running it.
+# Why: `aggte()` runs its own multiplier bootstrap when the att_gt object was
+# fitted with bstrap = TRUE, so an aggregated SE depends on the RNG state at
+# the aggte() call, not only at the att_gt() call. Two scripts that fit the
+# same specification with the same seed can therefore report different SEs
+# (for example, an analytical fit between att_gt() and aggte() leaves a
+# different RNG state). Re-seeding before att_gt() does not pin the reported
+# SE; fitting and aggregating once here, saving the result, and having every
+# other script read the saved aggregation does.
 # ==============================================================================
 
 #' Event-time weights implied by did's `simple` aggregation.
@@ -979,426 +607,117 @@ fit_stem_map <- c(
 )
 
 # ==============================================================================
-# SECTION 8. Helper: make_wide_table()
-# Produces att_combined_wide.tex for cohorts_dropped (§19c main half).
-# Seed rule (reproduces the published SEs): set.seed(1242) immediately before the outcomes loop
+# SECTION 8. Helper: store_headline_fit()
+# Table 2 is built by make_wide_table() (code/functions/make_wide_table.R),
+# which calls this function once per outcome, after every reported quantity of
+# that column has been computed, to store the fit behind the column.
 # ==============================================================================
 
-# Map from log outcome var name to its underlying raw column (USD millions)
-raw_var_map <- c(
-  log_commits           = "commitments",
-  share_adapt           = "share_adapt",
-  lcommitments_all      = "commitments_all",
-  lcommitments_nonadapt = "commitments_nonadapt",
-  ldisbursements        = "disbursements",
-  log_commits_dac       = "commits_dac",
-  log_commits_multi     = "commits_multi",
-  log_commits_other     = "commits_other"
-)
+#' Store the fit behind one column of Table 2 in output/fits/
+#'
+#' Adds the bootstrap dynamic and group aggregations (Figure 2, Figure C.3,
+#' HonestDiD), the event-time weights that reproduce the simple ATT, and the
+#' bootstrap covariance of the dynamic aggregation. The next column re-seeds
+#' with set.seed(1242) before its own bootstrap fit, so the draws made here do
+#' not reach it.
+#'
+#' @param oc outcome entry of `outcomes`
+#' @param col the column's fits and statistics, as passed by make_wide_table()
+#' @return invisibly, the path of the stored fit (NULL for an outcome without a
+#'   stem in fit_stem_map)
+store_headline_fit <- function(oc, col) {
+  stem <- fit_stem_map[oc$var]
+  if (is.na(stem)) return(invisible(NULL))
+  if (!is.finite(col$att) || !is.finite(col$se))
+    stop("Headline simple aggregation failed for ", oc$var, ": no stored fit is written.")
 
-make_wide_table <- function(did_panel_in, retain_thin, outcomes,
-                             dir_tabs, tex_label, caption_spec) {
+  agg_dyn_boot <- aggte(col$gt_boot, type = "dynamic", na.rm = TRUE, min_e = -5, max_e = Inf)
+  agg_grp_boot <- aggte(col$gt_boot, type = "group", na.rm = TRUE)
 
-  use_dr <- if (retain_thin) "reg" else "dr"
-
-  table_stats <- list()
-  # Seed rule (reproduces the published SEs): seed immediately before outcomes loop
-  set.seed(1242)
-
-  for (oc in outcomes) {
-    message(sprintf("  Table stats [%s]: %s", caption_spec, oc$label))
-
-    if (!retain_thin) {
-      # Main spec (cohorts >= 5): doubly-robust + multiplier-bootstrap SEs.
-      # A separate analytical fit is used exclusively for the pre-trend Wald test
-      # so that the pre-trend test is computed from an analytical
-      # influence-function covariance rather than from bootstrap SEs. (compute_pretrend_test() builds the full
-      # covariance from inf.function$dynamic.inf.func.e.)
-      gt_tab_analytical <- tryCatch(
-        att_gt(
-          yname         = oc$var,
-          tname         = "year",
-          idname        = "country_id",
-          gname         = "cohort_year",
-          xformla       = ~ ge_est + log_population,
-          data          = did_panel_in,
-          est_method    = use_dr,
-          bstrap        = FALSE,   # analytical IF — feeds pre-trend test only
-          cband         = FALSE,
-          control_group = "nevertreated",
-          anticipation  = 0,
-          base_period   = "universal",
-          panel         = TRUE,
-          allow_unbalanced_panel = TRUE
-        ),
-        error = function(e) NULL
-      )
-      # Bootstrap fit — reported ATT and SE
-      set.seed(1242)
-      gt_tab <- tryCatch(
-        att_gt(
-          yname         = oc$var,
-          tname         = "year",
-          idname        = "country_id",
-          gname         = "cohort_year",
-          xformla       = ~ ge_est + log_population,
-          data          = did_panel_in,
-          est_method    = use_dr,
-          bstrap        = TRUE,    # multiplier-bootstrap SE (DECISION 1)
-          biters        = BITERS,
-          cband         = FALSE,
-          control_group = "nevertreated",
-          anticipation  = 0,
-          base_period   = "universal",
-          panel         = TRUE,
-          allow_unbalanced_panel = TRUE
-        ),
-        error = function(e) NULL
-      )
-    } else {
-      # Thin-cohort robustness spec: outcome regression + analytical SEs.
-      gt_tab_analytical <- tryCatch(
-        att_gt(
-          yname         = oc$var,
-          tname         = "year",
-          idname        = "country_id",
-          gname         = "cohort_year",
-          xformla       = ~ ge_est + log_population,
-          data          = did_panel_in,
-          est_method    = use_dr,
-          bstrap        = FALSE,   # analytical IF for pre-trend test
-          cband         = FALSE,
-          control_group = "nevertreated",
-          anticipation  = 0,
-          base_period   = "universal",
-          panel         = TRUE,
-          allow_unbalanced_panel = TRUE
-        ),
-        error = function(e) NULL
-      )
-      gt_tab <- gt_tab_analytical  # same fit used for ATT and pre-trend
-    }
-    if (is.null(gt_tab)) next
-
-    # Pre-trend Wald test always uses the analytical fit: did returns no
-    # analytical variance matrix for a bootstrap fit, and the influence-function
-    # covariance must come from the same fit as the coefficients.
-    agg_dyn_analytical <- if (!is.null(gt_tab_analytical)) tryCatch(
-      aggte(gt_tab_analytical, type = "dynamic", na.rm = TRUE, min_e = -5, max_e = Inf),
-      error = function(e) NULL
-    ) else NULL
-    agg_dyn <- agg_dyn_analytical  # alias used for compute_pretrend_test below
-
-    agg_s <- tryCatch(
-      aggte(gt_tab, type = "simple", na.rm = TRUE),
-      error = function(e) NULL
-    )
-
-    att <- if (!is.null(agg_s)) agg_s$overall.att else NA_real_
-    se  <- if (!is.null(agg_s)) agg_s$overall.se  else NA_real_
-    t_v <- if (!is.na(att) && !is.na(se) && se > 0) att / se else NA_real_
-    stars <- if (is.na(t_v)) "" else
-      if (abs(t_v) > 2.576) "***" else
-      if (abs(t_v) > 1.960) "**"  else
-      if (abs(t_v) > 1.645) "*"   else ""
-
-    pt <- if (!is.null(agg_dyn)) compute_pretrend_test(agg_dyn, gt_tab_analytical) else
-      list(stat = NA_real_, pval = NA_real_, df = 0L,
-           W_did = NA_real_, Wpval_did = NA_real_,
-           df_did = NA_integer_)
-
-    rows_oc   <- did_panel_in[!is.na(did_panel_in[[oc$var]]), ]
-    n_obs     <- nrow(rows_oc)
-    n_country <- length(unique(rows_oc$country_id))
-
-    raw_var  <- raw_var_map[oc$var]
-    is_share <- (oc$var == "share_adapt")
-
-    if (!is.na(raw_var) && raw_var %in% names(did_panel_in)) {
-      pre_rows <- did_panel_in %>%
-        filter(cohort_year > 0, year < cohort_year,
-               !is.na(.data[[raw_var]]))
-      mean_pre <- mean(pre_rows[[raw_var]], na.rm = TRUE)
-    } else {
-      mean_pre <- NA_real_
-    }
-
-    # The naive back-transform exp(ATT)-1 x pre-treatment mean is not
-    # additive across outcomes (it violates the paper's own additivity check),
-    # so it is reported only when the underlying ATT is significant at 5%
-    # (|t| > 1.960); otherwise the cell is suppressed ("---").
-    is_sig5 <- !is.na(t_v) && abs(t_v) > 1.960
-    if (!is_share && !is.na(att) && !is.na(mean_pre) && is_sig5) {
-      implied_usd <- (exp(att) - 1) * mean_pre
-    } else {
-      implied_usd <- NA_real_
-    }
-
-    mean_pre_fmt <- if (is_share) {
-      sprintf("%.2f pp", mean_pre)
-    } else if (!is.na(mean_pre)) {
-      sprintf("%.1f", mean_pre)
-    } else {
-      "---"
-    }
-
-    implied_fmt <- if (is_share) {
-      "---"
-    } else if (!is.na(implied_usd)) {
-      sprintf("%.1f", implied_usd)
-    } else {
-      "---"
-    }
-
-    table_stats[[oc$var]] <- list(
-      att_fmt      = paste0(sprintf("%.4f", att), stars),
-      se_fmt       = sprintf("(%.4f)", se),
-      t_fmt        = sprintf("%.3f", t_v),
-      mean_pre_fmt = mean_pre_fmt,
-      implied_fmt  = implied_fmt,
-      n_obs        = format(n_obs, big.mark = ","),
-      n_country    = as.character(n_country),
-      pt_stat      = sprintf("%.3f", pt$stat),
-      pt_pval      = sprintf("%.3f", pt$pval),
-      pt_df        = pt$df,
-      pt_df_did    = pt$df_did,
-      pt_leads     = pt$leads,
-      pt_ginv      = pt$ginv_used,
-      pt_reason    = pt$wpval_reason,
-      pt_pval_num  = pt$pval,
-      pt_wpval_num = pt$Wpval_did,
-      pt_label     = oc$label,
-      pt_wpval_did = if (is.na(pt$Wpval_did)) "---" else sprintf("%.3f", pt$Wpval_did)
-    )
-    message(sprintf("    ATT = %s  |  Pre-trend chi2(%d) = %.3f  p = %.3f  |  did Wpval = %s",
-                    table_stats[[oc$var]]$att_fmt, pt$df, pt$stat, pt$pval,
-                    table_stats[[oc$var]]$pt_wpval_did))
-    message(sprintf("    Mean pre-treat (raw) = %s  |  Implied effect (USD M) = %s",
-                    mean_pre_fmt, implied_fmt))
-
-    # ------------------------------------------------------------------
-    # Persist the fit behind this column of Table 2.
-    # Everything below runs AFTER every reported quantity for this outcome
-    # has been computed, so it cannot perturb the RNG stream that produced
-    # them; the next loop iteration re-seeds with set.seed(1242) before its
-    # own bootstrap fit, so it cannot perturb the next column either.
-    # Saved only for the main never-treated / cohorts >= 5 specification.
-    # ------------------------------------------------------------------
-    if (!retain_thin && !is.na(fit_stem_map[oc$var])) {
-
-      agg_dyn_boot <- tryCatch(
-        aggte(gt_tab, type = "dynamic", na.rm = TRUE, min_e = -5, max_e = Inf),
-        error = function(e) NULL
-      )
-      agg_grp_boot <- tryCatch(aggte(gt_tab, type = "group", na.rm = TRUE),
-                               error = function(e) NULL)
-      # Analytical simple aggregation: supplies the unit-level influence
-      # function used by 05_heterogeneity.R for correlated-sample contrasts
-      # `ids` records the unit order those rows correspond to.
-      agg_s_analytical <- if (!is.null(gt_tab_analytical))
-        tryCatch(aggte(gt_tab_analytical, type = "simple", na.rm = TRUE),
-                 error = function(e) NULL) else NULL
-
-      # l_vec matching the ATT printed in Table 2 (group-size-weighted average
-      # of the post-treatment event-time effects), with an explicit
-      # reconciliation against agg_s$overall.att.
-      l_vec_simple <- NULL
-      l_vec_check  <- NA_real_
-      egt_post     <- NULL
-      if (!is.null(agg_dyn_boot)) {
-        keep_d   <- which(!is.na(agg_dyn_boot$se.egt) & agg_dyn_boot$se.egt > 1e-10)
-        egt_post <- agg_dyn_boot$egt[keep_d][agg_dyn_boot$egt[keep_d] >= 0]
-        if (length(egt_post) > 0) {
-          l_vec_simple <- simple_att_event_weights(gt_tab, did_panel_in, egt_post)
-          att_post     <- agg_dyn_boot$att.egt[match(egt_post, agg_dyn_boot$egt)]
-          l_vec_check  <- sum(l_vec_simple * att_post) - att
-          message(sprintf(
-            "    [fit] l_vec = (%s) reproduces the simple ATT to %.2e",
-            paste(sprintf("%.4f", l_vec_simple), collapse = ", "), abs(l_vec_check)))
-        }
-      }
-
-      # Bootstrap covariance of the dynamic aggregation (feeds HonestDiD in 04).
-      bvc <- if (!is.null(agg_dyn_boot))
-        tryCatch(boot_vcov_dynamic(agg_dyn_boot, gt_tab, seed = 1242L),
-                 error = function(e) { message("    [fit] boot vcov failed: ",
-                                                conditionMessage(e)); NULL })
-      else NULL
-      if (!is.null(bvc))
-        message(sprintf(paste0("    [fit] bootstrap vcov: max |se_cov - se_published| / ",
-                               "se_published = %.4f"), bvc$max_rel_dev))
-
-      fit_obj <- list(
-        outcome        = oc$var,
-        outcome_label  = oc$label,
-        spec           = list(
-          estimator      = "CS (2021)",
-          est_method     = use_dr,
-          control_group  = "nevertreated",
-          xformla        = "~ ge_est + log_population",
-          anticipation   = 0L,
-          base_period    = "universal",
-          cohort_rule    = "adoption cohorts with >= 5 treated units",
-          bstrap         = TRUE,
-          biters         = BITERS,
-          seed           = 1242L,
-          min_e          = -5,
-          max_e          = Inf
-        ),
-        gt_boot          = gt_tab,
-        gt_analytical    = gt_tab_analytical,
-        agg_simple       = agg_s,
-        agg_simple_analytic = agg_s_analytical,
-        agg_dynamic      = agg_dyn_boot,
-        agg_group        = agg_grp_boot,
-        agg_dyn_analytic = agg_dyn_analytical,
-        ids              = sort(unique(did_panel_in$country_id)),
-        att              = att,
-        se               = se,
-        pretrend         = pt,
-        l_vec_simple     = l_vec_simple,
-        l_vec_egt        = egt_post,
-        l_vec_recon_gap  = l_vec_check,
-        boot_vcov        = bvc,
-        n_obs            = n_obs,
-        n_country        = n_country,
-        provenance       = list(
-          script       = "code/03_main_results.R",
-          created      = format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-          r_version    = R.version.string,
-          did_version  = as.character(utils::packageVersion("did"))
-        )
-      )
-      fit_path <- here("output", "fits",
-                       paste0("headline_", fit_stem_map[[oc$var]], "_dr_bs.rds"))
-      saveRDS(fit_obj, fit_path)
-      message("    [fit] Saved: ", fit_path)
-    }
+  # l_vec matching the ATT printed in Table 2 (group-size-weighted average of
+  # the post-treatment event-time effects), reconciled against the simple ATT.
+  l_vec_simple <- NULL
+  l_vec_check  <- NA_real_
+  keep_d   <- which(!is.na(agg_dyn_boot$se.egt) & agg_dyn_boot$se.egt > 1e-10)
+  egt_post <- agg_dyn_boot$egt[keep_d][agg_dyn_boot$egt[keep_d] >= 0]
+  if (length(egt_post) > 0) {
+    l_vec_simple <- simple_att_event_weights(col$gt_boot, col$panel, egt_post)
+    att_post     <- agg_dyn_boot$att.egt[match(egt_post, agg_dyn_boot$egt)]
+    l_vec_check  <- sum(l_vec_simple * att_post) - col$att
+    message(sprintf(
+      "    [fit] l_vec = (%s) reproduces the simple ATT to %.2e",
+      paste(sprintf("%.4f", l_vec_simple), collapse = ", "), abs(l_vec_check)))
   }
 
-  row_labels <- c(
-    "ATT",
-    "SE",
-    "$t$-statistic",
-    "Mean (pre-treat., USD M)",
-    "Implied effect (USD M, exp(ATT)$-$1 $\\times$ pre-treat.\\ mean)",
-    "Observations",
-    "Countries",
-    "Pre-trend $\\chi^2$",
-    "Pre-trend $p$",
-    "\\texttt{did} pre-test $p$",
-    "\\midrule Estimator",
-    "Control group",
-    "Bootstrap SE"
-  )
+  # Bootstrap covariance of the dynamic aggregation (feeds HonestDiD in 04).
+  bvc <- boot_vcov_dynamic(agg_dyn_boot, col$gt_boot, seed = 1242L)
+  message(sprintf(paste0("    [fit] bootstrap vcov: max |se_cov - se_published| / ",
+                         "se_published = %.4f"), bvc$max_rel_dev))
 
-  col_short <- sapply(outcomes, `[[`, "label")
-
-  tab_wide <- data.frame(` ` = row_labels, check.names = FALSE,
-                          stringsAsFactors = FALSE)
-
-  # Row label reflects the actual inference method: bootstrap for main spec
-  # (retain_thin = FALSE), analytical for thin-cohort robustness spec.
-  # DECISION 1: main spec uses multiplier-bootstrap; thin-cohort spec uses analytical.
-  bootstrap_row_val <- if (!retain_thin) "Yes (multiplier, 999 reps)" else "No (analytical SE)"
-
-  for (i in seq_along(outcomes)) {
-    oc  <- outcomes[[i]]
-    s   <- table_stats[[oc$var]]
-    col <- if (is.null(s)) rep("---", length(row_labels)) else c(
-      s$att_fmt, s$se_fmt, s$t_fmt,
-      s$mean_pre_fmt, s$implied_fmt,
-      s$n_obs, s$n_country,
-      s$pt_stat, s$pt_pval, s$pt_wpval_did,
-      "CS (2021)", "Never-treated", bootstrap_row_val
+  fit_obj <- list(
+    outcome        = oc$var,
+    outcome_label  = oc$label,
+    spec           = list(
+      estimator      = "CS (2021)",
+      est_method     = col$est_method,
+      control_group  = "nevertreated",
+      xformla        = "~ ge_est + log_population",
+      anticipation   = 0L,
+      base_period    = "universal",
+      cohort_rule    = "adoption cohorts with >= 5 treated units",
+      bstrap         = TRUE,
+      biters         = BITERS,
+      seed           = 1242L,
+      min_e          = -5,
+      max_e          = Inf
+    ),
+    gt_boot          = col$gt_boot,
+    gt_analytical    = col$gt_analytical,
+    agg_simple       = col$agg_simple,
+    agg_simple_analytic = col$agg_simple_analytic,
+    agg_dynamic      = agg_dyn_boot,
+    agg_group        = agg_grp_boot,
+    agg_dyn_analytic = col$agg_dyn_analytic,
+    ids              = sort(unique(col$panel$country_id)),
+    att              = col$att,
+    se               = col$se,
+    pretrend         = col$pretrend,
+    l_vec_simple     = l_vec_simple,
+    l_vec_egt        = egt_post,
+    l_vec_recon_gap  = l_vec_check,
+    boot_vcov        = bvc,
+    n_obs            = col$n_obs,
+    n_country        = col$n_country,
+    provenance       = list(
+      script       = "code/03_main_results.R",
+      created      = format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+      r_version    = R.version.string,
+      did_version  = as.character(utils::packageVersion("did"))
     )
-    tab_wide[[esc_header(col_short[i])]] <- col
-  }
-
-  xtab <- xtable(tab_wide, label = tex_label)
-  align(xtab) <- paste0("ll", paste(rep("c", length(col_short)), collapse = ""))
-
-  raw_lines <- capture.output(
-    print(xtab, include.rownames = FALSE, booktabs = TRUE,
-          sanitize.text.function = identity, size = "\\small",
-          floating = FALSE)
   )
-
-  # Degrees of freedom behind the two pre-trend columns, taken from the first
-  # outcome that produced a test (they are identical across outcomes here, as
-  # all five are estimated on the same panel).
-  first_stats <- Filter(Negate(is.null), table_stats)
-  first_pt_df       <- if (length(first_stats) == 0L) NA_integer_ else first_stats[[1L]]$pt_df
-  first_pt_df_did   <- if (length(first_stats) == 0L) NA_integer_ else first_stats[[1L]]$pt_df_did
-  first_n_country   <- if (length(first_stats) == 0L) NA_integer_ else
-    as.integer(first_stats[[1L]]$n_country)
-  # Per-column inputs for the pre-trend note: the lead window actually used,
-  # both p-values for every outcome, whether a generalized inverse was needed,
-  # and did's own reason when it returned no statistic. Nothing is hardcoded.
-  first_pt_leads    <- if (length(first_stats) == 0L) integer(0) else
-    first_stats[[1L]]$pt_leads
-  col_wpval <- vapply(first_stats, function(s)
-    if (is.null(s$pt_wpval_num)) NA_real_ else s$pt_wpval_num, numeric(1L))
-  col_pwald <- vapply(first_stats, function(s)
-    if (is.null(s$pt_pval_num)) NA_real_ else s$pt_pval_num, numeric(1L))
-  col_labels_pt <- vapply(first_stats, function(s) s$pt_label, character(1L))
-  col_ginv  <- vapply(first_stats, function(s) isTRUE(s$pt_ginv), logical(1L))
-  first_reason <- {
-    rs <- unlist(lapply(first_stats, function(s) s$pt_reason))
-    rs <- rs[!is.na(rs)]
-    if (length(rs) == 0L) NA_character_ else rs[[1L]]
-  }
-
-  est_method_label <- if (use_dr == "dr") "DR" else "OR"
-  # DECISION 1: main spec (retain_thin=FALSE) uses multiplier-bootstrap SEs;
-  # thin-cohort robustness spec (retain_thin=TRUE) uses analytical SEs.
-  se_label <- if (!retain_thin) "multiplier-bootstrap SE (999 reps, seed 1242; \\texttt{did} 2.5.0; CRS Apr.\\ 2026)" else "analytical (IF) SE; \\texttt{did} 2.5.0; CRS Apr.\\ 2026"
-
-  notes_txt <- paste0(
-    "CS\\,(2021) ", est_method_label,
-    "; WGI gov.\\ effectiveness + log population; ",
-    "never-treated control group; ", se_label, ". ",
-    wpval_reconciliation(pre_egt = first_pt_leads, df_did = first_pt_df_did,
-                         n_clusters = first_n_country, wpval_did = col_wpval,
-                         pval_wald = col_pwald, labels = col_labels_pt,
-                         wpval_reason = first_reason, ginv_used = col_ginv),
-    "Implied effects: naive back-transforms on the pre-treatment mean, not additive; ",
-    "suppressed if insignificant at 5\\%. ",
-    "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
-  )
-  source_txt <- "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
-
-  cap_title <- paste0(
-    "Effect of NAP adoption on climate finance: simple ATT across outcomes (",
-    caption_spec, ")"
-  )
-
-  out_path <- file.path(dir_tabs, "att_combined_wide.tex")
-  write_tex_float(out_path, cap_title, tex_label, raw_lines, notes_txt, source_txt)
-
-  invisible(table_stats)
+  fit_path <- here("output", "fits", paste0("headline_", stem, "_dr_bs.rds"))
+  saveRDS(fit_obj, fit_path)
+  message("    [fit] Saved: ", fit_path)
+  invisible(fit_path)
 }
 
 # ==============================================================================
-# SECTION 9. §19b combined cohort plot — cohorts_DROPPED half
+# SECTION 9. Helper: make_cohort_plot() — Figure C.3 (called in Section 10b)
 # ==============================================================================
 
-make_cohort_plot <- function(results_group, outcomes, dir_figs,
-                              spec_label, use_bstrap) {
+make_cohort_plot <- function(results_group, outcomes, dir_figs, spec_label) {
 
   group_all <- bind_rows(results_group) %>%
     mutate(
-      outcome = factor(outcome, levels = sapply(outcomes, `[[`, "label")),
+      outcome = factor(outcome, levels = vapply(outcomes, `[[`, character(1L), "label")),
       cohort  = as.integer(cohort)
     ) %>%
     filter(!is.na(ATT))
 
-  if (nrow(group_all) == 0) {
-    message("No cohort ATT data for: ", spec_label); return(invisible(NULL))
-  }
+  if (nrow(group_all) == 0) stop("No cohort ATT data for: ", spec_label)
 
-  palette_vec <- setNames(sapply(outcomes, `[[`, "color"),
-                           sapply(outcomes, `[[`, "label"))
+  palette_vec <- setNames(vapply(outcomes, `[[`, character(1L), "color"),
+                           vapply(outcomes, `[[`, character(1L), "label"))
   dodge_w <- 0.6
 
   p <- ggplot(group_all,
@@ -1435,15 +754,6 @@ make_cohort_plot <- function(results_group, outcomes, dir_figs,
   invisible(p)
 }
 
-# cohorts_dropped cohort plot (main spec)
-make_cohort_plot(
-  results_group = res_main$group,
-  outcomes      = outcomes,
-  dir_figs      = file.path(here("output", "figures"), "cohorts_dropped"),
-  spec_label    = "Cohorts ≥ 5 units (bootstrap SE)",
-  use_bstrap    = TRUE
-)
-
 # ==============================================================================
 # SECTION 10. §19c combined wide table — cohorts_DROPPED half
 # Seed rule (reproduces the published SEs): set.seed(1242) in make_wide_table before estimator loop.
@@ -1456,37 +766,93 @@ make_wide_table(
   outcomes      = outcomes,
   dir_tabs      = file.path(here("output", "tables"), "cohorts_dropped"),
   tex_label     = "tab:combined_wide_main",
-  caption_spec  = "cohorts $\\geq 5$ units, DR + multiplier-bootstrap SE"
+  caption_spec  = "cohorts $\\geq 5$ units, DR + multiplier-bootstrap SE",
+  after_column  = store_headline_fit
 )
 
 # ==============================================================================
-# SECTION 10b. Reconciliation: the figure fit against the stored fits
-# The event-study and cohort figures (Figures 2 and B.4) are drawn from a second
-# pass over the same specification, needed only because they display
-# SIMULTANEOUS confidence bands (cband = TRUE) while the stored fits use
-# cband = FALSE. Point estimates cannot differ -- the multiplier bootstrap
-# affects only standard errors -- so this is asserted rather than assumed, and
-# the standard-error gap between the two draws is printed so that the size of
-# the simulation noise is on the record.
+# SECTION 10b. Figures 2 and C.3, drawn from the stored fits
+# Both figures read the aggregations store_headline_fit() saved in output/fits/.
+# Figure 2 uses the stored agg_dynamic draw, the same draw behind the
+# event-time SEs quoted in the text and the HonestDiD inputs; Figure C.3 uses
+# the stored agg_group draw. (Table 2's SE is the agg_simple draw.) There is
+# no second aggte() call: aggte() re-runs the bootstrap, so a second call on
+# the same fit reports different SEs. The intervals are simultaneous (sup-t)
+# 95% bands: ATT +/- crit x stored SE, with crit from sup_t_crit() on the stored
+# influence functions (what cband = TRUE would give, up to the RNG draw). One
+# band family per outcome curve: uniform over that outcome's event times
+# (Figure 2) or cohorts (Figure C.3), not jointly over the five outcomes.
 # ==============================================================================
 
-message("\n=== Section 10b: figure fit vs stored fit reconciliation ===\n")
+message("\n=== Section 10b: Figures 2 and C.3 from the stored fits ===\n")
 
-for (oc in outcomes) {
-  stem <- fit_stem_map[[oc$var]]
-  if (is.na(stem)) next
-  fit_path <- here("output", "fits", paste0("headline_", stem, "_dr_bs.rds"))
-  if (!file.exists(fit_path)) next
-  stored <- readRDS(fit_path)
-  fig    <- res_main$simple[[oc$var]]
-  if (is.null(fig) || is.null(stored$att)) next
-  # The figure pass rounds its stored ATT to 4 decimals, so compare at that
-  # tolerance; the SE gap is reported, not asserted.
-  stopifnot(abs(fig$ATT - round(stored$att, 4)) < 1e-9)
-  message(sprintf(paste0("  %-38s ATT identical (%.4f) | SE figure draw %.4f ",
-                         "vs stored %.4f (gap %+.4f)"),
-                  oc$label, fig$ATT, fig$SE, stored$se, fig$SE - stored$se))
+dir_figs_main   <- here("output", "figures", "cohorts_dropped")
+results_dynamic <- vector("list", length(outcomes))
+results_group   <- vector("list", length(outcomes))
+for (i in seq_along(outcomes)) {
+  oc     <- outcomes[[i]]
+  stored <- readRDS(here("output", "fits",
+                         paste0("headline_", fit_stem_map[[oc$var]], "_dr_bs.rds")))
+  d <- stored$agg_dynamic
+  g <- stored$agg_group
+  stopifnot(!is.null(d), !is.null(g))
+  cv_d <- sup_t_crit(d$inf.function$dynamic.inf.func.e, d$se.egt, biters = BITERS)
+  cv_g <- sup_t_crit(g$inf.function$selective.inf.func.g, g$se.egt, biters = BITERS)
+  message(sprintf("  Fig 2 sup-t crit (%s): %.4f | Fig C.3 sup-t crit (%s): %.4f",
+                  oc$label, cv_d, oc$label, cv_g))
+  results_dynamic[[i]] <- data.frame(
+    outcome = oc$label, event_time = d$egt, ATT = d$att.egt,
+    Lower = d$att.egt - cv_d * d$se.egt,
+    Upper = d$att.egt + cv_d * d$se.egt)
+  results_group[[i]] <- data.frame(
+    outcome = oc$label, cohort = g$egt, ATT = g$att.egt,
+    Lower = g$att.egt - cv_g * g$se.egt,
+    Upper = g$att.egt + cv_g * g$se.egt)
+  # Cohort-level ATTs quoted in the text (Figure C.3 plots them).
+  message(sprintf("  Cohort ATTs [%s]: %s", oc$label,
+                  paste(sprintf("%d %.4f (%.4f)", as.integer(g$egt), g$att.egt, g$se.egt),
+                        collapse = "; ")))
 }
+
+# --- Figure 2: combined event-study overlay ---
+outcome_levels <- vapply(outcomes, `[[`, character(1L), "label")
+palette_vec    <- setNames(vapply(outcomes, `[[`, character(1L), "color"), outcome_levels)
+dynamic_all    <- bind_rows(results_dynamic) %>%
+  mutate(outcome = factor(outcome, levels = outcome_levels))
+dodge_w <- 0.4
+
+p_combined <- ggplot(dynamic_all,
+                     aes(x = event_time, y = ATT,
+                         colour = outcome, shape = outcome, group = outcome)) +
+  geom_hline(yintercept = 0, colour = "grey50", linetype = "dashed") +
+  geom_vline(xintercept = -0.5, colour = "grey30", linetype = "dotted") +
+  geom_linerange(aes(ymin = Lower, ymax = Upper),
+                 position = position_dodge(width = dodge_w),
+                 linewidth = 0.6, alpha = 0.8, na.rm = TRUE) +
+  geom_point(size = 2.5, position = position_dodge(width = dodge_w)) +
+  scale_x_continuous(breaks = seq(min(dynamic_all$event_time), max(dynamic_all$event_time))) +
+  scale_colour_manual(values = palette_vec) +
+  scale_shape_manual(values = c(16, 17, 15, 18, 8)) +
+  # No title, subtitle, or caption — those go in LaTeX \caption{}
+  labs(title = NULL, subtitle = NULL, caption = NULL,
+       x = "Years relative to NAP adoption", y = "ATT estimate",
+       colour = NULL, shape = NULL) +
+  theme_minimal() +
+  theme(text             = element_text(family = "serif", size = 12),
+        legend.position  = "bottom",
+        legend.text      = element_text(size = 10),
+        panel.grid.minor = element_blank())
+ggsave(file.path(dir_figs_main, "did_combined_es_wgi.png"),
+       p_combined, width = 12, height = 7, dpi = 300)
+message("Saved: ", file.path(dir_figs_main, "did_combined_es_wgi.png"))
+
+# --- Figure C.3: ATT by adoption cohort ---
+make_cohort_plot(
+  results_group = results_group,
+  outcomes      = outcomes,
+  dir_figs      = dir_figs_main,
+  spec_label    = "Cohorts >= 5 units (stored bootstrap fits)"
+)
 
 # ==============================================================================
 # SECTION 11. Extensive margin: 1{adaptation commitments > 0}
@@ -1504,7 +870,7 @@ message("\n=== Section 11: extensive-margin ATT ===\n")
 
 did_panel_ext <- did_panel_tab_main %>%
   mutate(any_adapt = if_else(is.na(commitments), NA_integer_,
-                             as.integer(commitments > 0)))
+                             as.integer(crs_positive(commitments))))
 
 n_ext_obs <- sum(!is.na(did_panel_ext$any_adapt))
 message(sprintf("  Extensive-margin panel: %d rows with a non-missing indicator; ",
@@ -1532,27 +898,23 @@ gt_ext <- tryCatch(
   error = function(e) { message("  att_gt (bootstrap) failed: ",
                                 conditionMessage(e)); NULL })
 
-if (is.null(gt_ext)) {
-  message("  Extensive-margin estimation failed — table not written.")
+if (is.null(gt_ext) || is.null(gt_ext_analytical)) {
+  stop("Extensive-margin estimation failed: no table written.")
 } else {
   agg_s_ext <- aggte(gt_ext, type = "simple",  na.rm = TRUE)
   agg_d_ext <- aggte(gt_ext, type = "dynamic", na.rm = TRUE, min_e = -5, max_e = Inf)
-  agg_d_ext_analytical <- if (!is.null(gt_ext_analytical))
-    tryCatch(aggte(gt_ext_analytical, type = "dynamic", na.rm = TRUE,
-                   min_e = -5, max_e = Inf), error = function(e) NULL) else NULL
+  agg_d_ext_analytical <- aggte(gt_ext_analytical, type = "dynamic", na.rm = TRUE,
+                                min_e = -5, max_e = Inf)
 
   att_ext <- agg_s_ext$overall.att
   se_ext  <- agg_s_ext$overall.se
   t_ext   <- att_ext / se_ext
   stars_ext <- if (abs(t_ext) > 2.576) "***" else if (abs(t_ext) > 1.960) "**" else
                if (abs(t_ext) > 1.645) "*" else ""
-  pt_ext <- if (!is.null(agg_d_ext_analytical))
-    compute_pretrend_test(agg_d_ext_analytical, gt_ext_analytical) else
-    list(stat = NA_real_, pval = NA_real_, df = 0L,
-         W_did = NA_real_, Wpval_did = NA_real_, df_did = NA_integer_)
+  pt_ext <- compute_pretrend_test(agg_d_ext_analytical, gt_ext_analytical)
 
-  # MDE at 80% power, 5% two-sided (the constant is z_{0.975} + z_{0.80}).
-  mde_ext <- (qnorm(0.975) + qnorm(0.80)) * se_ext
+  # MDE at 80% power, 5% two-sided.
+  mde_ext <- mde(se_ext)
   message(sprintf("  Extensive-margin ATT = %.4f%s (SE = %.4f, t = %.3f) | MDE = %.4f",
                   att_ext, stars_ext, se_ext, t_ext, mde_ext))
 
@@ -1594,13 +956,14 @@ if (is.null(gt_ext)) {
   notes_ext <- paste0(
     "Outcome: $1\\{$adaptation commitments $>0\\}$. CS\\,(2021) DR; WGI GE + log ",
     "population; headline specification; boot SE (", BITERS,
-    " reps, seed 1242). Panel B: dynamic aggregation, $e \\in [-5, 3]$ ($e=-1$ ",
-    "omitted, base period). ",
+    " reps, seed 1242). Panel B: dynamic aggregation, $e \\in [",
+    paste(range(as.integer(agg_d_ext$egt[keep_ext])), collapse = ", "),
+    "]$ ($e=-1$ omitted, base period). ",
     wpval_reconciliation(pre_egt = pt_ext$leads, df_did = pt_ext$df_did,
                          n_clusters = n_cty_ext, wpval_did = pt_ext$Wpval_did,
                          pval_wald = pt_ext$pval,
                          wpval_reason = pt_ext$wpval_reason,
-                         ginv_used = pt_ext$ginv_used),
+                         ginv_used = pt_ext$ginv_used, df = pt_ext$df),
     "Outcome $=1$ for any positive marked amount, however small. ",
     "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
   )

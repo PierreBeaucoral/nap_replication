@@ -24,10 +24,12 @@
 #   output/tables/model_tests/lemma2_size.tex     (tab:lemma2_size)
 #   output/tables/model_tests/alpha_half.tex      (tab:alpha_half)
 #   output/figures/model_tests/fig_lemma2_size.png
-#   -> copied to paper/Tables/model_tests/ and paper/Figures/model_tests/
+#   -> copied to paper/Tables/model_tests/ and paper/Figures/model_tests/ when a
+#      paper/ folder exists
 #
-# This script is standalone (not called by run_all.R) and self-contained given
-# that 01_prepare_data.R has produced data/processed/simple_panel_wgi.csv.
+# Stage 10 of run_all.R. Reads data/processed/simple_panel_wgi.csv and the
+# headline fits that 03_main_results.R stores in output/fits/ (the main-spec
+# total and non-adaptation ATTs of Table A.2 are read from them, not re-estimated).
 # ==============================================================================
 
 # ============================================================
@@ -41,7 +43,7 @@
 #                        |                       | adaptation pool
 # $\omega_i = B_i^*/B$  | omega_i               | pre-treatment (2009-2012 mean)
 #                        |                       | share of commitments_all across
-#                        |                       | the 144-panel countries
+#                        |                       | the full-panel countries
 # $s_i^*(\alpha_i)$     | s_i                   | within-country adaptation share,
 #                        |                       | commitments / commitments_all
 # $\alpha_i$             | (not observed)       | proxied via sign(s_i - 0.5), exact
@@ -71,8 +73,13 @@ if (utils::packageVersion("did") < "2.5.0") {
 }
 
 Sys.setenv(RGL_USE_NULL = "TRUE")  # headless-safe; project convention, no rgl-dependent pkg used here
+source(here("code", "functions", "read_headline_fit.R"))  # read_headline_fit()
+source(here("code", "functions", "make_country_id.R"))    # make_country_id()
 
 set.seed(20240601)  # global seed — local set.seed(1242) calls follow each bootstrap fit
+
+# Multiplier-bootstrap replications (the pipeline's single BITERS constant).
+BITERS <- 999L
 
 # -----------------------------------------------------------------------
 # Output directories
@@ -81,6 +88,9 @@ dir_tabs <- here("output", "tables",  "model_tests")
 dir_figs <- here("output", "figures", "model_tests")
 dir.create(dir_tabs, recursive = TRUE, showWarnings = FALSE)
 dir.create(dir_figs, recursive = TRUE, showWarnings = FALSE)
+# A failed run must not leave the previous run's exhibits in place: they are
+# deleted before anything is estimated, and an estimation failure stops the stage.
+unlink(list.files(c(dir_tabs, dir_figs), pattern = "\\.(tex|png|pdf)$", full.names = TRUE))
 
 has_paper  <- dir.exists(here("paper"))  # FALSE in the stand-alone replication package
 paper_tabs <- here("paper", "Tables",  "model_tests")
@@ -91,12 +101,10 @@ if (has_paper) {
 }
 
 # ==============================================================================
-# SECTION 1. Helpers (copied/adapted from code/03_main_results.R and
-# code/05_heterogeneity.R per project convention — kept local, no shared
-# functions/ directory in this repo).
+# SECTION 1. Helpers (table and test helpers adapted from 03/05; the pre-trend
+# test and the fit reader are sourced from code/functions/).
 # ==============================================================================
 
-`%||%` <- function(a, b) if (!is.null(a)) a else b
 
 # canonical pre-trend wording — keep byte-identical across scripts
 PRETREND_NOTE_AGG <- function(min_e, max_e, k) sprintf(
@@ -154,56 +162,6 @@ write_tex_float <- function(out_path, caption_title, label,
   invisible(out_path)
 }
 
-# --- compute_pretrend_test(): identical to 03's revised version -------------
-# Joint Wald test on pre-treatment event-time ATTs, using the true dynamic-
-# aggregation influence-function covariance (crossprod(IF)/n^2), read from
-# agg_d$inf.function$dynamic.inf.func.e. did's own gt_obj$W / gt_obj$Wpval
-# (group-time pre-test) is captured alongside for comparison.
-compute_pretrend_test <- function(agg_d, gt_obj = NULL) {
-  keep    <- which(!is.na(agg_d$se.egt) & agg_d$se.egt > 1e-10)
-  pre_pos <- which(agg_d$egt[keep] < 0)
-  if (length(pre_pos) == 0)
-    return(list(stat = NA_real_, pval = NA_real_, df = 0L,
-                W_did = NA_real_, Wpval_did = NA_real_))
-
-  pre_beta <- agg_d$att.egt[keep][pre_pos]
-
-  IF <- agg_d$inf.function$dynamic.inf.func.e
-  stopifnot(is.matrix(IF), ncol(IF) == length(agg_d$egt))
-  n          <- nrow(IF)
-  sigma_full <- crossprod(IF) / n^2
-  # Guard: catches IF/egt column misalignment (would silently corrupt every
-  # downstream pre-trend test) by cross-checking the covariance diagonal
-  # against did's own agg_d$se.egt.
-  stopifnot(max(abs(sqrt(diag(sigma_full)) - agg_d$se.egt), na.rm = TRUE) < 1e-6)
-  sigma_pre  <- sigma_full[keep, keep][pre_pos, pre_pos, drop = FALSE]
-
-  inv_sigma_pre <- tryCatch(
-    solve(sigma_pre),
-    error = function(e) {
-      message("compute_pretrend_test: pre-treatment covariance is singular — ",
-              "using MASS::ginv() generalized inverse instead of a direct solve()")
-      MASS::ginv(sigma_pre)
-    }
-  )
-  W <- as.numeric(t(pre_beta) %*% inv_sigma_pre %*% pre_beta)
-
-  W_did     <- NA_real_
-  Wpval_did <- NA_real_
-  if (!is.null(gt_obj)) {
-    if (!is.null(gt_obj$W))     W_did     <- as.numeric(gt_obj$W)
-    if (!is.null(gt_obj$Wpval)) Wpval_did <- as.numeric(gt_obj$Wpval)
-  }
-
-  list(
-    stat      = round(W, 3),
-    pval      = round(pchisq(W, df = length(pre_pos), lower.tail = FALSE), 3),
-    df        = length(pre_pos),
-    W_did     = if (is.na(W_did))     NA_real_ else round(W_did, 3),
-    Wpval_did = if (is.na(Wpval_did)) NA_real_ else round(Wpval_did, 3)
-  )
-}
-
 # --- att_difference_test(): identical to 05's helper ------------------------
 #' Wald test that two subgroup ATTs are equal.
 #' Disjoint-sample independence: Var(theta_a - theta_b) = Var(theta_a) + Var(theta_b).
@@ -223,10 +181,13 @@ att_difference_test <- function(stats_a, stats_b) {
   list(diff = diff, se = se_diff, z = z, pval = pval)
 }
 
-# --- fit_subgroup_att(): mirrors 05's make_het_wide_table() convention ------
-# est_method = "dr" if the subgroup has >= 40 treated units, else "reg";
-# bstrap = FALSE always (analytical / influence-function SE), not-yet-treated
-# controls. Matches code/05_heterogeneity.R l.596-640 exactly.
+# --- fit_subgroup_att(): subgroup fit for the Lemma-2 size split ------------
+# est_method = "dr" if the subgroup has >= 40 treated units, else "reg" (05's
+# rule), not-yet-treated controls. SEs: multiplier bootstrap (BITERS reps,
+# clustered by recipient), seeded with 1242 immediately before the fit as in
+# 05's make_het_wide_table(). The fit and its simple aggregation run inside
+# withr::with_seed(), so the reported SE is ONE bootstrap draw (the aggte()
+# call that produces it) and no random draw later in this script moves.
 fit_subgroup_att <- function(panel_g, outcome_var, thin_cohorts_vec,
                               xformla = ~ ge_est + log_population,
                               control_group = "notyettreated") {
@@ -235,96 +196,33 @@ fit_subgroup_att <- function(panel_g, outcome_var, thin_cohorts_vec,
 
   n_treated_g <- n_distinct(panel_g$country_id[panel_g$cohort_year > 0])
   n_cohorts_g <- n_distinct(panel_g$cohort_year[panel_g$cohort_year > 0])
-  if (n_cohorts_g < 2L) {
-    message("  fit_subgroup_att: fewer than 2 treated cohorts — skipping")
-    return(list(att = NA_real_, se = NA_real_, n_treated = n_treated_g,
-                n_obs = NA_integer_, n_country = NA_integer_,
-                em = NA_character_, agg_d = NULL, pretrend = NULL))
-  }
+  if (n_cohorts_g < 2L)
+    stop("fit_subgroup_att(", outcome_var, "): fewer than 2 treated cohorts")
 
   em_g <- if (n_treated_g >= 40L) "dr" else "reg"
   message(sprintf("  fit_subgroup_att[%s]: N treated = %d -> est_method = %s",
                   outcome_var, n_treated_g, em_g))
 
-  gt_g <- tryCatch(
-    att_gt(
-      yname = outcome_var, tname = "year", idname = "country_id",
-      gname = "cohort_year", xformla = xformla, data = panel_g,
-      est_method = em_g, bstrap = FALSE, cband = FALSE,
-      control_group = control_group, anticipation = 0,
-      base_period = "universal", panel = TRUE, allow_unbalanced_panel = TRUE
-    ),
-    error = function(e) { message("  att_gt failed: ", conditionMessage(e)); NULL }
-  )
-  if (is.null(gt_g)) {
-    return(list(att = NA_real_, se = NA_real_, n_treated = n_treated_g,
-                n_obs = NA_integer_, n_country = NA_integer_,
-                em = em_g, agg_d = NULL, pretrend = NULL))
-  }
-
-  agg_s <- tryCatch(aggte(gt_g, type = "simple",  na.rm = TRUE), error = function(e) NULL)
-  agg_d <- tryCatch(aggte(gt_g, type = "dynamic", na.rm = TRUE, min_e = -5, max_e = Inf),
-                    error = function(e) NULL)
-
-  att <- if (!is.null(agg_s)) agg_s$overall.att else NA_real_
-  se  <- if (!is.null(agg_s)) agg_s$overall.se  else NA_real_
-  pt  <- if (!is.null(agg_d)) tryCatch(compute_pretrend_test(agg_d), error = function(e) NULL) else NULL
-
+  agg_s <- withr::with_seed(1242L, {
+    gt_g <- tryCatch(
+      att_gt(
+        yname = outcome_var, tname = "year", idname = "country_id",
+        gname = "cohort_year", xformla = xformla, data = panel_g,
+        est_method = em_g, bstrap = TRUE, biters = BITERS, cband = FALSE,
+        control_group = control_group, anticipation = 0,
+        base_period = "universal", panel = TRUE, allow_unbalanced_panel = TRUE
+      ),
+      error = function(e) { message("  att_gt failed: ", conditionMessage(e)); NULL }
+    )
+    if (is.null(gt_g)) stop("fit_subgroup_att(", outcome_var, "): att_gt() failed")
+    aggte(gt_g, type = "simple", na.rm = TRUE)
+  })
   rows_g <- panel_g[!is.na(panel_g[[outcome_var]]), ]
 
   list(
-    att = att, se = se, n_treated = n_treated_g,
+    att = agg_s$overall.att, se = agg_s$overall.se, n_treated = n_treated_g,
     n_obs = nrow(rows_g), n_country = n_distinct(rows_g$country_id),
-    em = em_g, agg_d = agg_d, pretrend = pt
-  )
-}
-
-# --- fit_main_spec(): main-spec CS fit, matching code/03_main_results.R ----
-# bootstrap fit for the ATT (bstrap=TRUE, biters=999L) + a parallel analytical
-# (bstrap=FALSE) fit for the pre-trend Wald test. est_method="dr",
-# control_group="nevertreated", base_period="universal" (cohorts_dropped spec).
-fit_main_spec <- function(panel_in, outcome_var,
-                          xformla = ~ ge_est + log_population) {
-  stopifnot(is.data.frame(panel_in), outcome_var %in% names(panel_in))
-
-  set.seed(1242)  # Seed rule (reproduces the published SEs): immediately before each bootstrap fit
-  gt_boot <- tryCatch(
-    att_gt(
-      yname = outcome_var, tname = "year", idname = "country_id",
-      gname = "cohort_year", xformla = xformla, data = panel_in,
-      est_method = "dr", bstrap = TRUE, biters = 999L, cband = FALSE,
-      control_group = "nevertreated", anticipation = 0,
-      base_period = "universal", panel = TRUE, allow_unbalanced_panel = TRUE
-    ),
-    error = function(e) { message("  att_gt (bootstrap) failed: ", conditionMessage(e)); NULL }
-  )
-  agg_s <- if (!is.null(gt_boot))
-    tryCatch(aggte(gt_boot, type = "simple", na.rm = TRUE), error = function(e) NULL) else NULL
-
-  set.seed(1242)  # Seed rule (reproduces the published SEs): immediately before each bootstrap fit
-  gt_analytical <- tryCatch(
-    att_gt(
-      yname = outcome_var, tname = "year", idname = "country_id",
-      gname = "cohort_year", xformla = xformla, data = panel_in,
-      est_method = "dr", bstrap = FALSE, cband = FALSE,
-      control_group = "nevertreated", anticipation = 0,
-      base_period = "universal", panel = TRUE, allow_unbalanced_panel = TRUE
-    ),
-    error = function(e) { message("  att_gt (analytical) failed: ", conditionMessage(e)); NULL }
-  )
-  agg_d <- if (!is.null(gt_analytical))
-    tryCatch(aggte(gt_analytical, type = "dynamic", na.rm = TRUE, min_e = -5, max_e = Inf),
-             error = function(e) NULL) else NULL
-  pt <- if (!is.null(agg_d)) tryCatch(compute_pretrend_test(agg_d, gt_obj = gt_analytical),
-                                       error = function(e) NULL) else NULL
-
-  rows_oc <- panel_in[!is.na(panel_in[[outcome_var]]), ]
-
-  list(
-    att = if (!is.null(agg_s)) agg_s$overall.att else NA_real_,
-    se  = if (!is.null(agg_s)) agg_s$overall.se  else NA_real_,
-    n_obs = nrow(rows_oc), n_country = n_distinct(rows_oc$country_id),
-    pretrend = pt
+    em = em_g
   )
 }
 
@@ -341,7 +239,7 @@ aggregated  <- as.data.frame(aggregated)
 did_panel <- aggregated
 
 did_panel <- did_panel %>%
-  mutate(country_id = as.integer(factor(recipient_name)))
+  mutate(country_id = make_country_id(recipient_name))
 
 first_year <- min(did_panel$year)
 
@@ -380,7 +278,7 @@ if (!"share_adapt" %in% names(did_panel)) {
 did_panel_full <- did_panel
 
 stopifnot(
-  n_distinct(did_panel_full$recipient_name) >= readRDS(here("output", "fits", "headline_adaptation_dr_bs.rds"))$n_country,
+  n_distinct(did_panel_full$recipient_name) >= read_headline_fit("adaptation")$n_country,
   sum(did_panel_full$always_treated) == 0L
 )
 
@@ -399,7 +297,7 @@ message("Thin cohorts (< ", thin_threshold, " treated units, dropped): ",
 did_panel_main <- did_panel_full %>% filter(!(cohort_year %in% thin_cohorts))
 n_est_sample   <- n_distinct(did_panel_main$recipient_name)
 message(sprintf("Estimation sample (cohorts_dropped): %d countries", n_est_sample))
-stopifnot(n_est_sample == readRDS(here("output", "fits", "headline_adaptation_dr_bs.rds"))$n_country)
+stopifnot(n_est_sample == read_headline_fit("adaptation")$n_country)
 
 # ==============================================================================
 # SECTION 3. Recipient-size measure omega_i and composition share s_i
@@ -409,7 +307,7 @@ message("\n=== Section 3: omega_i and s_i construction ===\n")
 
 PRE_YEARS <- 2009:2012
 
-# --- omega_i: pre-treatment share of total commitments across the 144-panel
+# --- omega_i: pre-treatment share of total commitments across the full panel
 #     countries (proxy for B_i*/B, recipient i's share of the donor's envelope).
 #     Alternative size proxy: pre-treatment share of the global adaptation pool.
 size_measures <- did_panel_full %>%
@@ -577,15 +475,12 @@ fmt_p <- function(x) {
 }
 paren4 <- function(x) if (is.na(x)) "" else sprintf("(%.4f)", x)
 
-panel_a_rows <- character(0)
-for (oc in names(t1_outcomes)) {
+panel_a_rows <- unlist(lapply(names(t1_outcomes), function(oc) {
   f <- t1_fits[[oc]]; d <- t1_diff[[oc]]
-  panel_a_rows <- c(panel_a_rows,
-    paste0(t1_outcomes[[oc]], " & ", fmt4(f$small$att), " & ", fmt4(f$large$att),
+  c(paste0(t1_outcomes[[oc]], " & ", fmt4(f$small$att), " & ", fmt4(f$large$att),
            " & ", fmt4(d$diff), " & ", fmt4(d$se), " & ", fmt3(d$z), " & ", fmt_p(d$pval), " \\\\"),
-    paste0(" & ", paren4(f$small$se), " & ", paren4(f$large$se), " & & & & \\\\")
-  )
-}
+    paste0(" & ", paren4(f$small$se), " & ", paren4(f$large$se), " & & & & \\\\"))
+}))
 
 panel_a_n <- paste0(
   "\\quad $N$ treated (small/large) & ", t1_fits[[1]]$small$n_treated, " & ",
@@ -627,15 +522,25 @@ lemma2_tabular <- c(
   "\\end{tabular}"
 )
 
+# Estimator actually used (fit_subgroup_att() switches OR -> DR at 40 treated).
+em_label <- function(fits) {
+  em <- unique(vapply(fits, `[[`, character(1L), "em"))
+  if (identical(em, "reg")) "OR" else if (identical(em, "dr")) "DR" else
+    "OR (DR in cells with at least 40 treated recipients)"
+}
+em_a <- em_label(unlist(lapply(t1_fits, function(f) list(f$small, f$large)), recursive = FALSE))
+em_b <- em_label(t1_terc_fits)
 notes_lemma2 <- paste0(
   "$\\omega_i$ = pre-treatment (", min(PRE_YEARS), "--", max(PRE_YEARS),
-  ") mean share of commitments\\_all across the ", nrow(size_measures),
+  ") mean share of total commitments across the ", nrow(size_measures),
   "-country panel; median/terciles from the ", n_est_sample,
   "-country estimation sample (see text for the Lemma~\\ref{lem:envelope_elast} prediction). Panel~A: CS\\,(2021) ",
-  "OR, analytical (IF) SE, not-yet-treated controls, cohorts $<$ ", thin_threshold,
+  em_a, ", not-yet-treated controls, cohorts $<$ ", thin_threshold,
   " dropped; difference row SE $=\\sqrt{se_a^2+se_b^2}$ (disjoint, country-clustered), ",
-  "$z$ vs.\\ standard normal, two-sided $p$. Panel~B: same specification by tercile, ",
-  "log(total commitments) only"
+  "$z$ vs.\\ standard normal, two-sided $p$. Panel~B: same specification",
+  if (identical(em_b, em_a)) "" else paste0(" (", em_b, ")"), " by tercile, ",
+  "log(total commitments) only. Multiplier-bootstrap SE (", BITERS,
+  " reps, clustered by recipient, seed 1242)"
 )
 source_lemma2 <- "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
 
@@ -666,7 +571,8 @@ p_lemma2 <- ggplot(terc_df, aes(x = tercile, y = att)) +
   geom_pointrange(aes(ymin = lower, ymax = upper), size = 0.7, linewidth = 0.8,
                   colour = "#2E86C1") +
   labs(title = NULL, subtitle = NULL, caption = NULL,
-       x = "Tercile of pre-treatment recipient size (omega_i, share of total commitments)",
+       x = expression(paste("Tercile of pre-treatment recipient size (", omega[i],
+                            ", share of total commitments)")),
        y = "ATT \u2014 log(Total commitments)") +
   theme_minimal(base_family = "serif", base_size = 12) +
   theme(panel.grid.minor = element_blank())
@@ -681,31 +587,28 @@ message("Saved: ", file.path(dir_figs, "fig_lemma2_size.png"))
 
 message("\n=== Section 7: Test 2 (Proposition 1 footnote, sign(alpha-1/2)) ===\n")
 
-fit_env  <- fit_main_spec(did_panel_main, "lcommitments_all")
-fit_nona <- fit_main_spec(did_panel_main, "lcommitments_nonadapt")
+# Main-spec ATTs: the fits 03 stores (one fit, one SE), never re-estimated.
+fit_env  <- read_headline_fit("total")
+fit_nona <- read_headline_fit("nonadaptation")
+stopifnot(identical(fit_env$outcome, "lcommitments_all"),
+          identical(fit_nona$outcome, "lcommitments_nonadapt"),
+          identical(fit_env$ids, sort(unique(did_panel_main$country_id))),
+          identical(as.integer(fit_env$n_obs), sum(!is.na(did_panel_main$lcommitments_all))),
+          identical(as.integer(fit_nona$n_obs), sum(!is.na(did_panel_main$lcommitments_nonadapt))))
 
 message(sprintf("Main-spec ATT log(Total commitments)      = %.4f (SE = %.4f, N=%d, countries=%d)",
                 fit_env$att, fit_env$se, fit_env$n_obs, fit_env$n_country))
 message(sprintf("Main-spec ATT log(Non-adaptation commits.) = %.4f (SE = %.4f, N=%d, countries=%d)",
                 fit_nona$att, fit_nona$se, fit_nona$n_obs, fit_nona$n_country))
 
-# Sanity check against the stored 03 fit for log(total commitments) (never a
-# literal: the panel revision of 2026-09-15 moved every published value).
-ref_total <- readRDS(here("output", "fits", "headline_total_dr_bs.rds"))
-if (is.finite(fit_env$att) && abs(fit_env$att - ref_total$att) > 0.01) {
-  warning(sprintf(
-    "Reproduced ATT on lcommitments_all (%.4f) deviates from the stored 03 fit (%.4f) by more than 0.01.",
-    fit_env$att, ref_total$att))
-}
-
 t_env  <- if (is.finite(fit_env$se)  && fit_env$se  > 0) fit_env$att  / fit_env$se  else NA_real_
 t_nona <- if (is.finite(fit_nona$se) && fit_nona$se > 0) fit_nona$att / fit_nona$se else NA_real_
 
-# One-sided test of the model's prediction (H0: ATT <= 0, i.e. model-consistent;
-# H1: ATT > 0, i.e. envelope response violates the model's sign prediction).
+# One-sided test of the model's prediction (null: ATT <= 0, i.e. model-consistent;
+# alternative: ATT > 0, i.e. the envelope response violates the sign prediction).
 p_onesided_env <- if (is.na(t_env)) NA_real_ else 1 - pnorm(t_env)
 
-message(sprintf("t (log total commitments) = %.3f | one-sided p (H1: ATT>0) = %.4f",
+message(sprintf("t (log total commitments) = %.3f | one-sided p (alternative ATT>0) = %.4f",
                 t_env, p_onesided_env))
 message(sprintf("t (log non-adaptation commitments) = %.3f | two-sided p = %.4f",
                 t_nona, if (is.na(t_nona)) NA_real_ else 2 * pnorm(-abs(t_nona))))
@@ -727,8 +630,12 @@ message("Verdict (Test 2, envelope sign): ", verdict_env)
 # SECTION 8. TEST 2 — table tab:alpha_half
 # ==============================================================================
 
-pt_env  <- fit_env$pretrend  %||% list(stat = NA_real_, pval = NA_real_, df = 0L)
-pt_nona <- fit_nona$pretrend %||% list(stat = NA_real_, pval = NA_real_, df = 0L)
+pt_env  <- fit_env$pretrend
+pt_nona <- fit_nona$pretrend
+# The note's lead window and restriction count come from the two tests.
+stopifnot(identical(sort(pt_env$leads), sort(pt_nona$leads)), pt_env$df == pt_nona$df,
+          length(pt_env$leads) > 0L)
+ginv_alpha <- c(total = isTRUE(pt_env$ginv_used), `non-adaptation` = isTRUE(pt_nona$ginv_used))
 
 p_twosided_nona <- if (is.na(t_nona)) NA_real_ else 2 * pnorm(-abs(t_nona))
 
@@ -751,7 +658,7 @@ alpha_rows <- c(
   paste0("ATT & ", sprintf("%.4f", fit_env$att), " \\\\"),
   paste0("SE & ", sprintf("(%.4f)", fit_env$se), " \\\\"),
   paste0("$t$-statistic & ", fmt3(t_env), " \\\\"),
-  paste0("One-sided $p$ ($H_1$: ATT $>0$) & ", fmt_p(p_onesided_env), " \\\\"),
+  paste0("One-sided $p$ (alternative: ATT $>0$) & ", fmt_p(p_onesided_env), " \\\\"),
   paste0("Pre-trend $\\chi^2$ & ", fmt3(pt_env$stat), " \\\\"),
   paste0("Pre-trend $p$ & ", fmt_p(pt_env$pval), " \\\\"),
   "\\midrule",
@@ -777,17 +684,29 @@ alpha_tabular <- c(
   "\\end{tabular}"
 )
 
+# The note's claims are derived from the numbers behind the table.
+s_max    <- max(dist_pre$max, dist_g1$max)
+n_ge_one <- dist_pre$n_ge_half + dist_g1$n_ge_half
 notes_alpha <- paste0(
-  "$s_i = $ \\texttt{commitments}/\\texttt{commitments\\_all}, proxy for $\\alpha_i$ via ",
+  "$s_i = $ adaptation-marked commitments / total commitments of the recipient, proxy for $\\alpha_i$ via ",
   "$s_i^*=q_i/(1+q_i)$ (Lemma~\\ref{lem:monotone_s}); $\\alpha_i \\geq 0.5 \\iff s_i^* \\geq 0.5$. ",
-  "Pre-treatment $s_i$ is far below 0.5 for every recipient (max ",
-  sprintf("%.3f", max(dist_pre$max, dist_g1$max)),
-  "), so under gross substitutes the model predicts ATT $\\leq 0$ (sign chain: see text, ",
-  "Lemma~\\ref{lem:envelope_elast}). One-sided test: $H_0$: ATT $\\leq 0$ vs.\\ $H_1$: ATT $>0$. ",
-  "CS\\,(2021) DR, never-treated controls, headline specification; SE: multiplier-bootstrap ",
-  "(999 reps, seed 1242; \\texttt{did} 2.5.0; CRS Apr.\\ 2026) for the ATT, analytical fit for ",
+  if (n_ge_one == 0L)
+    paste0("Pre-treatment $s_i$ is below 0.5 for every recipient (max ", sprintf("%.3f", s_max),
+           "), so under gross substitutes the model predicts ATT $\\leq 0$ (sign chain: see text, ",
+           "Lemma~\\ref{lem:envelope_elast}). ")
+  else
+    paste0("Pre-treatment $s_i$ reaches 0.5 for some recipients (max ", sprintf("%.3f", s_max),
+           "; see the counts above and the text, Lemma~\\ref{lem:envelope_elast}). "),
+  "One-sided test of the null that the ATT is at most zero against the alternative ATT $>0$. ",
+  "CS\\,(2021) ", if (identical(fit_env$spec$est_method, "dr")) "DR" else "OR",
+  ", never-treated controls, headline specification; SE: multiplier-bootstrap ",
+  "(", fit_env$spec$biters, " reps, seed ", fit_env$spec$seed, "; \\texttt{did} ",
+  as.character(utils::packageVersion("did")), "; CRS Apr.\\ 2026) for the ATT, analytical fit for ",
   "the pre-trend Wald. ",
-  PRETREND_NOTE(-5L, -2L, pt_env$df)
+  PRETREND_NOTE_AGG(min(pt_env$leads), max(pt_env$leads), pt_env$df),
+  if (any(ginv_alpha)) paste0("; the block was singular for ",
+                              paste(names(ginv_alpha)[ginv_alpha], collapse = " and "),
+                              " commitments and a generalized inverse was used") else ""
 )
 source_alpha <- "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
 

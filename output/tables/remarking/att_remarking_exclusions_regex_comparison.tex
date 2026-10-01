@@ -1,14 +1,14 @@
 \begin{table}[H]
 \centering
-\caption{Sensitivity of the exclusion ATTs to the title/purpose flag regex fix}
+\caption{Sensitivity of the exclusion ATTs to the title and purpose flag definitions}
 \label{tab:remarking_exclusions_regex_comparison}
-% latex table generated in R 4.6.0 by xtable 1.8-8 package
-% Tue Sep 29 12:11:53 2026
+% latex table generated in R 4.6.1 by xtable 1.8-8 package
+% Thu Oct  1 12:44:49 2026
 \begingroup\small
 \adjustbox{max width=\textwidth}{%
 \begin{tabular}{lcccccc}
   \toprule
-  & Excl. title-flagged [old regex] & Excl. title-flagged [new regex] & Excl. purpose-flagged [old codes] & Excl. purpose-flagged [new codes] & Excl. all three [old] & Excl. all three [new] \\ 
+  & Excl. title-flagged [broad] & Excl. title-flagged [narrow] & Excl. purpose-flagged [broad] & Excl. purpose-flagged [narrow] & Excl. all three [broad] & Excl. all three [narrow] \\ 
   \midrule
 ATT & 0.2967** & 0.2986** & 0.3482** & 0.3222** & 0.4073** & 0.3802** \\ 
   SE & (0.1272) & (0.1275) & (0.1471) & (0.1440) & (0.1581) & (0.1639) \\ 
@@ -25,7 +25,7 @@ ATT & 0.2967** & 0.2986** & 0.3482** & 0.3222** & 0.4073** & 0.3802** \\
 \endgroup
 \par\vspace{4pt}
 \begin{minipage}{\linewidth}\footnotesize
-Notes: CS\,(2021) DR, same specification/sample as Table~\ref{tab:remarking_exclusions}. SE: multiplier-bootstrap (999 reps, seed 1242; \texttt{did} 2.5.0; CRS Apr.\ 2026). ``[old]'' = pre-fix broad flags: title matches ``national adaptation plan''/``NAP''/``readiness''/``NAP-''/``adaptation plan''/``planning'' (bare); purpose $\in\{41010,15110,43010\}$. ``[new]'' reproduces Table~\ref{tab:remarking_exclusions}. Fund-flagged cells omitted (unchanged by this fix). * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Notes: CS\,(2021) DR, same specification/sample as Table~\ref{tab:remarking_exclusions}. SE: multiplier-bootstrap (999 reps, seed 1242; \texttt{did} 2.5.0; CRS Apr.\ 2026). ``[broad]'' = broad flag definitions: title matches ``national adaptation plan''/``NAP''/``readiness''/``NAP-''/``adaptation plan''/``planning'' (bare); purpose $\in\{41010,15110,43010\}$. ``[narrow]'' = the definitions of Table~\ref{tab:remarking_exclusions}, whose estimates it reproduces. Fund-flagged cells omitted (the fund flag is the same under both definitions). * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
 Source: OECD CRS activity-level microdata (Rio adaptation marker 1 or 2); UNFCCC NAP Central.
 \end{minipage}
 \end{table}

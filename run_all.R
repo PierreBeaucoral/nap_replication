@@ -55,14 +55,22 @@
 #   NAP_START_AT=<script file>     resume from that stage (earlier stages are
 #                                  assumed complete), e.g.
 #                                  NAP_START_AT=07_principal_and_share.R
+#                                  Stages 04-14 read output/fits/, which stages
+#                                  03, 04 and 07 write and which is not shipped:
+#                                  run once from 03 or earlier before resuming
+#                                  later.
+#                                  Not combinable with NAP_FROM_RAW=1 unless it
+#                                  names stage 01 (the rebuild starts at 01).
 #   NAP_SKIP_RI=1                  skip stage 08 when its cached permutation
 #                                  draws (output/tables/randomization/ri_draws.csv)
-#                                  exist. Without this flag stage 08 still uses
-#                                  the cached draws and only rebuilds its table
-#                                  and figure; delete the CSV to force the
-#                                  full ~29-minute recompute.
+#                                  exist. Without this flag stage 08 uses the
+#                                  cached draws only if they match the current
+#                                  panel and assignment design (hash check) and
+#                                  otherwise recomputes them (8-29 min); delete
+#                                  the CSV to force the recompute.
 #
 # OUTPUT
+#   output/logs/<stage>.log  console output of each stage (overwritten per run)
 #   data/processed/          analysis panels
 #   output/tables/           LaTeX tables (.tex)
 #   output/figures/          figures (.png, .pdf)
@@ -98,6 +106,13 @@ shipped_dir    <- here("data", "processed_shipped")
 start_at <- Sys.getenv("NAP_START_AT", "")
 if (nzchar(start_at) && !start_at %in% scripts) {
   stop("NAP_START_AT is not a pipeline stage: ", start_at)
+}
+if (from_raw && nzchar(start_at) && !identical(start_at, scripts[1L])) {
+  # From-raw mode empties data/processed/ and rebuilds it with stage 01;
+  # skipping 01 would leave the later stages without their input panels.
+  stop("NAP_FROM_RAW=1 rebuilds data/processed/ from stage 01 and cannot be combined ",
+       "with NAP_START_AT=", start_at, ". Unset NAP_START_AT, or drop NAP_FROM_RAW to ",
+       "resume on the existing panels.")
 }
 if (!nzchar(start_at) && !from_raw) start_at <- "02_descriptive_stats.R"
 
@@ -181,7 +196,8 @@ compare_rebuilt <- function(done) {
   }
   res
 }
-comparison <- character(0)  # file -> PASS/FAIL result, filled in from-raw mode
+# file -> PASS/FAIL result per stage, filled in from-raw mode (one slot per stage)
+comparison_by_stage <- vector("list", length(scripts))
 
 # ---- From-raw mode: checksums, then set the shipped panels aside -------------
 if (from_raw) {
@@ -204,6 +220,36 @@ if (from_raw) {
 # ---- Run the pipeline stages in order, each in a fresh R process -------------
 # Rscript (not source()) keeps stages independent: no objects leak between
 # stages, each script's own seeds apply, and a failing stage stops the run.
+# Each stage's console output (messages included) is also written to
+# output/logs/<stage>.log, the record that numbers quoted in the text but shown
+# in no exhibit are traced to.
+log_dir <- here("output", "logs")
+dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
+
+# The Rscript of the R running this script, not whichever one is first on the
+# PATH (Rscript is often not on the PATH on Windows, and a machine may have
+# several R installations).
+rscript <- file.path(R.home("bin"),
+                     if (.Platform$OS.type == "windows") "Rscript.exe" else "Rscript")
+
+#' Run one stage with Rscript, showing its output and copying it to a log file
+#'
+#' @param script_path path to the stage script
+#' @param log_path path of the stage log (overwritten)
+#' @return the stage's exit status
+run_stage <- function(script_path, log_path) {
+  if (.Platform$OS.type == "unix") {
+    # pipefail: the status is Rscript's, not tee's.
+    cmd <- sprintf("set -o pipefail; %s %s 2>&1 | tee %s",
+                   shQuote(rscript), shQuote(script_path), shQuote(log_path))
+    system2("bash", c("-c", shQuote(cmd)))
+  } else {  # no tee: write the log, then show it
+    status <- system2(rscript, shQuote(script_path), stdout = log_path, stderr = log_path)
+    cat(readLines(log_path, warn = FALSE), sep = "\n")
+    status
+  }
+}
+
 n_steps <- length(scripts) + 1L
 for (i in seq_along(scripts)) {
   script <- scripts[i]
@@ -223,7 +269,8 @@ for (i in seq_along(scripts)) {
 
   message(sprintf("\n[%d/%d] running %s ...", i, n_steps, script))
   t_stage <- Sys.time()
-  status <- system2("Rscript", shQuote(file.path(here("code"), script)))
+  status <- run_stage(file.path(here("code"), script),
+                      file.path(log_dir, sub("\\.R$", ".log", script)))
   if (status != 0L) {
     stop(sprintf("Stage failed (exit status %d): %s\n", status, script),
          "Fix the error above, then re-run run_all.R.")
@@ -232,9 +279,10 @@ for (i in seq_along(scripts)) {
                   as.numeric(difftime(Sys.time(), t_stage, units = "mins"))))
 
   if (from_raw && dir.exists(shipped_dir)) {
-    comparison <- c(comparison, compare_rebuilt(names(comparison)))
+    comparison_by_stage[[i]] <- compare_rebuilt(names(unlist(comparison_by_stage)))
   }
 }
+comparison <- c(character(0), unlist(comparison_by_stage))
 
 if (from_raw && dir.exists(shipped_dir)) {
   shipped_all <- list.files(shipped_dir, recursive = TRUE, pattern = "\\.csv(\\.gz)?$")
@@ -262,15 +310,12 @@ fix_result_tables <- function(dir) {
     if (any(grepl("begin{longtable}", txt, fixed = TRUE))) next
     txt <- sub("\\\\begin\\{table\\}\\[[A-Za-z!]+\\]", "\\\\begin{table}[H]", txt)
     if (!any(grepl("adjustbox", txt, fixed = TRUE))) {
-      out <- character(0)
-      for (ln in txt) {
-        if (grepl("^\\\\begin\\{tabular\\}", ln)) {
-          out <- c(out, "\\adjustbox{max width=\\textwidth}{%", ln)
-        } else if (grepl("^\\\\end\\{tabular\\}", ln)) {
-          out <- c(out, ln, "}")
-        } else out <- c(out, ln)
-      }
-      txt <- out
+      # Vectorised: the wrapper lines are joined to their tabular line with
+      # "\n", which writeLines() writes out as separate lines.
+      is_open  <- grepl("^\\\\begin\\{tabular\\}", txt)
+      is_close <- grepl("^\\\\end\\{tabular\\}", txt)
+      txt[is_open]  <- paste0("\\adjustbox{max width=\\textwidth}{%\n", txt[is_open])
+      txt[is_close] <- paste0(txt[is_close], "\n}")
     }
     writeLines(txt, f)
   }

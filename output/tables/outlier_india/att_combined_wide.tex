@@ -2,34 +2,29 @@
 \centering
 \caption{Effect of NAP adoption on climate finance: simple ATT across outcomes (main specification excluding India (largest recipient))}
 \label{tab:combined_wide_noindia}
-% latex table generated in R 4.6.0 by xtable 1.8-8 package
-% Tue Sep 29 11:45:42 2026
+% latex table generated in R 4.6.1 by xtable 1.8-8 package
+% Thu Oct  1 12:41:02 2026
 \begingroup\small
 \adjustbox{max width=\textwidth}{%
 \begin{tabular}{lccccc}
   \toprule
-  & log(Adaptation commitments) & Adaptation share (\% of global) & log(Total commitments) & log(Non-adaptation commitments) & log(Adaptation disbursements) \\ 
+  & \makecell{log(Adaptation \\ commitments)} & \makecell{Adaptation share \\ (\% of global)} & \makecell{log(Total \\ commitments)} & \makecell{log(Non-adaptation \\ commitments)} & \makecell{log(Adaptation \\ disbursements)} \\ 
   \midrule
 ATT & 0.3050** & 0.3058** & 0.0737 & 0.0420 & 0.1357 \\ 
   SE & (0.1278) & (0.1422) & (0.0694) & (0.0689) & (0.1130) \\ 
   $t$-statistic & 2.386 & 2.151 & 1.062 & 0.609 & 1.200 \\ 
-  Mean (pre-treat., USD M) & 104.2 & 0.80 pp & 1907.8 & 1803.6 & 70.9 \\ 
-  Implied effect (USD M, exp(ATT)$-$1 $\times$ pre-treat.\ mean) & 37.2 & --- & --- & --- & --- \\ 
-  Observations & 1,914 & 1,914 & 1,914 & 1,914 & 1,914 \\ 
-  Countries & 125 & 125 & 125 & 125 & 125 \\ 
+  Pre-treatment mean & 104.2 & 0.80 pp & 1907.8 & 1803.6 & 70.9 \\ 
+  Implied effect (USD M) & 37.2 & --- & --- & --- & --- \\ 
   Pre-trend $\chi^2$ & 1.733 & 3.182 & 11.543 & 9.905 & 4.144 \\ 
   Pre-trend $p$ & 0.785 & 0.528 & 0.021 & 0.042 & 0.387 \\ 
   \texttt{did} pre-test $p$ & 0.000 & 0.000 & 0.000 & 0.000 & 0.000 \\ 
-  \midrule Estimator & CS (2021) & CS (2021) & CS (2021) & CS (2021) & CS (2021) \\ 
-  Control group & Never-treated & Never-treated & Never-treated & Never-treated & Never-treated \\ 
-  Bootstrap SE & Yes (multiplier, 999 reps) & Yes (multiplier, 999 reps) & Yes (multiplier, 999 reps) & Yes (multiplier, 999 reps) & Yes (multiplier, 999 reps) \\ 
    \bottomrule
 \end{tabular}
 }
 \endgroup
 \par\vspace{4pt}
 \begin{minipage}{\linewidth}\footnotesize
-Notes: CS\,(2021) DR; WGI gov.\ effectiveness + log population; never-treated control group; multiplier-bootstrap SE (999 reps, seed 1242; \texttt{did} 2.5.0; CRS Apr.\ 2026). Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-5 \leq e \leq -2$; 4 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular. \texttt{did} pre-test $p$: \texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year (50 restrictions, 125 recipients): aggregate rejects (5\%) for log(Total commitments), log(Non-adaptation commitments) only; \texttt{did} rejects in every column. Implied effects: naive back-transforms on the pre-treatment mean, not additive; suppressed if insignificant at 5\%. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Notes: CS\,(2021) DR; WGI gov.\ effectiveness + log population; never-treated control group; multiplier-bootstrap SE (999 reps, seed 1242; \texttt{did} 2.5.0; CRS Apr.\ 2026). Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-5 \leq e \leq -2$; 4 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular. \texttt{did} pre-test $p$: \texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year (50 restrictions, 125 recipients): aggregate rejects (5\%) for log(Total commitments), log(Non-adaptation commitments) only; \texttt{did} rejects in every column. Pre-treatment mean: mean of the outcome in levels over treated recipient-years before adoption, USD M (pp for the share). Implied effect: $(\exp(\mathrm{ATT})-1) \times$ pre-treatment mean, a naive back-transform, not additive across outcomes; suppressed if the ATT is insignificant at 5\%. Every column: 1,914 observations (recipient-years), 125 countries. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
 Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
 \end{minipage}
 \end{table}

@@ -7,3 +7,7 @@ Rplots.pdf
 .RData
 .Rproj.user/
 .DS_Store
+# EM-DAT data may not be redistributed (data/raw/emdat/README.md)
+data/raw/emdat/*.csv
+data/raw/emdat/*.xlsx
+data/processed/emdat_panel.csv

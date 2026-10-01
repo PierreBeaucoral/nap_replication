@@ -6,9 +6,9 @@
 # cohort's pre-period ATT(g,t) cells are large and positive relative to its
 # 2020 base year, and (iii) how sensitive the headline is to that base year.
 #
-# Background: an exploratory diagnostic of the 2021-cohort base-year dip (not
-# part of the replication package). This script reproduces its numbers from the processed panel on
-# disk (not from a cached RDS) and turns them into publication exhibits.
+# Every number is estimated here from the processed panel, except the
+# main-specification rows, which are read from the fits stored by
+# 03_main_results.R and 07_principal_and_share.R.
 #
 # Inputs : data/processed/simple_panel_wgi.csv
 # Outputs:
@@ -17,11 +17,14 @@
 #   output/tables/base_year/base_year_sensitivity.tex    (tab:base_year_sensitivity)
 #   output/figures/base_year/fig_pretrend_cells_by_cohort.png
 #   output/figures/base_year/fig_es_full_window.png
-#   (all copied to paper/Tables/base_year/ and paper/Figures/base_year/)
+#   (copied to paper/Tables/base_year/ and paper/Figures/base_year/ when a
+#    paper/ folder exists)
 #
-# NOT run from run_all.R / not wired into the master pipeline (per task scope --
-# this script does not edit run_all.R). Run standalone:
-#   RGL_USE_NULL=TRUE Rscript code/11_base_year_sensitivity.R
+# Stage 11 of run_all.R. The main-specification rows (leads >= -5 tests, the
+# main-spec ATT/SE) are read from the fits 03_main_results.R (and, for the
+# within-country share panels, 07_principal_and_share.R) store in output/fits/;
+# this stage adds the full-window tests, the 2010-start panel and the base-year
+# variations.
 # ==============================================================================
 
 # ============================================================
@@ -61,9 +64,11 @@ if (utils::packageVersion("did") < "2.5.0") {
     "  or install.packages(\"did\") to get >= 2.5.0, then rerun this script."),
     utils::packageVersion("did")))
 }
-# NOTE: MASS is NOT attached via library() -- MASS::select() would mask
-# dplyr::select(). compute_pretrend_test() below calls MASS::ginv() by full
-# namespace instead (singular-covariance fallback).
+source(here("code", "functions", "pretrend_test.R"))      # compute_pretrend_test()
+source(here("code", "functions", "read_headline_fit.R"))  # read_headline_fit()
+source(here("code", "functions", "make_country_id.R"))    # make_country_id()
+source(here("code", "functions", "crs_positive.R"))       # crs_positive()
+source(here("code", "functions", "sup_t_crit.R"))         # sup_t_crit()
 
 set.seed(20240601)  # global seed -- local set.seed(1242) calls precede each att_gt() fit
 
@@ -76,13 +81,8 @@ dir_tabs_by <- here("output", "tables",  "base_year")
 dir_figs_by <- here("output", "figures", "base_year")
 dir.create(dir_tabs_by, recursive = TRUE, showWarnings = FALSE)
 dir.create(dir_figs_by, recursive = TRUE, showWarnings = FALSE)
-
-# -----------------------------------------------------------------------
-# Tolerance helper for the reproduction asserts below (relative, floor of 1)
-# -----------------------------------------------------------------------
-close_enough <- function(a, b, tol = 1e-3) {
-  abs(a - b) <= tol * max(1, abs(b))
-}
+# A failed run must not leave the previous run's exhibits in place.
+unlink(list.files(c(dir_tabs_by, dir_figs_by), pattern = "\\.(tex|png|pdf)$", full.names = TRUE))
 
 # ==============================================================================
 # Helper: esc_header() -- duplicate of 03/04/05 helper
@@ -145,57 +145,8 @@ write_tex_float <- function(out_path, caption_title, label,
   invisible(out_path)
 }
 
-# ==============================================================================
-# Helper: compute_pretrend_test() -- identical copy of the corrected version
-# now in 03/04 (IF from agg_d$inf.function$dynamic.inf.func.e, Sigma =
-# crossprod(IF)/n^2, MASS::ginv fallback with message). Works for ANY dynamic
-# aggregation (min_e = -5 or min_e = -Inf) since it filters on agg_d$egt < 0.
-# ==============================================================================
-compute_pretrend_test <- function(agg_d, gt_obj = NULL, antic = 0L) {
-  keep    <- which(!is.na(agg_d$se.egt) & agg_d$se.egt > 1e-10)
-  # Under anticipation = k, the cells e = -k..-1 are treated cells, not leads.
-  pre_pos <- which(agg_d$egt[keep] < -antic)
-  if (length(pre_pos) == 0)
-    return(list(stat = NA_real_, pval = NA_real_, df = 0L,
-                W_did = NA_real_, Wpval_did = NA_real_))
-
-  pre_beta <- agg_d$att.egt[keep][pre_pos]
-
-  IF <- agg_d$inf.function$dynamic.inf.func.e
-  stopifnot(is.matrix(IF), ncol(IF) == length(agg_d$egt))
-  n          <- nrow(IF)
-  sigma_full <- crossprod(IF) / n^2
-  # Guard: catches IF/egt column misalignment (would silently corrupt every
-  # downstream pre-trend test) by cross-checking the covariance diagonal
-  # against did's own agg_d$se.egt.
-  stopifnot(max(abs(sqrt(diag(sigma_full)) - agg_d$se.egt), na.rm = TRUE) < 1e-6)
-  sigma_pre  <- sigma_full[keep, keep][pre_pos, pre_pos, drop = FALSE]
-
-  inv_sigma_pre <- tryCatch(
-    solve(sigma_pre),
-    error = function(e) {
-      message("compute_pretrend_test: pre-treatment covariance is singular — ",
-              "using MASS::ginv() generalized inverse instead of a direct solve()")
-      MASS::ginv(sigma_pre)
-    }
-  )
-  W <- as.numeric(t(pre_beta) %*% inv_sigma_pre %*% pre_beta)
-
-  W_did     <- NA_real_
-  Wpval_did <- NA_real_
-  if (!is.null(gt_obj)) {
-    if (!is.null(gt_obj$W))     W_did     <- as.numeric(gt_obj$W)
-    if (!is.null(gt_obj$Wpval)) Wpval_did <- as.numeric(gt_obj$Wpval)
-  }
-
-  list(
-    stat      = round(W, 3),
-    pval      = round(pchisq(W, df = length(pre_pos), lower.tail = FALSE), 3),
-    df        = length(pre_pos),
-    W_did     = if (is.na(W_did))     NA_real_ else round(W_did, 3),
-    Wpval_did = if (is.na(Wpval_did)) NA_real_ else round(Wpval_did, 3)
-  )
-}
+# compute_pretrend_test() (sourced at the top) works for ANY dynamic
+# aggregation (min_e = -5 or min_e = -Inf): it filters on agg_d$egt < -k.
 
 # canonical pre-trend wording — keep byte-identical across scripts.
 # This table reports TWO aggregated-Wald windows side by side (leads >= -5 and
@@ -210,13 +161,6 @@ PRETREND_NOTE_AGG <- function(min_e, max_e, k) sprintf(
 PRETREND_NOTE_DID <- "\\texttt{did} pre-test $p$: \\texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year"
 PRETREND_NOTE <- function(min_e, max_e, k) paste0(PRETREND_NOTE_AGG(min_e, max_e, k), ". ", PRETREND_NOTE_DID)
 
-# Number of pre-treatment (g,t) cells feeding did's built-in Wald pre-test
-# (mirrors did::att_gt's internal `pre <- which(group > tt)` after dropping
-# zero/NA-variance cells -- that internal df is not returned on the object).
-n_pretest_df <- function(gt_obj) {
-  length(which(gt_obj$group > gt_obj$t & !is.na(gt_obj$se) & gt_obj$se > 1e-10))
-}
-
 # ==============================================================================
 # SECTION 1. Load and prepare the DiD panel (identical construction to
 # 03_main_results.R §1, lines 132-183, + the thin-cohort filter used to build
@@ -230,7 +174,7 @@ aggregated <- as.data.frame(aggregated)
 
 did_panel <- aggregated
 did_panel <- did_panel %>%
-  mutate(country_id = as.integer(factor(recipient_name)))
+  mutate(country_id = make_country_id(recipient_name))
 
 first_year <- min(did_panel$year)
 
@@ -282,6 +226,17 @@ message("Thin cohorts dropped (< ", thin_threshold, " treated units): ",
 
 # Main-specification estimation sample (== 03's did_panel_tab_main)
 main_panel <- did_panel_full %>% filter(!(cohort_year %in% thin_cohorts))
+# The same sample with the within-country adaptation share of
+# 07_principal_and_share.R (level, pp, and logit; undefined when the recipient
+# has no reported commitments that year), used only by Panels C and D of the
+# base-year table.
+main_panel_w <- main_panel %>%
+  mutate(
+    share_within = if_else(crs_positive(commitments_all), 100 * commitments / commitments_all, NA_real_),
+    logit_within = if_else(crs_positive(commitments_all),
+                           log((commitments + 0.5) / (commitments_all - commitments + 0.5)),
+                           NA_real_)
+  )
 
 message(sprintf("Main panel: %d obs | %d countries | %d treated (cohorts %s)",
                 nrow(main_panel), n_distinct(main_panel$country_id),
@@ -366,54 +321,80 @@ stars_from_t <- function(tstat) {
 message("\n=== Table 1: pre-trend tests (leads>=-5, full window, did built-in) ===\n")
 t0_tab1 <- Sys.time()
 
-table1_rows <- vector("list", length(outcomes))
-gt_an_cache <- list()
-a5_cache    <- list()
-aI_cache    <- list()
+# Stored-fit stems of the five outcomes (03_main_results.R fit_stem_map).
+fit_stem_map <- c(log_commits = "adaptation", share_adapt = "share",
+                  lcommitments_all = "total", lcommitments_nonadapt = "nonadaptation",
+                  ldisbursements = "disbursements")
+outcome_vars <- vapply(outcomes, `[[`, character(1L), "var")
 
-for (i in seq_along(outcomes)) {
-  oc <- outcomes[[i]]
-  message(sprintf("  Fitting analytical CS(2021) for %s ...", oc$label))
-
-  gt_an <- fit_gt(main_panel, oc$var, bstrap = FALSE)
-  a5    <- aggte(gt_an, type = "dynamic", na.rm = TRUE, min_e = -5,    max_e = Inf)
-  aI    <- aggte(gt_an, type = "dynamic", na.rm = TRUE, min_e = -Inf, max_e = Inf)
-
-  pt5 <- compute_pretrend_test(a5, gt_an)
+#' One row of the pre-trend table from an analytical fit and its aggregations
+#'
+#' @param oc outcome entry of `outcomes`
+#' @param gt_an analytical MP object
+#' @param pt5 leads >= -5 test (compute_pretrend_test() output)
+#' @param aI full-window dynamic aggregation of gt_an
+#' @return one-row data.frame
+pretrend_row <- function(oc, gt_an, pt5, aI) {
   ptI <- compute_pretrend_test(aI, gt_an)
-  did_df <- n_pretest_df(gt_an)
-
-  gt_an_cache[[oc$var]] <- gt_an
-  a5_cache[[oc$var]]    <- a5
-  aI_cache[[oc$var]]    <- aI
-
-  table1_rows[[i]] <- data.frame(
-    outcome   = oc$label,
-    var       = oc$var,
-    chi2_5    = pt5$stat, df_5    = pt5$df,    p_5    = pt5$pval,
-    chi2_full = ptI$stat, df_full = ptI$df,    p_full = ptI$pval,
-    W_did     = pt5$W_did, df_did = did_df,    p_did  = pt5$Wpval_did,
-    stringsAsFactors = FALSE
-  )
-
   message(sprintf(
     "    leads>=-5: chi2(%d)=%.3f p=%.3f | full window: chi2(%d)=%.3f p=%.3f | did W(%d)=%.3f p=%.3f",
     pt5$df, pt5$stat, pt5$pval, ptI$df, ptI$stat, ptI$pval,
-    did_df, pt5$W_did, pt5$Wpval_did))
+    pt5$df_did, pt5$W_did, pt5$Wpval_did))
+  data.frame(
+    outcome   = oc$label,
+    var       = oc$var,
+    chi2_5    = pt5$stat, df_5    = pt5$df,     p_5    = pt5$pval,
+    chi2_full = ptI$stat, df_full = ptI$df,     p_full = ptI$pval,
+    W_did     = pt5$W_did, df_did = pt5$df_did, p_did  = pt5$Wpval_did,  # cells with a usable SE
+    stringsAsFactors = FALSE
+  )
+}
+
+# Panel A, headline sample: the analytical fits and leads >= -5 tests behind
+# Table 2, read from the stored 03 fits (never re-estimated); only the
+# full-window aggregation is new here.
+table1_rows <- vector("list", length(outcomes))
+fit_cache   <- setNames(vector("list", length(outcomes)), outcome_vars)
+aI_cache    <- setNames(vector("list", length(outcomes)), outcome_vars)
+
+for (i in seq_along(outcomes)) {
+  oc <- outcomes[[i]]
+  message(sprintf("  Stored analytical CS(2021) fit for %s ...", oc$label))
+  fit <- read_headline_fit(fit_stem_map[[oc$var]])
+  stopifnot(identical(fit$outcome, oc$var),
+            identical(fit$ids, sort(unique(main_panel$country_id))))
+  aI <- aggte(fit$gt_analytical, type = "dynamic", na.rm = TRUE, min_e = -Inf, max_e = Inf)
+  fit_cache[[oc$var]] <- fit
+  aI_cache[[oc$var]]  <- aI
+  table1_rows[[i]] <- pretrend_row(oc, fit$gt_analytical, fit$pretrend, aI)
 }
 table1 <- bind_rows(table1_rows)
+
+# Panel B, panel starting in 2010 (the sample of Table tab:combined_wide_2010):
+# the same three tests without the 2009 cells. Analytical fits, same settings.
+panel_2010 <- main_panel %>% filter(year >= 2010L)
+message(sprintf("  2010-start panel: %d obs | %d countries", nrow(panel_2010),
+                n_distinct(panel_2010$country_id)))
+table1_2010_rows <- vector("list", length(outcomes))
+for (i in seq_along(outcomes)) {
+  oc <- outcomes[[i]]
+  message(sprintf("  Fitting analytical CS(2021), 2010-start panel, for %s ...", oc$label))
+  gt10 <- fit_gt(panel_2010, oc$var, bstrap = FALSE)
+  a5   <- aggte(gt10, type = "dynamic", na.rm = TRUE, min_e = -5,   max_e = Inf)
+  aI   <- aggte(gt10, type = "dynamic", na.rm = TRUE, min_e = -Inf, max_e = Inf)
+  table1_2010_rows[[i]] <- pretrend_row(oc, gt10, compute_pretrend_test(a5, gt10), aI)
+}
+table1_2010 <- bind_rows(table1_2010_rows)
 
 message(sprintf("Table 1 fits done in %.1f min.",
                 as.numeric(difftime(Sys.time(), t0_tab1, units = "mins"))))
 
-# --- Reproduction asserts (log_commits, main spec, tolerance 1e-3) -----------
 lc1 <- table1[table1$var == "log_commits", ]
-# Reported, not asserted against literals (values change with the panel; the
-# 2026-09-15 revision restored recipient code 860). The structural checks on
-# the influence-function covariance above (lines ~166-172) remain hard stops.
 message(sprintf("Full-window pre-trend test, log_commits: chi2 = %.2f, p = %.3f; did Wald = %.2f",
                 lc1$chi2_full, lc1$p_full, lc1$W_did))
-message("Reproduction check (Table 1, log_commits): full-window chi2/p and did W match target.")
+lc1_10 <- table1_2010[table1_2010$var == "log_commits", ]
+message(sprintf("Full-window pre-trend test, log_commits, 2010-start panel: chi2(%d) = %.3f, p = %.3f",
+                lc1_10$df_full, lc1_10$chi2_full, lc1_10$p_full))
 
 # --- Build tab:pretrend_tests_full --------------------------------------------
 tab1_header <- c(
@@ -432,7 +413,18 @@ fmt_tab1_row <- function(r) paste0(
 )
 tab1_rows_tex <- vapply(seq_len(nrow(table1)),
                         function(i) fmt_tab1_row(table1[i, ]), character(1L))
-tabular_lines_1 <- c(tab1_header, tab1_rows_tex, "\\bottomrule", "\\end{tabular}")
+tab1_rows_2010 <- vapply(seq_len(nrow(table1_2010)),
+                         function(i) fmt_tab1_row(table1_2010[i, ]), character(1L))
+yr_rng <- function(p) sprintf("%d--%d", min(p$year), max(p$year))
+tabular_lines_1 <- c(tab1_header,
+                     sprintf("\\multicolumn{10}{l}{\\textit{Panel A: panel %s (headline sample)}} \\\\",
+                             yr_rng(main_panel)),
+                     tab1_rows_tex,
+                     "\\midrule",
+                     sprintf("\\multicolumn{10}{l}{\\textit{Panel B: panel %s}} \\\\",
+                             yr_rng(panel_2010)),
+                     tab1_rows_2010,
+                     "\\bottomrule", "\\end{tabular}")
 
 write_tex_float(
   out_path      = file.path(dir_tabs_by, "pretrend_tests_full.tex"),
@@ -448,7 +440,9 @@ write_tex_float(
     "window vs.\\ every available pre-period respectively; restriction counts are the df ",
     "columns); a generalized inverse is used if a block is singular. ", PRETREND_NOTE_DID,
     ", pooling each cohort's pre-treatment $ATT(g,t)$ cells against its own base year and ",
-    "excluding the zero-variance base-year cell"),
+    "excluding the zero-variance base-year cell. Panel~B repeats the three tests on the panel ",
+    "starting in ", min(panel_2010$year), " (the sample of Table~\\ref{tab:combined_wide_2010}), ",
+    "which has no ", min(main_panel$year), " cells"),
   source_text   = "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
 )
 
@@ -460,7 +454,7 @@ write_tex_float(
 
 message("\n=== Table 2: pre-treatment ATT(g,t) cells, log_commits ===\n")
 
-gt_lc <- gt_an_cache[["log_commits"]]
+gt_lc <- fit_cache[["log_commits"]]$gt_analytical
 gtdf  <- data.frame(group = gt_lc$group, t = gt_lc$t, att = gt_lc$att, se = gt_lc$se)
 
 cell_fmt <- function(att, se, tstat) {
@@ -516,21 +510,31 @@ write_tex_float(
 
 # ==============================================================================
 # SECTION 6. Figure 1 (fig_pretrend_cells_by_cohort.png) -- four-panel figure
-# (one per cohort) of pre- and post-period ATT(g,t) with 95% CIs over calendar
-# year, base year marked. Style matches 03's combined ES/cohort figures:
+# (one per cohort) of pre- and post-period ATT(g,t) with simultaneous (sup-t)
+# 95% bands over calendar year, base year marked. One band family per cohort
+# panel: crit from sup_t_crit() on that cohort's plotted ATT(g,t) influence
+# functions (columns of the analytical fit's inffunc), times the stored SEs. Style matches 03's combined ES/cohort figures:
 # serif theme, colour + shape (not colour alone), no in-figure titles.
 # ==============================================================================
 
 message("\n=== Figure 1: ATT(g,t) by cohort, pre- and post-period ===\n")
 
+cell_crit <- vapply(2021:2024, function(g) {
+  cols <- which(gt_lc$group == g & !is.na(gt_lc$se) & gt_lc$se > 0)
+  sup_t_crit(gt_lc$inffunc[, cols, drop = FALSE], gt_lc$se[cols])
+}, numeric(1L))
+names(cell_crit) <- 2021:2024
+message(sprintf("  fig_pretrend_cells_by_cohort sup-t crit: %s",
+                paste(sprintf("%s cohort %.4f", names(cell_crit), cell_crit), collapse = "; ")))
 fig_cells_df <- gtdf %>%
   filter(group %in% 2021:2024, !is.na(se), se > 0) %>%
   mutate(
     cohort = factor(group, levels = 2021:2024,
                     labels = paste0(2021:2024, " cohort")),
     period = ifelse(t < group, "Pre-treatment", "Post-treatment"),
-    ci_lo  = att - 1.96 * se,
-    ci_hi  = att + 1.96 * se
+    crit   = unname(cell_crit[as.character(group)]),
+    ci_lo  = att - crit * se,
+    ci_hi  = att + crit * se
   )
 
 base_year_df <- data.frame(
@@ -567,29 +571,38 @@ message("Saved: ", file.path(dir_figs_by, "fig_pretrend_cells_by_cohort.png"))
 
 # ==============================================================================
 # SECTION 7. Figure 2 (fig_es_full_window.png) -- aggregated event study for
-# log_commits and share_adapt with min_e = -Inf (leads to -15), 95% pointwise
-# CIs. Style matches 03's combined event-study overlay (did_combined_es_wgi.png).
+# log_commits and share_adapt with min_e = -Inf (leads to -15), simultaneous
+# (sup-t) 95% bands, one band family per outcome curve (sup_t_crit() on the
+# analytical full-window aggregation's influence functions). Style matches
+# 03's combined event-study overlay (did_combined_es_wgi.png).
 # ==============================================================================
 
 message("\n=== Figure 2: full-window event study, log_commits & share_adapt ===\n")
 
 # Figure labels: the outcome labels carry LaTeX escapes (\\%) meant for the tables.
 fig_lab <- function(x) gsub("\\\\", "", x)
+cv_full <- vapply(c("log_commits", "share_adapt"), function(v)
+  sup_t_crit(aI_cache[[v]]$inf.function$dynamic.inf.func.e, aI_cache[[v]]$se.egt),
+  numeric(1L))
+message(sprintf("  fig_es_full_window sup-t crit: log_commits %.4f | share_adapt %.4f",
+                cv_full[["log_commits"]], cv_full[["share_adapt"]]))
 dyn_full <- bind_rows(
   data.frame(
     outcome    = fig_lab(outcomes[[1]]$label),
     event_time = aI_cache[["log_commits"]]$egt,
     ATT        = aI_cache[["log_commits"]]$att.egt,
-    SE         = aI_cache[["log_commits"]]$se.egt
+    SE         = aI_cache[["log_commits"]]$se.egt,
+    crit       = cv_full[["log_commits"]]
   ),
   data.frame(
     outcome    = fig_lab(outcomes[[2]]$label),
     event_time = aI_cache[["share_adapt"]]$egt,
     ATT        = aI_cache[["share_adapt"]]$att.egt,
-    SE         = aI_cache[["share_adapt"]]$se.egt
+    SE         = aI_cache[["share_adapt"]]$se.egt,
+    crit       = cv_full[["share_adapt"]]
   )
 ) %>%
-  mutate(Lower = ATT - 1.96 * SE, Upper = ATT + 1.96 * SE)
+  mutate(Lower = ATT - crit * SE, Upper = ATT + crit * SE)
 
 palette_full <- c(setNames(outcomes[[1]]$color, fig_lab(outcomes[[1]]$label)),
                   setNames(outcomes[[2]]$color, fig_lab(outcomes[[2]]$label)))
@@ -607,7 +620,7 @@ p_full <- ggplot(dyn_full,
   # No title, subtitle, or caption -- those go in LaTeX \caption{}
   labs(title = NULL, subtitle = NULL, caption = NULL,
        x = "Years relative to NAP adoption",
-       y = "ATT estimate (95% pointwise CI)",
+       y = "ATT estimate (95% simultaneous band)",
        colour = NULL, shape = NULL) +
   theme_minimal() +
   theme(
@@ -632,21 +645,26 @@ message("\n=== Table 4: base-year sensitivity, log_commits & share_adapt ===\n")
 t0_tab4 <- Sys.time()
 
 build_sensitivity_row <- function(label, data, yname, antic = 0L,
-                                   gt_an_in = NULL, a5_in = NULL, aI_in = NULL) {
-  gt_an <- if (!is.null(gt_an_in)) gt_an_in else fit_gt(data, yname, bstrap = FALSE, antic = antic)
-  a5 <- if (!is.null(a5_in)) a5_in else
-    aggte(gt_an, type = "dynamic", na.rm = TRUE, min_e = -5, max_e = Inf)
-  aI <- if (!is.null(aI_in)) aI_in else
-    aggte(gt_an, type = "dynamic", na.rm = TRUE, min_e = -Inf, max_e = Inf)
+                                   stored = NULL, aI_in = NULL) {
+  if (!is.null(stored)) {
+    # Main-spec row: the stored 03 headline fit (one fit, one SE), not re-estimated.
+    gt_an <- stored$gt_analytical
+    aI    <- aI_in
+    pt5   <- stored$pretrend
+    att   <- stored$att
+    se    <- stored$se
+  } else {
+    gt_an <- fit_gt(data, yname, bstrap = FALSE, antic = antic)
+    a5 <- aggte(gt_an, type = "dynamic", na.rm = TRUE, min_e = -5, max_e = Inf)
+    aI <- aggte(gt_an, type = "dynamic", na.rm = TRUE, min_e = -Inf, max_e = Inf)
 
-  gt_bs <- fit_gt(data, yname, bstrap = TRUE, antic = antic, biters = 999L)
-  agg_s <- aggte(gt_bs, type = "simple", na.rm = TRUE)
-
-  pt5 <- compute_pretrend_test(a5, gt_an, antic)
+    gt_bs <- fit_gt(data, yname, bstrap = TRUE, antic = antic, biters = 999L)
+    agg_s <- aggte(gt_bs, type = "simple", na.rm = TRUE)
+    pt5   <- compute_pretrend_test(a5, gt_an, antic)
+    att   <- agg_s$overall.att
+    se    <- agg_s$overall.se
+  }
   ptI <- compute_pretrend_test(aI, gt_an, antic)
-
-  att <- agg_s$overall.att
-  se  <- agg_s$overall.se
   tst <- att / se
 
   n_treated <- data %>%
@@ -659,10 +677,11 @@ build_sensitivity_row <- function(label, data, yname, antic = 0L,
     yname, label, att, se, tst, n_treated, pt5$pval, ptI$pval))
 
   data.frame(
-    spec = label, outcome = yname,
+    spec = label, outcome = yname, antic = antic,
     att = att, se = se, t_stat = tst, stars = stars_from_t(tst),
     n_treated = n_treated,
     wald5_p = pt5$pval, waldfull_p = ptI$pval,
+    df5 = pt5$df, lead5_min = min(pt5$leads), lead5_max = max(pt5$leads),
     stringsAsFactors = FALSE
   )
 }
@@ -678,14 +697,14 @@ sens_specs <- list(
   list(label = "Drop calendar year 2020",             filt = "y2020", antic = 0L, use_cache = FALSE)
 )
 
-apply_filt <- function(filt) {
+apply_filt <- function(filt, panel = main_panel) {
   switch(filt,
-    none  = main_panel,
-    c2021 = main_panel %>% filter(cohort_year != 2021),
-    c2022 = main_panel %>% filter(cohort_year != 2022),
-    c2023 = main_panel %>% filter(cohort_year != 2023),
-    c2024 = main_panel %>% filter(cohort_year != 2024),
-    y2020 = main_panel %>% filter(year != 2020),
+    none  = panel,
+    c2021 = panel %>% filter(cohort_year != 2021),
+    c2022 = panel %>% filter(cohort_year != 2022),
+    c2023 = panel %>% filter(cohort_year != 2023),
+    c2024 = panel %>% filter(cohort_year != 2024),
+    y2020 = panel %>% filter(year != 2020),
     stop("Unknown filt: ", filt)
   )
 }
@@ -695,15 +714,13 @@ sens_rows <- vector("list", length(sens_outcomes) * length(sens_specs))
 idx <- 0L
 
 for (so in sens_outcomes) {
-  y      <- so$var
-  cached <- if (y %in% names(gt_an_cache))
-    list(gt = gt_an_cache[[y]], a5 = a5_cache[[y]], aI = aI_cache[[y]]) else NULL
-
+  y <- so$var
   for (sp in sens_specs) {
     idx  <- idx + 1L
     data <- apply_filt(sp$filt)
-    row  <- if (sp$use_cache && !is.null(cached))
-      build_sensitivity_row(sp$label, data, y, sp$antic, cached$gt, cached$a5, cached$aI)
+    row  <- if (sp$use_cache)
+      build_sensitivity_row(sp$label, data, y, sp$antic,
+                            stored = fit_cache[[y]], aI_in = aI_cache[[y]])
     else
       build_sensitivity_row(sp$label, data, y, sp$antic)
     sens_rows[[idx]] <- row
@@ -724,21 +741,66 @@ r_antic1   <- get_row(lc4, "Anticipation = 1 (base $g-2$)")
 r_antic2   <- get_row(lc4, "Anticipation = 2 (base $g-3$)")
 r_drop2020 <- get_row(lc4, "Drop calendar year 2020")
 
-# The main-spec row must reproduce the stored 03 headline fit (output/fits/);
-# the other rows are this script's own results and are reported, not asserted
-# against literals (the 2026-09-15 panel revision made the old literals stale).
-ref_head <- readRDS(here("output", "fits", "headline_adaptation_dr_bs.rds"))
-stopifnot(close_enough(r_main$att, ref_head$att), close_enough(r_main$se, ref_head$se))
-message(sprintf(paste0("Reproduction check (log_commits): main spec %.4f (%.4f) matches the stored 03 fit. ",
+# The main-spec row is the stored 03 headline fit; the other rows are this
+# script's own results.
+message(sprintf(paste0("log_commits: main spec %.4f (%.4f), read from the stored 03 fit. ",
                        "Drop-2021 %.4f (%.4f); anticipation-1 %.4f (%.4f); anticipation-2 %.4f (%.4f); ",
                        "drop-2020 %.4f (%.4f)."),
                 r_main$att, r_main$se, r_drop21$att, r_drop21$se, r_antic1$att, r_antic1$se,
                 r_antic2$att, r_antic2$se, r_drop2020$att, r_drop2020$se))
 
 sa4     <- sens_all[sens_all$outcome == "share_adapt", ]
-r_sa_main <- get_row(sa4, "Main spec")
-message(sprintf("Cross-check (not asserted, diagnostic reference): share_adapt main spec ATT=%.4f SE=%.4f (diagnostic doc: 0.3185/0.1403)",
-                r_sa_main$att, r_sa_main$se))
+
+# --- Panels C and D: within-country adaptation share (level, pp; logit) ------
+# Same rows. The main-spec row is the fit 07_principal_and_share.R stores (the
+# estimate of Table tab:within_share_wide), read, not re-estimated.
+within_stems <- c(share_within = "within_share", logit_within = "within_logit")
+within_rows  <- vector("list", length(within_stems) * length(sens_specs))
+idx <- 0L
+for (y in names(within_stems)) {
+  path_w <- here("output", "fits", paste0(within_stems[[y]], "_dr_bs.rds"))
+  if (!file.exists(path_w))
+    stop("Stored within-share fit not found: ", path_w,
+         " -- it is written by 07_principal_and_share.R (run_all.R runs 07 before 11).")
+  fit_w <- readRDS(path_w)
+  stopifnot(identical(fit_w$outcome, y),
+            identical(fit_w$ids, sort(unique(main_panel_w$country_id))),
+            identical(as.integer(fit_w$n_obs), sum(!is.na(main_panel_w[[y]]))))
+  aI_w <- aggte(fit_w$gt_analytical, type = "dynamic", na.rm = TRUE, min_e = -Inf, max_e = Inf)
+  for (sp in sens_specs) {
+    idx <- idx + 1L
+    within_rows[[idx]] <- if (sp$use_cache)
+      build_sensitivity_row(sp$label, main_panel_w, y, sp$antic, stored = fit_w, aI_in = aI_w)
+    else
+      build_sensitivity_row(sp$label, apply_filt(sp$filt, main_panel_w), y, sp$antic)
+  }
+}
+within_all <- bind_rows(within_rows)
+sw4 <- within_all[within_all$outcome == "share_within", ]
+sl4 <- within_all[within_all$outcome == "logit_within", ]
+for (r in seq_len(nrow(within_all)))
+  message(sprintf("  Within-share panel [%s | %s]: ATT = %.4f (SE %.4f), t = %.3f, N treated = %d, Wald p (leads >= -5) = %.3f [%d restrictions], Wald p (full) = %.3f",
+                  within_all$outcome[r], within_all$spec[r], within_all$att[r], within_all$se[r],
+                  within_all$t_stat[r], within_all$n_treated[r], within_all$wald5_p[r],
+                  within_all$df5[r], within_all$waldfull_p[r]))
+
+# Lead window of the leads >= -5 test under anticipation, for the note: with
+# anticipation, e = -1 - antic is the base period and the later leads are
+# treated, so fewer leads remain than in Table tab:att_anticipation, whose
+# window starts at e = -5 - antic.
+num_word <- function(n) { stopifnot(n >= 1L, n <= 6L); c("one", "two", "three", "four", "five", "six")[n] }
+antic_all <- bind_rows(sens_all, within_all)
+antic_txt <- vapply(c(1L, 2L), function(k) {
+  a <- antic_all[antic_all$antic == k, ]
+  stopifnot(nrow(a) > 0L, length(unique(a$lead5_min)) == 1L, length(unique(a$lead5_max)) == 1L)
+  n_lead <- unique(a$lead5_max) - unique(a$lead5_min) + 1L
+  dfs    <- sort(unique(a$df5))
+  sprintf("with %s year%s of anticipation it keeps %s leads ($%d \\leq e \\leq %d$; %s restriction%s), where Table~\\ref{tab:att_anticipation} keeps four ($%d \\leq e \\leq %d$)",
+          num_word(k), if (k == 1L) "" else "s", num_word(n_lead),
+          unique(a$lead5_min), unique(a$lead5_max),
+          paste(dfs, collapse = " or "), if (identical(dfs, 1L)) "" else "s",
+          -5L - k, -2L - k)
+}, character(1L))
 
 # --- Build tab:base_year_sensitivity ------------------------------------------
 build_panel_lines <- function(rows_df) {
@@ -768,6 +830,14 @@ tabular_lines_4 <- c(
   "\\multicolumn{7}{l}{\\textit{Panel B: Adaptation share (\\% of global)}} \\\\",
   "\\midrule",
   build_panel_lines(sa4),
+  "\\\\[0.5em]",
+  "\\multicolumn{7}{l}{\\textit{Panel C: Within-country adaptation share (pp)}} \\\\",
+  "\\midrule",
+  build_panel_lines(sw4),
+  "\\\\[0.5em]",
+  "\\multicolumn{7}{l}{\\textit{Panel D: Within-country adaptation share (logit)}} \\\\",
+  "\\midrule",
+  build_panel_lines(sl4),
   "\\bottomrule",
   "\\end{tabular}"
 )
@@ -780,8 +850,14 @@ write_tex_float(
   notes_text    = paste0(
     "CS(2021) DR, never-treated controls, WGI GE + log population, cohorts $\\geq 5$. ATT/SE ",
     "from the multiplier-bootstrap fit (999 reps, seed 1242; \\texttt{did} 2.5.0); Wald $p$ from ",
-    "the analytical fit's dynamic aggregation (as in the pre-trend table). ``Anticipation $=k$'' ",
-    "resets the base period to $g-1-k$ ($k=1$ moves the 2021 cohort's base year to 2019). ",
+    "the analytical fit's dynamic aggregation (as in the pre-trend table). ``Anticipation $=1$'' ",
+    "(``$=2$'') resets the base period to $g-2$ ($g-3$): one year of anticipation moves the ",
+    "2021 cohort's base year to 2019. The leads-$\\geq -5$ test uses the leads left after the ",
+    "base period: ", antic_txt[1L], "; ", antic_txt[2L], ". This is why its $p$ differs from ",
+    "that table's. Panels C and D: within-country adaptation share of ",
+    "Table~\\ref{tab:within_share_wide}, $100 \\times E/S$ in pp and its logit ",
+    "$\\log[(E+0.5)/(S-E+0.5)]$, with $E$ the recipient's adaptation-marked and $S$ its total ",
+    "commitments; main-spec rows are the estimates of that table. ",
     "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"),
   source_text   = "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
 )

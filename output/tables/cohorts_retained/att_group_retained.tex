@@ -1,0 +1,34 @@
+\begin{table}[H]
+\centering
+\caption{ATT by adoption cohort, all cohorts retained}
+\label{tab:att_group_retained}
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lcccccccccc}
+\toprule
+ & & \multicolumn{3}{c}{log(Adaptation commitments)} & \multicolumn{3}{c}{log(Total commitments)} & \multicolumn{3}{c}{log(Non-adaptation commitments)} \\
+\cmidrule(lr){3-5} \cmidrule(lr){6-8} \cmidrule(lr){9-11}
+Adoption cohort & Recipients & ATT & SE & $p$ & ATT & SE & $p$ & ATT & SE & $p$ \\
+\midrule
+2015 & 2 & -0.1313 & (0.5781) & 0.820 & 0.3650*** & (0.0927) & 0.000 & 0.3777*** & (0.0717) & 0.000 \\
+2016 & 4 & 0.4020 & (0.4131) & 0.330 & 0.2178 & (0.2046) & 0.287 & 0.2129 & (0.2104) & 0.312 \\
+2017 & 2 & 1.7972 & (1.3848) & 0.194 & 0.7583* & (0.4410) & 0.086 & 0.7454* & (0.4288) & 0.082 \\
+2018 & 4 & 0.3909 & (0.2763) & 0.157 & 0.1882 & (0.1172) & 0.108 & 0.1379 & (0.1148) & 0.230 \\
+2019 & 4 & -0.4188*** & (0.1589) & 0.008 & 0.3232 & (0.2727) & 0.236 & 0.3001 & (0.2540) & 0.237 \\
+2020 & 3 & -0.9062*** & (0.2037) & 0.000 & -0.2578 & (0.1944) & 0.185 & -0.1270 & (0.2431) & 0.601 \\
+2021 & 11 & 0.5355*** & (0.1738) & 0.002 & 0.2036** & (0.0974) & 0.037 & 0.1589 & (0.0976) & 0.104 \\
+2022 & 10 & 0.0329 & (0.1793) & 0.854 & -0.0396 & (0.1102) & 0.719 & -0.0692 & (0.1140) & 0.544 \\
+2023 & 11 & 0.1044 & (0.3200) & 0.744 & 0.0514 & (0.1003) & 0.609 & 0.0613 & (0.0887) & 0.490 \\
+2024 & 8 & 0.6893*** & (0.2591) & 0.008 & 0.0724 & (0.2077) & 0.727 & -0.0017 & (0.2219) & 0.994 \\
+\midrule
+\multicolumn{11}{l}{\textit{Pooled cohorts (weights proportional to recipients)}} \\
+2015--2019 adopters & 16 & 0.3017 & (0.2304) & 0.190 & 0.3227*** & (0.1111) & 0.004 & 0.3031*** & (0.1076) & 0.005 \\
+2021--2024 adopters & 40 & 0.3221*** & (0.1239) & 0.009 & 0.0747 & (0.0635) & 0.239 & 0.0429 & (0.0645) & 0.506 \\
+\bottomrule
+\end{tabular}
+}
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: Specification of Table~\ref{tab:combined_wide_robust}: CS\,(2021) outcome regression, all adoption cohorts retained (2,227 recipient-years, 145 recipients), never-treated control group, WGI gov.\ effectiveness + log population, universal base period. Each cohort row is that cohort's average post-adoption ATT; ``Recipients'' counts its treated recipients. Pooled rows average the cohort ATTs with weights proportional to their recipients, held fixed (no term for estimated weights). SEs: analytical influence-function SEs clustered by recipient; a pooled row's SE combines the cohorts' influence functions with the same weights. $p$: two-sided, normal. Analytical SEs on cohorts of 2--4 treated recipients are unreliable, so individual thin-cohort $p$-values and stars should be read with caution; the pooled rows are the estimates of interest. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

@@ -15,7 +15,10 @@
 #   figures/notyettreated/did_notyettreated_es.png         (§19d event study)
 #   tables/notyettreated/att_notyettreated_wide.tex        (§19d not-yet-treated)
 #   tables/units_zeros/diagnostic_units_zeros.tex          (§19e units/zeros sensitivity)
+#   tables/cohorts_retained/att_group_retained.tex         (§19 cohort ATTs, retained spec)
 #   tables/cohorts_dropped/honestdid_rm.tex                (§20 HonestDiD)
+#   tables/cohorts_dropped/honestdid_prepriods.tex         (§20 HonestDiD, 4/6/8 leads)
+#   tables/cohorts_dropped/honestdid_sd.tex                (§20 HonestDiD, smoothness)
 #   figures/placebo/did_placebo_es.png                     (§25)
 #   tables/placebo/att_placebo.tex                         (§25)
 #   figures/mitigation/did_mitigation_es.png               (§26)
@@ -24,6 +27,9 @@
 #   figures/dcdh/did_dcdh_es.png                            (§A dCDH event study)
 #   tables/bacon/bacon_decomp.tex                           (§B Goodman-Bacon)
 #   figures/bacon/bacon_scatter.png                         (§B Goodman-Bacon)
+#   tables/outlier_india/att_combined_wide.tex             (§C excluding India)
+#   tables/balanced_panel/att_combined_wide.tex            (§D balanced panel)
+#   tables/panel_2010/att_combined_wide.tex                (§E panel from 2010)
 #
 # NOTE: honestdid_combined.png is NOT written (not used in paper).
 # ==============================================================================
@@ -66,9 +72,13 @@ if (utils::packageVersion("did") < "2.5.0") {
 }
 library(fixest)
 library(countrycode)
-# NOTE: MASS is NOT attached via library() -- MASS::select() would mask
-# dplyr::select() used throughout this script. compute_pretrend_test() below
-# calls MASS::ginv() by full namespace instead (singular-covariance fallback).
+source(here("code", "functions", "pretrend_test.R"))      # compute_pretrend_test()
+source(here("code", "functions", "two_line_head.R"))     # two_line_head()
+source(here("code", "functions", "read_headline_fit.R"))  # read_headline_fit()
+source(here("code", "functions", "make_country_id.R"))    # make_country_id()
+source(here("code", "functions", "crs_positive.R"))       # crs_positive()
+source(here("code", "functions", "make_wide_table.R"))    # make_wide_table()
+source(here("code", "functions", "sup_t_crit.R"))         # sup_t_crit()
 # §A/§B appendix estimators (de Chaisemartin & D'Haultfoeuille; Goodman-Bacon).
 # polars MUST be loaded before DIDmultiplegtDYN, else did_multiplegt_dyn() errors
 # with "objet 'pl' introuvable" (the package references the loaded `pl` object).
@@ -76,11 +86,9 @@ library(polars)
 library(DIDmultiplegtDYN)
 library(bacondecomp)
 
-# HonestDiD (GitHub-only optional dependency; used in §20). Guarded with
+# HonestDiD (required; used in §20; renv.lock pins 0.2.8). Guarded with
 # requireNamespace() so a missing install fails with an actionable message
-# rather than a bare "there is no package called 'HonestDiD'" error. Moved
-# here from inside §20 so that all packages are loaded at the top of the
-# script, before any data loading or computation.
+# rather than a bare "there is no package called 'HonestDiD'" error.
 if (!requireNamespace("HonestDiD", quietly = TRUE)) {
   stop(
     "Package 'HonestDiD' is not installed.\n",
@@ -94,20 +102,31 @@ set.seed(20240601)  # global seed — local set.seed(1242) calls follow each est
 
 # -----------------------------------------------------------------------
 # One fit, one SE: single bootstrap-replication constant.
-# Every multiplier-bootstrap call in this script uses BITERS. Before this
-# revision the §25 placebo fit passed no `biters` at all and silently used
-# did's default of 1000 while its table note claimed 999 replications.
-# 999 is kept so that no published SE is re-randomised
-# merely by changing the replication count.
+# Every multiplier-bootstrap call in this script passes BITERS explicitly
+# (did's own default is 1000), so the replication count stated in the table
+# notes is the one used.
 # -----------------------------------------------------------------------
 BITERS <- 999L
 
 # -----------------------------------------------------------------------
-# Saved headline fits written by 03_main_results.R. §19e and §20 read
-# these instead of re-fitting, so the paper can never print two different
-# standard errors for one specification.
+# §19e and §20 read the headline fits written by 03_main_results.R
+# (read_headline_fit()) instead of re-fitting, so the paper can never print two
+# different standard errors for one specification. This stage writes its own
+# placebo and mitigation fits to the same folder.
 # -----------------------------------------------------------------------
 FITS_DIR <- here("output", "fits")
+
+# A failed run must not leave the previous run's results in place: the fits
+# and exhibits this stage owns are deleted before anything is re-estimated, and
+# an estimator failure below stops the stage.
+unlink(file.path(FITS_DIR, c("mitigation_dr_bs.rds", "placebo_m2_reg_bs.rds")))
+unlink(c(list.files(here("output", c("tables", "figures"),
+                         rep(c("cohorts_retained", "notyettreated", "units_zeros",
+                               "outlier_india", "balanced_panel", "panel_2010", "placebo",
+                               "mitigation", "dcdh", "bacon"), each = 2L)),
+                    pattern = "\\.(tex|png|pdf)$", full.names = TRUE),
+         here("output", "tables", "cohorts_dropped",
+              c("honestdid_rm.tex", "honestdid_sd.tex", "honestdid_prepriods.tex"))))
 
 # canonical pre-trend wording — keep byte-identical across scripts
 PRETREND_NOTE_AGG <- function(min_e, max_e, k) sprintf(
@@ -115,23 +134,6 @@ PRETREND_NOTE_AGG <- function(min_e, max_e, k) sprintf(
   min_e, max_e, k)
 PRETREND_NOTE_DID <- "\\texttt{did} pre-test $p$: \\texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year"
 PRETREND_NOTE <- function(min_e, max_e, k) paste0(PRETREND_NOTE_AGG(min_e, max_e, k), ". ", PRETREND_NOTE_DID)
-
-#' Read a saved headline fit written by 03_main_results.R.
-#'
-#' @param stem one of "adaptation", "share", "total", "nonadaptation",
-#'   "disbursements"
-#' @return the saved list (see 03_main_results.R §7b for its fields)
-read_headline_fit <- function(stem) {
-  path <- file.path(FITS_DIR, paste0("headline_", stem, "_dr_bs.rds"))
-  if (!file.exists(path)) {
-    stop("Saved headline fit not found: ", path, "\n",
-         "  04_robustness.R consumes the fits written by 03_main_results.R ",
-         "(one fit, one SE).\n",
-         "  Fix: run `Rscript code/03_main_results.R` first ",
-         "(run_all.R already orders 03 before 04).")
-  }
-  readRDS(path)
-}
 
 # Outcome -> saved-fit stem (kept in sync with 03_main_results.R fit_stem_map).
 fit_stem_map <- c(
@@ -161,16 +163,28 @@ fit_stem_map <- c(
 #' @param labels optional column labels, same length, for per-column disclosure
 #' @param wpval_reason machine-derived reason did returned no statistic
 #' @param ginv_used TRUE if the aggregated test used a generalized inverse
+#' @param df degrees of freedom of the aggregated test(s) (compute_pretrend_test()$df),
+#'   one per column; below full rank they are fewer than the leads
 #' @return a character string for the table note
 wpval_reconciliation <- function(pre_egt, df_did, n_clusters,
                                  wpval_did = NA_real_, pval_wald = NA_real_,
                                  labels = NULL, wpval_reason = NA_character_,
-                                 ginv_used = FALSE) {
+                                 ginv_used = FALSE, df = length(pre_egt)) {
   # Compact pre-trend disclosure for table notes (byte-identical
   # in 03/04/05). The averaging mechanism and the interpretation of each
   # result are stated once in the main text; the note keeps the restriction
   # counts and the per-column verdicts, which the text does not repeat table
   # by table.
+
+  # Column labels are interpolated into LaTeX prose, so they must be escaped
+  # here: "Adaptation share (% of global)" would otherwise comment out the rest
+  # of the note.
+  esc_lab <- function(x) {
+    x <- gsub("\\\\", "", x)
+    x <- gsub("([%#&_])", "\\\\\\1", x)
+    x
+  }
+  if (!is.null(labels)) labels <- esc_lab(labels)
 
   # --- lead window, rendered from the vector actually used -----------------
   n_lead <- length(pre_egt)
@@ -184,22 +198,20 @@ wpval_reconciliation <- function(pre_egt, df_did, n_clusters,
     # canonical wording: the lead window itself is disclosed via
     # min/max of pre_egt, not re-derived from the (possibly non-contiguous)
     # lead_list string built above.
-    paste0(PRETREND_NOTE_AGG(min(as.integer(pre_egt)), max(as.integer(pre_egt)), n_lead),
+    # Restrictions = the test's df (the rank actually inverted), not the lead
+    # count; if the df differ across columns the lead count is quoted and the
+    # singular columns are flagged just below.
+    df_u <- unique(as.integer(df[!is.na(df)]))
+    paste0(PRETREND_NOTE_AGG(min(as.integer(pre_egt)), max(as.integer(pre_egt)),
+                             if (length(df_u) == 1L) df_u else n_lead),
            if (isTRUE(any(ginv_used)))
-             "; for this column the block was singular and a generalized inverse was used"
+             paste0("; the block was singular",
+                    if (!is.null(labels) && length(labels) == length(ginv_used))
+                      paste0(" for ", paste(labels[ginv_used], collapse = ", ")) else "",
+                    " and a generalized inverse was used")
            else "",
            ". ")
   }
-
-  # Column labels are interpolated into LaTeX prose, so they must be escaped
-  # here: "Adaptation share (% of global)" would otherwise comment out the rest
-  # of the note.
-  esc_lab <- function(x) {
-    x <- gsub("\\\\", "", x)
-    x <- gsub("([%#&_])", "\\\\\\1", x)
-    x
-  }
-  if (!is.null(labels)) labels <- esc_lab(labels)
 
   wp <- suppressWarnings(as.numeric(wpval_did))
   pw <- suppressWarnings(as.numeric(pval_wald))
@@ -238,6 +250,11 @@ wpval_reconciliation <- function(pre_egt, df_did, n_clusters,
                sub(sing_re, "\\1", wpval_reason[[1L]]), " cells; rank ",
                paste(sprintf("%s %s", labels, sub(sing_re, "\\2", wpval_reason)),
                      collapse = ", "), ")")
+      else if (!is.null(labels) && length(wpval_reason) == length(labels))
+        paste(sprintf("%s, %s", labels,
+                      ifelse(is.na(wpval_reason), "no reason recorded",
+                             sub("^not computed: ", "", wpval_reason))),
+              collapse = "; ")
       else "reason varies by column (see text)"
     did_txt <- paste0(did_head, " not computed: ", reason_txt,
                       ". ")
@@ -364,7 +381,7 @@ aggregated <- fread(here("data", "processed", "simple_panel_wgi.csv"))
 aggregated  <- as.data.frame(aggregated)
 
 did_panel <- aggregated %>%
-  mutate(country_id = as.integer(factor(recipient_name)))
+  mutate(country_id = make_country_id(recipient_name))
 
 first_year <- min(did_panel$year)
 
@@ -442,457 +459,28 @@ outcomes <- list(
 
 # ==============================================================================
 # SECTION 3. Shared helpers
-# (compute_pretrend_test, make_wide_table, raw_var_map — duplicated from
-#  03_main_results.R; each stage script is self-contained, no sourced utils file)
+# make_wide_table() is sourced from code/functions/make_wide_table.R and
+# compute_pretrend_test() from code/functions/pretrend_test.R.
 # ==============================================================================
-
-# --- Wald pre-trend test ---
-compute_pretrend_test <- function(agg_d, gt_obj = NULL, anticipation = 0) {
-  # `anticipation` (default 0, i.e. the behaviour every other call site relies
-  # on) excludes the event times the estimator itself treats as TREATED. Under
-  # att_gt(anticipation = k) the cells e = -1, ..., -k are post-treatment by
-  # construction and e = -k-1 is the normalised base period, so a pre-trend
-  # test must be restricted to e < -k. Truncating the aggregation instead
-  # (aggte(max_e = -k-1)) is not an option: did errors out when a dynamic
-  # aggregation contains no post-treatment period.
-  # Covariance: did (>= 2.5.0) stores the dynamic-aggregation influence
-  # function at agg_d$inf.function$dynamic.inf.func.e (n x K, aligned with
-  # agg_d$egt). The full covariance is crossprod(IF)/n^2, and the joint Wald
-  # test uses the whole pre-treatment block, not a diagonal approximation
-  # (which would ignore covariance across pre-treatment event-time ATTs). A
-  # generalized inverse (MASS::ginv) is used, with a message, if the block is
-  # singular. did's own group-time pre-test (gt_obj$W,
-  # gt_obj$Wpval — computed on the disaggregated ATT(g,t) cells, independent of
-  # bstrap) is captured alongside for comparison and reported as a separate
-  # table row ("Pre-trend p (did Wpval)").
-  keep    <- which(!is.na(agg_d$se.egt) & agg_d$se.egt > 1e-10)
-  pre_pos <- which(agg_d$egt[keep] < -anticipation)
-  if (length(pre_pos) == 0)
-    return(list(stat = NA_real_, pval = NA_real_, df = 0L, n_leads = 0L,
-                leads = integer(0), ginv_used = FALSE,
-                W_did = NA_real_, Wpval_did = NA_real_, df_did = NA_integer_,
-                wpval_reason = NA_character_))
-
-  pre_beta <- agg_d$att.egt[keep][pre_pos]
-
-  IF <- agg_d$inf.function$dynamic.inf.func.e
-  stopifnot(is.matrix(IF), ncol(IF) == length(agg_d$egt))
-  n          <- nrow(IF)
-  sigma_full <- crossprod(IF) / n^2
-  # Guard: catches IF/egt column misalignment (would silently corrupt every
-  # downstream pre-trend test) by cross-checking the covariance diagonal
-  # against did's own agg_d$se.egt.
-  stopifnot(max(abs(sqrt(diag(sigma_full)) - agg_d$se.egt), na.rm = TRUE) < 1e-6)
-  sigma_pre  <- sigma_full[keep, keep][pre_pos, pre_pos, drop = FALSE]
-
-  # A generalized inverse is used only if the direct solve fails. When it is,
-  # the statistic no longer has length(pre_pos) degrees of freedom: the correct
-  # reference is the NUMERICAL RANK of the pre-treatment covariance, because a
-  # Moore-Penrose inverse tests only the directions the data can identify.
-  # Using the full lead count there would overstate df and understate the
-  # p-value. Both the rank and the fact that a generalized inverse was used are
-  # returned, so the table note can disclose them.
-  # tryCatch returns BOTH the inverse and the flag, so nothing is assigned into
-  # an enclosing environment (`<<-` is prohibited by this project's standards).
-  inv_res <- tryCatch(
-    list(inv = solve(sigma_pre), ginv = FALSE),
-    error = function(e) {
-      message("compute_pretrend_test: pre-treatment covariance is singular — ",
-              "using MASS::ginv() generalized inverse instead of a direct solve()")
-      list(inv = MASS::ginv(sigma_pre), ginv = TRUE)
-    }
-  )
-  inv_sigma_pre <- inv_res$inv
-  ginv_used     <- isTRUE(inv_res$ginv)
-  W <- as.numeric(t(pre_beta) %*% inv_sigma_pre %*% pre_beta)
-
-  df_use <- length(pre_pos)
-  if (ginv_used) {
-    sv <- svd(sigma_pre)$d
-    df_use <- sum(sv > max(dim(sigma_pre)) * .Machine$double.eps * max(sv))
-    message(sprintf(paste0("compute_pretrend_test: df set to the numerical rank ",
-                           "of the pre-treatment covariance (%d of %d leads)"),
-                    df_use, length(pre_pos)))
-  }
-
-  W_did     <- NA_real_
-  Wpval_did <- NA_real_
-  df_did    <- NA_integer_
-  if (!is.null(gt_obj)) {
-    if (!is.null(gt_obj$W))     W_did     <- as.numeric(gt_obj$W)
-    if (!is.null(gt_obj$Wpval)) Wpval_did <- as.numeric(gt_obj$Wpval)
-    # Restrictions behind did's own pre-test: did 2.5.0 (att_gt) drops the
-    # pre-treatment cells whose standard error is NA (the base-period cells)
-    # before inverting V[pre, pre], so q counts only cells with a usable SE.
-    df_did <- sum(gt_obj$t < gt_obj$group & !is.na(gt_obj$se))
-  }
-
-  # Why did returned no statistic, derived from the fit rather than guessed.
-  # did declines the pre-test when (i) it never formed the analytical variance
-  # matrix (bstrap without cband), (ii) there are no estimable pre-treatment
-  # cells, or (iii) rcond(preV) underflows. Case (iii) is the one that fires on
-  # thin subgroups: the pre-treatment block has more cells than the subgroup's
-  # recipient-level influence functions can span.
-  wpval_reason <- NA_character_
-  if (!is.null(gt_obj) && is.na(Wpval_did)) {
-    pre_idx <- which(gt_obj$group > gt_obj$t & !is.na(gt_obj$se))  # the cells did inverts
-    if (is.null(gt_obj$V)) {
-      wpval_reason <- paste0("did does not form the analytical variance matrix ",
-                             "for this fit, so its pre-test is unavailable by ",
-                             "construction")
-    } else if (length(pre_idx) == 0L) {
-      wpval_reason <- "there are no estimable pre-treatment group-time cells"
-    } else {
-      preV <- as.matrix(gt_obj$V[pre_idx, pre_idx])
-      rc   <- tryCatch(rcond(preV), error = function(e) NA_real_)
-      rk   <- tryCatch({ sv <- svd(preV)$d
-                         sum(sv > max(dim(preV)) * .Machine$double.eps * max(sv)) },
-                       error = function(e) NA_integer_)
-      wpval_reason <- sprintf(paste0("not computed: pre-treatment covariance ",
-                                     "singular (%d cells, numerical rank %s)"),
-                              nrow(preV),
-                              if (is.na(rk)) "unavailable" else as.character(rk))
-    }
-  }
-
-  list(
-    stat         = round(W, 3),
-    pval         = round(pchisq(W, df = df_use, lower.tail = FALSE), 3),
-    df           = df_use,
-    n_leads      = length(pre_pos),
-    leads        = as.integer(agg_d$egt[keep][pre_pos]),
-    ginv_used    = ginv_used,
-    W_did        = if (is.na(W_did))     NA_real_ else round(W_did, 3),
-    Wpval_did    = if (is.na(Wpval_did)) NA_real_ else round(Wpval_did, 3),
-    df_did       = as.integer(df_did),
-    wpval_reason = wpval_reason
-  )
-}
-
-# --- raw-variable map ---
-raw_var_map <- c(
-  log_commits           = "commitments",
-  share_adapt           = "share_adapt",
-  lcommitments_all      = "commitments_all",
-  lcommitments_nonadapt = "commitments_nonadapt",
-  ldisbursements        = "disbursements",
-  log_commits_dac       = "commits_dac",
-  log_commits_multi     = "commits_multi",
-  log_commits_other     = "commits_other"
-)
-
-# --- Combined wide table ---
-# Seed rule (reproduces the published SEs): set.seed(1242) inside before outcomes loop
-make_wide_table <- function(did_panel_in, retain_thin, outcomes,
-                             dir_tabs, tex_label, caption_spec,
-                             control_grp  = "nevertreated",
-                             out_filename = "att_combined_wide.tex") {
-
-  use_dr <- if (retain_thin) "reg" else "dr"
-
-  # Control-group labels (parameterized so the same helper builds the
-  # never-treated main table and the not-yet-treated robustness table).
-  control_grp_label <- if (control_grp == "notyettreated")
-    "Not-yet-treated" else "Never-treated"
-  control_grp_note  <- if (control_grp == "notyettreated")
-    "not-yet-treated control group" else "never-treated control group"
-
-  table_stats <- list()
-  # Seed rule (reproduces the published SEs): seed immediately before estimator loop
-  set.seed(1242)
-
-  for (oc in outcomes) {
-    message(sprintf("  Table stats [%s]: %s", caption_spec, oc$label))
-
-    if (!retain_thin) {
-      # Main spec (cohorts >= 5): doubly-robust + multiplier-bootstrap SEs.
-      # A separate analytical fit is used exclusively for the pre-trend Wald test
-      # so that the pre-trend test is computed from an analytical
-      # influence-function covariance rather than from bootstrap SEs. (compute_pretrend_test() builds the full
-      # covariance from inf.function$dynamic.inf.func.e.)
-      gt_tab_analytical <- tryCatch(
-        att_gt(
-          yname         = oc$var,
-          tname         = "year",
-          idname        = "country_id",
-          gname         = "cohort_year",
-          xformla       = ~ ge_est + log_population,
-          data          = did_panel_in,
-          est_method    = use_dr,
-          bstrap        = FALSE,   # analytical IF — feeds pre-trend test only
-          cband         = FALSE,
-          control_group = control_grp,
-          anticipation  = 0,
-          base_period   = "universal",
-          panel         = TRUE,
-          allow_unbalanced_panel = TRUE
-        ),
-        error = function(e) NULL
-      )
-      # Bootstrap fit — reported ATT and SE
-      set.seed(1242)
-      gt_tab <- tryCatch(
-        att_gt(
-          yname         = oc$var,
-          tname         = "year",
-          idname        = "country_id",
-          gname         = "cohort_year",
-          xformla       = ~ ge_est + log_population,
-          data          = did_panel_in,
-          est_method    = use_dr,
-          bstrap        = TRUE,    # multiplier-bootstrap SE (DECISION 1)
-          biters        = BITERS,
-          cband         = FALSE,
-          control_group = control_grp,
-          anticipation  = 0,
-          base_period   = "universal",
-          panel         = TRUE,
-          allow_unbalanced_panel = TRUE
-        ),
-        error = function(e) NULL
-      )
-    } else {
-      # Thin-cohort robustness spec: outcome regression + analytical SEs.
-      gt_tab_analytical <- tryCatch(
-        att_gt(
-          yname         = oc$var,
-          tname         = "year",
-          idname        = "country_id",
-          gname         = "cohort_year",
-          xformla       = ~ ge_est + log_population,
-          data          = did_panel_in,
-          est_method    = use_dr,
-          bstrap        = FALSE,   # analytical IF for pre-trend test
-          cband         = FALSE,
-          control_group = control_grp,
-          anticipation  = 0,
-          base_period   = "universal",
-          panel         = TRUE,
-          allow_unbalanced_panel = TRUE
-        ),
-        error = function(e) NULL
-      )
-      gt_tab <- gt_tab_analytical  # same fit used for ATT and pre-trend
-    }
-    if (is.null(gt_tab)) next
-
-    # Pre-trend Wald test always uses the analytical fit: did returns no
-    # analytical variance matrix for a bootstrap fit, and the influence-function
-    # covariance must come from the same fit as the coefficients.
-    agg_dyn_analytical <- if (!is.null(gt_tab_analytical)) tryCatch(
-      aggte(gt_tab_analytical, type = "dynamic", na.rm = TRUE, min_e = -5, max_e = Inf),
-      error = function(e) NULL
-    ) else NULL
-    agg_dyn <- agg_dyn_analytical  # alias used for compute_pretrend_test below
-
-    agg_s <- tryCatch(
-      aggte(gt_tab, type = "simple", na.rm = TRUE),
-      error = function(e) NULL
-    )
-
-    att <- if (!is.null(agg_s)) agg_s$overall.att else NA_real_
-    se  <- if (!is.null(agg_s)) agg_s$overall.se  else NA_real_
-    t_v <- if (!is.na(att) && !is.na(se) && se > 0) att / se else NA_real_
-    stars <- if (is.na(t_v)) "" else
-      if (abs(t_v) > 2.576) "***" else
-      if (abs(t_v) > 1.960) "**"  else
-      if (abs(t_v) > 1.645) "*"   else ""
-
-    pt <- if (!is.null(agg_dyn)) compute_pretrend_test(agg_dyn, gt_tab_analytical) else
-      list(stat = NA_real_, pval = NA_real_, df = 0L,
-           W_did = NA_real_, Wpval_did = NA_real_,
-           df_did = NA_integer_)
-
-    rows_oc   <- did_panel_in[!is.na(did_panel_in[[oc$var]]), ]
-    n_obs     <- nrow(rows_oc)
-    n_country <- length(unique(rows_oc$country_id))
-
-    raw_var  <- raw_var_map[oc$var]
-    is_share <- (oc$var == "share_adapt")
-
-    if (!is.na(raw_var) && raw_var %in% names(did_panel_in)) {
-      pre_rows <- did_panel_in %>%
-        filter(cohort_year > 0, year < cohort_year,
-               !is.na(.data[[raw_var]]))
-      mean_pre <- mean(pre_rows[[raw_var]], na.rm = TRUE)
-    } else {
-      mean_pre <- NA_real_
-    }
-
-    # The naive back-transform exp(ATT)-1 x pre-treatment mean is not
-    # additive across outcomes (it violates the paper's own additivity check),
-    # so it is reported only when the underlying ATT is significant at 5%
-    # (|t| > 1.960); otherwise the cell is suppressed ("---").
-    is_sig5 <- !is.na(t_v) && abs(t_v) > 1.960
-    if (!is_share && !is.na(att) && !is.na(mean_pre) && is_sig5) {
-      implied_usd <- (exp(att) - 1) * mean_pre
-    } else {
-      implied_usd <- NA_real_
-    }
-
-    mean_pre_fmt <- if (is_share) {
-      sprintf("%.2f pp", mean_pre)
-    } else if (!is.na(mean_pre)) {
-      sprintf("%.1f", mean_pre)
-    } else {
-      "---"
-    }
-
-    implied_fmt <- if (is_share) {
-      "---"
-    } else if (!is.na(implied_usd)) {
-      sprintf("%.1f", implied_usd)
-    } else {
-      "---"
-    }
-
-    table_stats[[oc$var]] <- list(
-      att_fmt      = paste0(sprintf("%.4f", att), stars),
-      se_fmt       = sprintf("(%.4f)", se),
-      t_fmt        = sprintf("%.3f", t_v),
-      mean_pre_fmt = mean_pre_fmt,
-      implied_fmt  = implied_fmt,
-      n_obs        = format(n_obs, big.mark = ","),
-      n_country    = as.character(n_country),
-      pt_stat      = sprintf("%.3f", pt$stat),
-      pt_pval      = sprintf("%.3f", pt$pval),
-      pt_df        = pt$df,
-      pt_df_did    = pt$df_did,
-      pt_leads     = pt$leads,
-      pt_ginv      = pt$ginv_used,
-      pt_reason    = pt$wpval_reason,
-      pt_pval_num  = pt$pval,
-      pt_wpval_num = pt$Wpval_did,
-      pt_label     = oc$label,
-      pt_wpval_did = if (is.na(pt$Wpval_did)) "---" else sprintf("%.3f", pt$Wpval_did)
-    )
-    message(sprintf("    ATT = %s  |  Pre-trend chi2(%d) = %.3f  p = %.3f  |  did Wpval = %s",
-                    table_stats[[oc$var]]$att_fmt, pt$df, pt$stat, pt$pval,
-                    table_stats[[oc$var]]$pt_wpval_did))
-  }
-
-  # Row label reflects the actual inference method: bootstrap for main spec
-  # (retain_thin = FALSE), analytical for thin-cohort robustness spec.
-  row_labels <- c(
-    "ATT",
-    "SE",
-    "$t$-statistic",
-    "Mean (pre-treat., USD M)",
-    "Implied effect (USD M, exp(ATT)$-$1 $\\times$ pre-treat.\\ mean)",
-    "Observations",
-    "Countries",
-    "Pre-trend $\\chi^2$",
-    "Pre-trend $p$",
-    "\\texttt{did} pre-test $p$",
-    "\\midrule Estimator",
-    "Control group",
-    "Bootstrap SE"
-  )
-
-  col_short <- sapply(outcomes, `[[`, "label")
-  tab_wide  <- data.frame(` ` = row_labels, check.names = FALSE, stringsAsFactors = FALSE)
-
-  # DECISION 1: main spec uses multiplier-bootstrap; thin-cohort spec uses analytical.
-  bootstrap_row_val <- if (!retain_thin) "Yes (multiplier, 999 reps)" else "No (analytical SE)"
-
-  for (i in seq_along(outcomes)) {
-    oc  <- outcomes[[i]]
-    s   <- table_stats[[oc$var]]
-    col <- if (is.null(s)) rep("---", length(row_labels)) else c(
-      s$att_fmt, s$se_fmt, s$t_fmt,
-      s$mean_pre_fmt, s$implied_fmt,
-      s$n_obs, s$n_country,
-      s$pt_stat, s$pt_pval, s$pt_wpval_did,
-      "CS (2021)", control_grp_label, bootstrap_row_val
-    )
-    tab_wide[[esc_header(col_short[i])]] <- col
-  }
-
-  xtab <- xtable(tab_wide, label = tex_label)
-  align(xtab) <- paste0("ll", paste(rep("c", length(col_short)), collapse = ""))
-
-  raw_lines <- capture.output(
-    print(xtab, include.rownames = FALSE, booktabs = TRUE,
-          sanitize.text.function = identity, size = "\\small",
-          floating = FALSE)
-  )
-
-  # Degrees of freedom behind the two pre-trend columns, taken from the first
-  # outcome that produced a test (they are identical across outcomes here, as
-  # all five are estimated on the same panel).
-  first_stats <- Filter(Negate(is.null), table_stats)
-  first_pt_df       <- if (length(first_stats) == 0L) NA_integer_ else first_stats[[1L]]$pt_df
-  first_pt_df_did   <- if (length(first_stats) == 0L) NA_integer_ else first_stats[[1L]]$pt_df_did
-  first_n_country   <- if (length(first_stats) == 0L) NA_integer_ else
-    as.integer(first_stats[[1L]]$n_country)
-  # Per-column inputs for the pre-trend note: the lead window actually used,
-  # both p-values for every outcome, whether a generalized inverse was needed,
-  # and did's own reason when it returned no statistic. Nothing is hardcoded.
-  first_pt_leads    <- if (length(first_stats) == 0L) integer(0) else
-    first_stats[[1L]]$pt_leads
-  col_wpval <- vapply(first_stats, function(s)
-    if (is.null(s$pt_wpval_num)) NA_real_ else s$pt_wpval_num, numeric(1L))
-  col_pwald <- vapply(first_stats, function(s)
-    if (is.null(s$pt_pval_num)) NA_real_ else s$pt_pval_num, numeric(1L))
-  col_labels_pt <- vapply(first_stats, function(s) s$pt_label, character(1L))
-  col_ginv  <- vapply(first_stats, function(s) isTRUE(s$pt_ginv), logical(1L))
-  first_reason <- {
-    rs <- unlist(lapply(first_stats, function(s) s$pt_reason))
-    rs <- rs[!is.na(rs)]
-    if (length(rs) == 0L) NA_character_ else rs[[1L]]
-  }
-
-  est_method_label <- if (use_dr == "dr") "DR" else "OR"
-  # DECISION 1: main spec (retain_thin=FALSE) uses multiplier-bootstrap SEs;
-  # thin-cohort robustness spec (retain_thin=TRUE) uses analytical SEs.
-  se_label <- if (!retain_thin) "multiplier-bootstrap SE (999 reps, seed 1242; \\texttt{did} 2.5.0; CRS Apr.\\ 2026)" else "analytical (IF) SE; \\texttt{did} 2.5.0; CRS Apr.\\ 2026"
-
-  notes_txt <- paste0(
-    "CS\\,(2021) ", est_method_label,
-    "; WGI gov.\\ effectiveness + log population; ",
-    control_grp_note, "; ", se_label, ". ",
-    wpval_reconciliation(pre_egt = first_pt_leads, df_did = first_pt_df_did,
-                         n_clusters = first_n_country, wpval_did = col_wpval,
-                         pval_wald = col_pwald, labels = col_labels_pt,
-                         wpval_reason = first_reason, ginv_used = col_ginv),
-    "Implied effects: naive back-transforms on the pre-treatment mean, not additive; ",
-    "suppressed if insignificant at 5\\%. ",
-    "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
-  )
-  source_txt <- "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
-
-  cap_title <- paste0(
-    "Effect of NAP adoption on climate finance: simple ATT across outcomes (",
-    caption_spec, ")"
-  )
-
-  out_path <- file.path(dir_tabs, out_filename)
-  write_tex_float(out_path, cap_title, tex_label, raw_lines, notes_txt, source_txt)
-
-  invisible(table_stats)
-}
 
 # ==============================================================================
 # SECTION 4. Helper: make_cohort_plot()
 # (duplicated from 03_main_results.R §9)
 # ==============================================================================
 
-make_cohort_plot <- function(results_group, outcomes, dir_figs,
-                              spec_label, use_bstrap) {
+make_cohort_plot <- function(results_group, outcomes, dir_figs, spec_label) {
 
   group_all <- bind_rows(results_group) %>%
     mutate(
-      outcome = factor(outcome, levels = sapply(outcomes, `[[`, "label")),
+      outcome = factor(outcome, levels = vapply(outcomes, `[[`, character(1L), "label")),
       cohort  = as.integer(cohort)
     ) %>%
     filter(!is.na(ATT))
 
-  if (nrow(group_all) == 0) {
-    message("No cohort ATT data for: ", spec_label); return(invisible(NULL))
-  }
+  if (nrow(group_all) == 0) stop("No cohort ATT data for: ", spec_label)
 
-  palette_vec <- setNames(sapply(outcomes, `[[`, "color"),
-                           sapply(outcomes, `[[`, "label"))
+  palette_vec <- setNames(vapply(outcomes, `[[`, character(1L), "color"),
+                           vapply(outcomes, `[[`, character(1L), "label"))
   dodge_w <- 0.6
 
   p <- ggplot(group_all,
@@ -939,10 +527,12 @@ message("\n=== Section 19: retained-cohorts robustness ===\n")
 dir.create(here("output", "figures", "cohorts_retained"), recursive = TRUE, showWarnings = FALSE)
 dir.create(here("output", "tables",  "cohorts_retained"), recursive = TRUE, showWarnings = FALSE)
 
-# Storage for retained-cohorts results
-results_simple_r  <- list()
-results_group_r   <- list()
-results_dynamic_r <- list()
+# Storage for retained-cohorts results, one slot per outcome
+outcome_vars      <- vapply(outcomes, `[[`, character(1L), "var")
+results_simple_r  <- setNames(vector("list", length(outcomes)), outcome_vars)
+results_group_r   <- setNames(vector("list", length(outcomes)), outcome_vars)
+results_dynamic_r <- setNames(vector("list", length(outcomes)), outcome_vars)
+agg_group_r       <- setNames(vector("list", length(outcomes)), outcome_vars)
 
 # Seed rule (reproduces the published SEs): set.seed(1242) before loop
 set.seed(1242)
@@ -971,7 +561,7 @@ for (oc in outcomes) {
       message("  att_gt failed: ", conditionMessage(e)); NULL
     }
   )
-  if (is.null(gt_r)) next
+  if (is.null(gt_r)) stop("Retained-cohorts att_gt() failed for ", oc$var)
 
   agg_s_r <- tryCatch(aggte(gt_r, type = "simple", na.rm = TRUE), error = function(e) NULL)
   agg_g_r <- tryCatch(aggte(gt_r, type = "group",  na.rm = TRUE), error = function(e) NULL)
@@ -979,6 +569,8 @@ for (oc in outcomes) {
     aggte(gt_r, type = "dynamic", na.rm = TRUE, min_e = -5, max_e = Inf),
     error = function(e) NULL
   )
+  if (is.null(agg_s_r) || is.null(agg_g_r) || is.null(agg_d_r))
+    stop("Retained-cohorts aggte() failed for ", oc$var)
 
   if (!is.null(agg_s_r)) {
     results_simple_r[[oc$var]] <- data.frame(
@@ -989,13 +581,22 @@ for (oc in outcomes) {
     )
   }
   if (!is.null(agg_g_r)) {
+    agg_group_r[[oc$var]] <- agg_g_r
+    # Figure C.10 band: simultaneous (sup-t) 95% over this outcome's cohorts.
+    cv_g_r <- sup_t_crit(agg_g_r$inf.function$selective.inf.func.g, agg_g_r$se.egt,
+                         biters = BITERS)
+    message(sprintf("  Retained cohort fig sup-t crit (%s): %.4f", oc$label, cv_g_r))
+    # Cohort-level ATTs quoted in the text (Figure C.10 plots them).
+    message(sprintf("  Cohort ATTs [%s, retained]: %s", oc$label,
+                    paste(sprintf("%d %.4f (%.4f)", as.integer(agg_g_r$egt),
+                                  agg_g_r$att.egt, agg_g_r$se.egt), collapse = "; ")))
     results_group_r[[oc$var]] <- data.frame(
       outcome = oc$label,
       cohort  = agg_g_r$egt,
       ATT     = round(agg_g_r$att.egt,  4),
       SE      = round(agg_g_r$se.egt,   4),
-      Lower   = round(agg_g_r$att.egt - agg_g_r$crit.val.egt * agg_g_r$se.egt, 4),
-      Upper   = round(agg_g_r$att.egt + agg_g_r$crit.val.egt * agg_g_r$se.egt, 4)
+      Lower   = round(agg_g_r$att.egt - cv_g_r * agg_g_r$se.egt, 4),
+      Upper   = round(agg_g_r$att.egt + cv_g_r * agg_g_r$se.egt, 4)
     )
   }
   if (!is.null(agg_d_r)) {
@@ -1016,8 +617,7 @@ make_cohort_plot(
   results_group = results_group_r,
   outcomes      = outcomes,
   dir_figs      = file.path(here("output", "figures"), "cohorts_retained"),
-  spec_label    = "All cohorts retained (asymptotic SE)",
-  use_bstrap    = FALSE
+  spec_label    = "All cohorts retained (asymptotic SE)"
 )
 
 # --- §19c wide table: cohorts_retained ---
@@ -1028,6 +628,116 @@ make_wide_table(
   dir_tabs      = file.path(here("output", "tables"), "cohorts_retained"),
   tex_label     = "tab:combined_wide_robust",
   caption_spec  = "all cohorts retained, asymptotic SE"
+)
+
+# --- §19f cohort ATTs and pooled early / late adopters, retained spec --------
+# The group aggregations above come from the retained-cohorts fits behind
+# Table tab:combined_wide_robust (outcome regression, analytical SEs, all
+# cohorts, never-treated controls). A pooled row averages the ATTs of a range
+# of cohorts with weights proportional to each cohort's number of recipients,
+# held fixed. Its influence function is the same weighted sum of the cohort
+# influence functions (inf.function$selective.inf.func.g), and its SE uses the
+# formula did applies to this analytical fit, sqrt(mean(IF^2) / n), which is
+# checked below against did's own cohort SEs.
+grp_outcomes <- c(log_commits           = "log(Adaptation commitments)",
+                  lcommitments_all      = "log(Total commitments)",
+                  lcommitments_nonadapt = "log(Non-adaptation commitments)")
+grp_pools <- list(list(label = "2015--2019 adopters", years = 2015:2019),
+                  list(label = "2021--2024 adopters", years = 2021:2024))
+grp_cohorts <- cohort_sizes$cohort_year
+stopifnot(all(unlist(lapply(grp_pools, `[[`, "years")) %in% grp_cohorts))
+
+#' Fixed-weight pooled ATT over a set of cohorts from a group aggregation
+#'
+#' @param agg_g AGGTEobj from aggte(type = "group") of an analytical fit
+#' @param years cohorts to pool
+#' @return list(att, se, p, n_rec)
+pool_cohort_atts <- function(agg_g, years) {
+  IF_g <- agg_g$inf.function$selective.inf.func.g
+  stopifnot(is.matrix(IF_g), ncol(IF_g) == length(agg_g$egt))
+  se_chk <- sqrt(colMeans(IF_g^2) / nrow(IF_g))
+  stopifnot(max(abs(se_chk - agg_g$se.egt) / agg_g$se.egt) < 1e-10)
+  j <- match(years, agg_g$egt)
+  stopifnot(!anyNA(j), !anyNA(agg_g$att.egt[j]))
+  n_rec <- cohort_sizes$n_treated[match(years, cohort_sizes$cohort_year)]
+  w     <- n_rec / sum(n_rec)
+  IF_p  <- as.numeric(IF_g[, j, drop = FALSE] %*% w)
+  att   <- sum(w * agg_g$att.egt[j])
+  se    <- sqrt(mean(IF_p^2) / length(IF_p))
+  list(att = att, se = se, p = 2 * pnorm(-abs(att / se)), n_rec = sum(n_rec))
+}
+
+stars_of_p <- function(p) if (is.na(p)) "" else if (p < 0.01) "***" else
+  if (p < 0.05) "**" else if (p < 0.10) "*" else ""
+grp_cell <- function(att, se) {
+  p <- 2 * pnorm(-abs(att / se))
+  c(paste0(sprintf("%.4f", att), stars_of_p(p)), sprintf("(%.4f)", se), sprintf("%.3f", p))
+}
+
+stopifnot(all(!vapply(agg_group_r[names(grp_outcomes)], is.null, logical(1L))))
+grp_rows <- vapply(seq_along(grp_cohorts), function(i) {
+  g <- grp_cohorts[i]
+  cells <- unlist(lapply(names(grp_outcomes), function(v) {
+    a <- agg_group_r[[v]]
+    j <- match(g, a$egt)
+    stopifnot(!is.na(j))
+    message(sprintf("  Retained cohort ATT [%s] %d (%d recipients): %.4f (SE %.4f, p %.3f)",
+                    v, as.integer(g), cohort_sizes$n_treated[i], a$att.egt[j], a$se.egt[j],
+                    2 * pnorm(-abs(a$att.egt[j] / a$se.egt[j]))))
+    grp_cell(a$att.egt[j], a$se.egt[j])
+  }))
+  paste0(g, " & ", cohort_sizes$n_treated[i], " & ", paste(cells, collapse = " & "), " \\\\")
+}, character(1L))
+pool_rows <- vapply(grp_pools, function(pl) {
+  res <- lapply(names(grp_outcomes), function(v) pool_cohort_atts(agg_group_r[[v]], pl$years))
+  for (k in seq_along(res))
+    message(sprintf("  Retained pooled ATT [%s] %s (%d recipients): %.4f (SE %.4f, p %.4f)",
+                    names(grp_outcomes)[k], pl$label, res[[k]]$n_rec,
+                    res[[k]]$att, res[[k]]$se, res[[k]]$p))
+  cells <- unlist(lapply(res, function(r) grp_cell(r$att, r$se)))
+  paste0(pl$label, " & ", res[[1L]]$n_rec, " & ", paste(cells, collapse = " & "), " \\\\")
+}, character(1L))
+
+n_col_grp <- 2L + 3L * length(grp_outcomes)
+grp_tabular <- c(
+  paste0("\\begin{tabular}{l", strrep("c", n_col_grp - 1L), "}"),
+  "\\toprule",
+  paste0(" & & ", paste(sprintf("\\multicolumn{3}{c}{%s}", grp_outcomes), collapse = " & "),
+         " \\\\"),
+  paste(sprintf("\\cmidrule(lr){%d-%d}", 3L + 3L * (seq_along(grp_outcomes) - 1L),
+                5L + 3L * (seq_along(grp_outcomes) - 1L)), collapse = " "),
+  paste0("Adoption cohort & Recipients & ",
+         paste(rep("ATT & SE & $p$", length(grp_outcomes)), collapse = " & "), " \\\\"),
+  "\\midrule",
+  grp_rows,
+  "\\midrule",
+  paste0("\\multicolumn{", n_col_grp, "}{l}{\\textit{Pooled cohorts (weights proportional to recipients)}} \\\\"),
+  pool_rows,
+  "\\bottomrule",
+  "\\end{tabular}"
+)
+write_tex_float(
+  out_path      = file.path(here("output", "tables"), "cohorts_retained", "att_group_retained.tex"),
+  caption_title = "ATT by adoption cohort, all cohorts retained",
+  label         = "tab:att_group_retained",
+  tabular_lines = grp_tabular,
+  notes_text    = paste0(
+    "Specification of Table~\\ref{tab:combined_wide_robust}: CS\\,(2021) outcome regression, ",
+    "all adoption cohorts retained (", format(nrow(did_panel_full), big.mark = ","),
+    " recipient-years, ",
+    n_distinct(did_panel_full$recipient_name), " recipients), never-treated control group, ",
+    "WGI gov.\\ effectiveness + log population, universal base period. Each cohort row is ",
+    "that cohort's average post-adoption ATT; ``Recipients'' counts its treated recipients. ",
+    "Pooled rows average the cohort ATTs with weights proportional to their recipients, held ",
+    "fixed (no term for estimated weights). SEs: analytical influence-function SEs clustered by recipient; a pooled row's SE ",
+    "combines the cohorts' influence functions with the same weights. $p$: two-sided, normal. ",
+    "Analytical SEs on cohorts of ",
+    paste(range(cohort_sizes$n_treated[cohort_sizes$cohort_year %in% thin_cohorts]),
+          collapse = "--"),
+    " treated recipients are unreliable, so individual thin-cohort $p$-values and stars ",
+    "should be read with caution; the pooled rows are the estimates of interest. ",
+    "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"),
+  source_text   = "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
 )
 
 # ==============================================================================
@@ -1054,16 +764,16 @@ dir.create(dir_tabs_nyt, recursive = TRUE, showWarnings = FALSE)
 
 # Hold the estimation panel fixed at the MAIN-spec definition (cohorts_dropped):
 # thin cohorts (< thin_threshold treated units) are removed, exactly as in
-# 03_main_results.R run_did_estimation(retain_thin_cohorts = FALSE).  Only the
-# control group differs from the headline result.
+# the headline panel of 03_main_results.R (Section 10).  Only the control group
+# differs from the headline result.
 did_panel_nyt <- if (length(thin_cohorts) > 0)
   did_panel_full %>% filter(!(cohort_year %in% thin_cohorts)) else did_panel_full
 message(sprintf("Not-yet-treated panel: dropped thin cohorts {%s}; N = %d rows, %d countries",
                 paste(thin_cohorts, collapse = ", "),
                 nrow(did_panel_nyt), length(unique(did_panel_nyt$country_id))))
 
-results_group_nyt   <- list()
-results_dynamic_nyt <- list()
+results_group_nyt   <- setNames(vector("list", length(outcomes)), outcome_vars)
+results_dynamic_nyt <- setNames(vector("list", length(outcomes)), outcome_vars)
 
 # Seed rule (reproduces the published SEs): set.seed(1242) before loop
 set.seed(1242)
@@ -1071,7 +781,7 @@ set.seed(1242)
 for (oc in outcomes) {
   message(sprintf("\n--- Not-yet-treated spec: %s ---", oc$label))
 
-  set.seed(1242)  # re-seed before each bootstrap fit (DECISION 1 reproducibility)
+  set.seed(1242)  # re-seed before each bootstrap fit (reproduces the published SEs)
   gt_nyt <- tryCatch(
     att_gt(
       yname         = oc$var,
@@ -1092,13 +802,23 @@ for (oc in outcomes) {
     ),
     error = function(e) { message("  att_gt failed: ", conditionMessage(e)); NULL }
   )
-  if (is.null(gt_nyt)) next
+  if (is.null(gt_nyt)) stop("Not-yet-treated att_gt() failed for ", oc$var)
 
   agg_g_nyt <- tryCatch(aggte(gt_nyt, type = "group",  na.rm = TRUE), error = function(e) NULL)
   agg_d_nyt <- tryCatch(
     aggte(gt_nyt, type = "dynamic", na.rm = TRUE, min_e = -5, max_e = Inf),
     error = function(e) NULL
   )
+  if (is.null(agg_g_nyt) || is.null(agg_d_nyt))
+    stop("Not-yet-treated aggte() failed for ", oc$var)
+  # Figure bands: simultaneous (sup-t) 95%, one band family per outcome curve
+  # (uniform over its cohorts / its event times), on the SEs of these draws.
+  cv_g_nyt <- sup_t_crit(agg_g_nyt$inf.function$selective.inf.func.g, agg_g_nyt$se.egt,
+                         biters = BITERS)
+  cv_d_nyt <- sup_t_crit(agg_d_nyt$inf.function$dynamic.inf.func.e, agg_d_nyt$se.egt,
+                         biters = BITERS)
+  message(sprintf("  Not-yet-treated sup-t crit (%s): cohort fig %.4f | event-study %.4f",
+                  oc$label, cv_g_nyt, cv_d_nyt))
 
   if (!is.null(agg_g_nyt)) {
     results_group_nyt[[oc$var]] <- data.frame(
@@ -1106,8 +826,8 @@ for (oc in outcomes) {
       cohort  = agg_g_nyt$egt,
       ATT     = round(agg_g_nyt$att.egt, 4),
       SE      = round(agg_g_nyt$se.egt,  4),
-      Lower   = round(agg_g_nyt$att.egt - agg_g_nyt$crit.val.egt * agg_g_nyt$se.egt, 4),
-      Upper   = round(agg_g_nyt$att.egt + agg_g_nyt$crit.val.egt * agg_g_nyt$se.egt, 4)
+      Lower   = round(agg_g_nyt$att.egt - cv_g_nyt * agg_g_nyt$se.egt, 4),
+      Upper   = round(agg_g_nyt$att.egt + cv_g_nyt * agg_g_nyt$se.egt, 4)
     )
   }
   if (!is.null(agg_d_nyt)) {
@@ -1116,8 +836,8 @@ for (oc in outcomes) {
       event_time = agg_d_nyt$egt,
       ATT        = round(agg_d_nyt$att.egt, 4),
       SE         = round(agg_d_nyt$se.egt,  4),
-      Lower      = round(agg_d_nyt$att.egt - agg_d_nyt$crit.val.egt * agg_d_nyt$se.egt, 4),
-      Upper      = round(agg_d_nyt$att.egt + agg_d_nyt$crit.val.egt * agg_d_nyt$se.egt, 4),
+      Lower      = round(agg_d_nyt$att.egt - cv_d_nyt * agg_d_nyt$se.egt, 4),
+      Upper      = round(agg_d_nyt$att.egt + cv_d_nyt * agg_d_nyt$se.egt, 4),
       color      = oc$color
     )
   }
@@ -1128,8 +848,7 @@ make_cohort_plot(
   results_group = results_group_nyt,
   outcomes      = outcomes,
   dir_figs      = dir_figs_nyt,
-  spec_label    = "Not-yet-treated controls (multiplier bootstrap)",
-  use_bstrap    = TRUE
+  spec_label    = "Not-yet-treated controls (multiplier bootstrap)"
 )
 
 # --- §19d-ii headline event-study: log(adaptation commitments) ---
@@ -1204,6 +923,13 @@ did_panel_main <- if (length(thin_cohorts) > 0)
 message(sprintf("Units/zeros panel: dropped thin cohorts {%s}; N = %d rows, %d countries",
                 paste(thin_cohorts, collapse = ", "),
                 nrow(did_panel_main), length(unique(did_panel_main$country_id))))
+# Text numbers (units/zeros section): zeros and how many fall in 2009.
+is_zero_uz <- !is.na(did_panel_main$commitments) & !crs_positive(did_panel_main$commitments)
+message(sprintf(paste0("Exact zeros in adaptation commitments (main sample): %d of %d ",
+                       "observations (%.1f%%), %d of them in 2009"),
+                sum(is_zero_uz), sum(!is.na(did_panel_main$commitments)),
+                100 * mean(is_zero_uz[!is.na(did_panel_main$commitments)]),
+                sum(is_zero_uz & did_panel_main$year == 2009L)))
 
 # Spec definitions.  `transform` maps the panel to (data, yname) ready for
 # att_gt(); `est_method` is "dr" for specs 1--4 and "reg" for spec 5 (the
@@ -1241,13 +967,14 @@ uz_specs <- list(
        label = "Pure log, zeros dropped",
        est_method = "reg",   # GOTCHA: "dr" segfaults on positives-only panel
        transform  = function(d) {
-         d <- d[!is.na(d$commitments) & d$commitments > 0, ]
+         d <- d[!is.na(d$commitments) & crs_positive(d$commitments), ]
          d$uz_y <- log(d$commitments)
          list(data = d, yname = "uz_y")
        })
 )
 
-uz_stats <- list()
+uz_stats <- setNames(vector("list", length(uz_specs) + 1L),
+                     c(vapply(uz_specs, `[[`, character(1L), "key"), "ppml_levels"))
 
 # Seed rule (reproduces the published SEs): seed once before the spec loop.
 set.seed(1242)
@@ -1337,9 +1064,9 @@ for (sp in uz_specs) {
     error = function(e) { message("  att_gt failed: ", conditionMessage(e)); NULL }
   )
 
-  # Separate analytical fit (bstrap = FALSE) feeds the pre-trend Wald test only,
-  # keeping the pre-trend test on an analytical influence-function covariance
-  # (did returns no analytical variance matrix for a bootstrap fit).
+  # Separate analytical fit (bstrap = FALSE) feeds the pre-trend Wald test only:
+  # its dynamic aggregation reports the influence-function SEs the test's
+  # covariance reproduces (a bootstrap aggregation reports bootstrap SEs).
   set.seed(1242)  # re-seed immediately before att_gt (reproducibility invariant)
   gt_sp_analytical <- tryCatch(
     att_gt(
@@ -1358,17 +1085,14 @@ for (sp in uz_specs) {
       panel         = TRUE,
       allow_unbalanced_panel = TRUE
     ),
-    error = function(e) NULL
+    error = function(e) { message("  att_gt (analytical) failed: ", conditionMessage(e)); NULL }
   )
+  if (is.null(gt_sp) || is.null(gt_sp_analytical))
+    stop("Units/zeros estimation failed: ", sp$label)
 
-  agg_s_sp <- if (!is.null(gt_sp))
-    tryCatch(aggte(gt_sp, type = "simple", na.rm = TRUE), error = function(e) NULL)
-  else NULL
-
-  agg_d_sp <- if (!is.null(gt_sp_analytical))
-    tryCatch(aggte(gt_sp_analytical, type = "dynamic", na.rm = TRUE,
-                   min_e = -5, max_e = Inf), error = function(e) NULL)
-  else NULL
+  agg_s_sp <- aggte(gt_sp, type = "simple", na.rm = TRUE)
+  agg_d_sp <- aggte(gt_sp_analytical, type = "dynamic", na.rm = TRUE,
+                    min_e = -5, max_e = Inf)
 
   att_sp <- if (!is.null(agg_s_sp)) agg_s_sp$overall.att else NA_real_
   se_sp  <- if (!is.null(agg_s_sp)) agg_s_sp$overall.se  else NA_real_
@@ -1378,15 +1102,7 @@ for (sp in uz_specs) {
     if (abs(t_sp) > 1.960) "**"  else
     if (abs(t_sp) > 1.645) "*"   else ""
 
-  pt_sp <- if (!is.null(agg_d_sp))
-    tryCatch(compute_pretrend_test(agg_d_sp, gt_sp_analytical),
-             error = function(e) list(stat = NA_real_, pval = NA_real_, df = 0L,
-                                       W_did = NA_real_, Wpval_did = NA_real_,
-                                       df_did = NA_integer_))
-  else
-    list(stat = NA_real_, pval = NA_real_, df = 0L,
-         W_did = NA_real_, Wpval_did = NA_real_,
-         df_did = NA_integer_)
+  pt_sp <- compute_pretrend_test(agg_d_sp, gt_sp_analytical)
 
   uz_stats[[sp$key]] <- list(
     label        = sp$label,
@@ -1411,10 +1127,10 @@ for (sp in uz_specs) {
 # benchmark (Chen & Roth remedy).  Estimated on `commitments` in USD millions
 # via the Sun & Abraham (2021) interaction-weighted estimator with a Poisson
 # link (fixest::fepois + sunab()), which is robust to staggered timing.
-# Poisson in levels handles the 230 zeros natively and its coefficient is a
-# proportional (semi-elasticity) effect, invariant to the units of the outcome.
-# fepois drops perfectly-separated observations, so N may be < 2,014 — that is
-# expected and correct; we report whatever fepois uses (model$nobs).
+# Poisson in levels keeps the exact zeros (counted in the log above) and its
+# coefficient is a proportional (semi-elasticity) effect, invariant to the units
+# of the outcome. fepois drops perfectly-separated observations, so its N can be
+# below the panel's; we report whatever fepois uses (model$nobs).
 # Analytical clustered SE (clustered by country) — not bootstrap-based, so no
 # seeding is required for this spec.
 # -----------------------------------------------------------------------
@@ -1438,6 +1154,7 @@ ppml_att_row <- if (!is.null(ppml_model)) {
            error = function(e) { message("  agg=att failed: ", conditionMessage(e)); NULL })
 } else NULL
 
+if (is.null(ppml_att_row)) stop("Units/zeros PPML estimation failed.")
 att_ppml <- if (!is.null(ppml_att_row)) ppml_att_row[["Estimate"]]   else NA_real_
 se_ppml  <- if (!is.null(ppml_att_row)) ppml_att_row[["Std. Error"]] else NA_real_
 t_ppml   <- if (!is.null(ppml_att_row)) ppml_att_row[[3L]]           else NA_real_
@@ -1529,15 +1246,15 @@ raw_uz <- capture.output(
 
 notes_uz <- paste0(
   "Outcome: adaptation commitments. Specs 1--4: CS\\,(2021) DR, boot SE (",
-  BITERS, " reps, seed 1242); 5: OR, boot SE, positive subsample. Row 1: headline ",
-  "fit, not re-estimated. Row 6: Sun--Abraham ",
+  BITERS, " reps, seed 1242); 5: OR, boot SE, positive subsample. Row 1: the headline ",
+  "estimate (Table~\\ref{tab:combined_wide_main}). Row 6: Sun--Abraham ",
   "(2021) PPML, levels, country+year FE, clustered SE; retains zeros; no ",
   "comparable pre-trend statistic. Never-treated controls; WGI GE + log ",
   "population. Commitments in USD millions (raw USD $= \\times 10^6$). ",
   wpval_reconciliation(pre_egt = uz_pt_leads, df_did = uz_pt_df_did,
                        n_clusters = uz_n_country, wpval_did = uz_wpval,
                        pval_wald = uz_pval, wpval_reason = uz_reason,
-                       ginv_used = uz_ginv),
+                       ginv_used = uz_ginv, df = uz_pt_df),
   "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
 )
 source_uz <- "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
@@ -1606,8 +1323,7 @@ Mvec_sd      <- c(0, 0.01, 0.02, 0.05)
 numPre_grid  <- c(4L, 6L, 8L)
 
 #' Multiplier-bootstrap covariance of a dynamic aggregation.
-#' (Byte-identical copy of the helper in 03_main_results.R §7b — duplicated
-#'  per this project's no-sourced-utils convention.)
+#' (Copy of the helper in 03_main_results.R §7b; keep the two in sync.)
 #'
 #' @param agg_d dynamic AGGTEobj from aggte(type = "dynamic")
 #' @param gt_obj the att_gt MP object the aggregation came from
@@ -1642,16 +1358,16 @@ boot_vcov_dynamic <- function(agg_d, gt_obj, seed = 1242L) {
 
 #' Smallest grid value at which a sensitivity CI first contains zero.
 #'
-#' @param lb numeric vector of robust lower bounds, ordered as `grid`
+#' A CI contains zero when lb <= 0 <= ub; testing lb alone would call an
+#' interval lying wholly below zero a breakdown.
+#' @param lb,ub numeric vectors of robust lower/upper bounds, ordered as `grid`
 #' @param grid numeric vector of M or Mbar values
 #' @return formatted LaTeX string
-breakdown_value <- function(lb, grid) {
-  if (all(is.na(lb))) return("---")
-  if (all(lb > 0, na.rm = TRUE)) return(sprintf("$> %.2f$", max(grid)))
-  idx <- which(lb <= 0)[1]
-  if (is.na(idx)) sprintf("$> %.2f$", max(grid)) else {
-    if (max(grid) < 0.1) sprintf("$%.3f$", grid[idx]) else sprintf("$%.2f$", grid[idx])
-  }
+breakdown_value <- function(lb, ub, grid) {
+  if (all(is.na(lb) | is.na(ub))) return("---")
+  idx <- which(lb <= 0 & ub >= 0)[1]
+  if (is.na(idx)) return(sprintf("$> %.2f$", max(grid)))
+  if (max(grid) < 0.1) sprintf("$%.3f$", grid[idx]) else sprintf("$%.2f$", grid[idx])
 }
 
 #' Assemble HonestDiD inputs (betahat, Sigma, l_vec) from a saved headline fit.
@@ -1674,13 +1390,8 @@ hd_inputs_from_fit <- function(fit, numPre) {
   min_e_k <- -(numPre + 1)
   reagg   <- !identical(as.integer(numPre), 4L)
   if (!reagg) {
-    agg_k <- fit$agg_dynamic
-    if (is.null(agg_k)) {
-      message("    stored dynamic aggregation missing — falling back to aggte().")
-      reagg <- TRUE
-    } else {
-      stopifnot(identical(as.numeric(agg_k$min_e), -5))
-    }
+    agg_k <- fit$agg_dynamic  # read_headline_fit() guarantees it is present
+    stopifnot(identical(as.numeric(agg_k$min_e), -5))
   }
   if (reagg) {
     set.seed(1242)
@@ -1708,18 +1419,14 @@ hd_inputs_from_fit <- function(fit, numPre) {
   }
 
   # l_vec: group-size weights that reproduce the simple ATT (verified in 03).
+  # Hard stop: the sensitivity analysis must target the estimand Table 2
+  # prints. If the group-size weights do not reproduce the reported simple
+  # ATT, the exhibit would silently describe a different parameter.
   l_vec <- fit$l_vec_simple
-  if (is.null(l_vec) || length(l_vec) != nPost) {
-    message("    l_vec unavailable or wrong length — falling back to equal weights.")
-    l_vec <- rep(1 / nPost, nPost)
-  } else {
-    # Hard stop: the sensitivity analysis must target the estimand Table 2
-    # prints. If the group-size weights stop reproducing the reported simple
-    # ATT, the l_vec is wrong and the exhibit would silently describe a
-    # different parameter.
-    gap <- sum(l_vec * betahat[egt >= 0]) - fit$att
-    stopifnot(abs(gap) < 1e-6)
-  }
+  if (length(l_vec) != nPost)
+    stop("l_vec_simple has ", length(l_vec), " entries for ", nPost, " post-treatment event times")
+  gap <- sum(l_vec * betahat[egt >= 0]) - fit$att
+  stopifnot(abs(gap) < 1e-6)
 
   list(betahat = betahat, sigma = bvc$sigma, numPre = nPre, numPost = nPost,
        l_vec = l_vec, egt = egt, max_rel_dev = bvc$max_rel_dev,
@@ -1729,9 +1436,12 @@ hd_inputs_from_fit <- function(fit, numPre) {
 short_labels_hd <- c("log(Adapt.)", "Share (pp)", "log(Total)",
                      "log(Non-adapt.)", "log(Disb.)")
 
-hd_all  <- list()   # primary RM results (numPre = 4)
-hd_pre  <- list()   # RM breakdown by numPrePeriods
-hd_sd   <- list()   # smoothness-restriction results
+# One slot per outcome (and per outcome x lead count for hd_pre).
+hd_all  <- setNames(vector("list", length(outcomes)), outcome_vars)  # primary RM results (numPre = 4)
+hd_pre_keys <- unlist(lapply(outcomes, function(oc)
+  paste0(oc$var, "_", if (oc$var %in% PRIMARY_OUTCOMES) numPre_grid else numPre_grid[1L])))
+hd_pre  <- setNames(vector("list", length(hd_pre_keys)), hd_pre_keys)  # RM breakdown by numPrePeriods
+hd_sd   <- setNames(vector("list", length(outcomes)), outcome_vars)  # smoothness-restriction results
 
 for (oc in outcomes) {
   message(sprintf("\n=== HonestDiD: %s ===", oc$label))
@@ -1745,7 +1455,7 @@ for (oc in outcomes) {
   ks <- if (oc$var %in% PRIMARY_OUTCOMES) numPre_grid else numPre_grid[1L]
   for (k in ks) {
     hin <- hd_inputs_from_fit(fit, k)
-    if (is.null(hin)) next
+    if (is.null(hin)) stop("HonestDiD inputs unavailable for ", oc$var, ", numPre = ", k)
     message(sprintf("  numPre = %d | numPost = %d | event times %s",
                     hin$numPre, hin$numPost,
                     paste(sprintf("%d", as.integer(hin$egt)), collapse = ",")))
@@ -1763,14 +1473,15 @@ for (oc in outcomes) {
         Mbarvec = Mbarvec_hd, l_vec = hin$l_vec, alpha = 0.05),
       error = function(e) { message("  RM sensitivity failed: ",
                                      conditionMessage(e)); NULL })
+    if (is.null(rm_sens)) stop("HonestDiD RM sensitivity failed for ", oc$var, ", numPre = ", k)
 
     if (!is.null(rm_sens)) {
-      bd <- breakdown_value(rm_sens$lb, Mbarvec_hd[seq_len(nrow(rm_sens))])
+      bd <- breakdown_value(rm_sens$lb, rm_sens$ub, Mbarvec_hd[seq_len(nrow(rm_sens))])
       message(sprintf("  RM breakdown Mbar (numPre = %d) = %s", k, bd))
       hd_pre[[paste0(oc$var, "_", k)]] <- list(var = oc$var, numPre = k,
                                                rm = rm_sens, breakdown = bd)
       if (k == numPre_grid[1L]) {
-        hd_all[[oc$var]] <- list(label = oc$label, rm = rm_sens,
+        hd_all[[oc$var]] <- list(label = oc$label, rm = rm_sens, egt = hin$egt,
                                  numPre = hin$numPre, numPost = hin$numPost,
                                  l_vec = hin$l_vec, breakdown = bd,
                                  max_rel_dev = hin$max_rel_dev,
@@ -1788,9 +1499,10 @@ for (oc in outcomes) {
           Mvec = Mvec_sd, l_vec = hin$l_vec, alpha = 0.05),
         error = function(e) { message("  SD sensitivity failed: ",
                                        conditionMessage(e)); NULL })
+      if (is.null(sd_sens)) stop("HonestDiD SD sensitivity failed for ", oc$var)
       if (!is.null(sd_sens)) {
         hd_sd[[oc$var]] <- list(label = oc$label, sd = sd_sens,
-                                breakdown = breakdown_value(sd_sens$lb, Mvec_sd),
+                                breakdown = breakdown_value(sd_sens$lb, sd_sens$ub, Mvec_sd),
                                 method = unique(as.character(sd_sens$method)))
         message(sprintf("  SD breakdown M = %s (method: %s)",
                         hd_sd[[oc$var]]$breakdown,
@@ -1859,14 +1571,20 @@ make_honestdid_table <- function(hd_all, Mbarvec, outcomes, dir_tabs) {
     sprintf("%.1f\\%% (%s)", 100 * max(mrd_vals, na.rm = TRUE),
             short_labels_hd[which.max(replace(mrd_vals, is.na(mrd_vals), -Inf))])
 
+  # Event-time windows of the fit behind the table (first outcome), not typed.
+  egt_hd  <- hd_all[[outcomes[[1L]]$var]]$egt
+  post_hd <- egt_hd[egt_hd >= 0]
+  pre_hd  <- egt_hd[egt_hd < 0]
   notes_txt <- paste0(
     "Sensitivity of \\citet{rambachan_roth_2023} on the headline spec (Table~",
     "\\ref{tab:combined_wide_main}): CS\\,(2021) DR, never-treated controls, ",
     "multiplier-bootstrap SE (", BITERS, " reps, seed 1242); event-study ",
-    "covariance from the stored fit, not re-estimated. Target: group-size-weighted ",
-    "average post-treatment effect ($e=0,\\dots,3$), weights ", l_vec_txt,
+    "estimates and covariance of that headline estimate. Target: group-size-weighted ",
+    "average post-treatment effect ($e=", min(post_hd), ",\\dots,", max(post_hd),
+    "$), weights ", l_vec_txt,
     ", reproducing the simple ATT. $\\Sigma$ rescaled to reported bootstrap SEs ",
-    "(max gap ", mrd_txt, "). Four pre-treatment leads ($e=-5,\\dots,-2$). ",
+    "(max gap ", mrd_txt, "). Pre-treatment window: ", length(pre_hd), " leads ($e=",
+    min(pre_hd), ",\\dots,", max(pre_hd), "$). ",
     "``Breakdown $\\bar{M}$'' = smallest grid value where the robust CI contains zero"
   )
   source_txt <- "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
@@ -1885,7 +1603,7 @@ make_honestdid_table(hd_all, Mbarvec_hd, outcomes,
                      here("output", "tables", "cohorts_dropped"))
 
 # (ii) Breakdown Mbar by number of pre-treatment periods -----------------------
-if (length(hd_pre) > 0) {
+if (!all(vapply(hd_pre, is.null, logical(1L)))) {
   pre_mat <- matrix("---", nrow = length(numPre_grid), ncol = length(outcomes))
   rownames(pre_mat) <- sprintf("%d pre-treatment periods", numPre_grid)
   colnames(pre_mat) <- short_labels_hd
@@ -1907,14 +1625,35 @@ if (length(hd_pre) > 0) {
     print(xt_pre, include.rownames = FALSE, booktabs = TRUE,
           sanitize.text.function = identity, size = "\\small", floating = FALSE))
 
+  # Lead counts, windows and outcome lists come from the objects, not typed.
+  np_vars  <- setdiff(outcome_vars, PRIMARY_OUTCOMES)
+  lab_of   <- function(v) {
+    l <- short_labels_hd[match(v, outcome_vars)]
+    if (length(l) < 2L) l else paste(paste(head(l, -1L), collapse = ", "), "and", tail(l, 1L))
+  }
+  # TRUE if the robust CI at the smallest Mbar (0) already contains zero.
+  np_break0 <- vapply(np_vars, function(v) {
+    r <- hd_pre[[paste0(v, "_", numPre_grid[1L])]]$rm
+    r$lb[1L] <= 0 && r$ub[1L] >= 0
+  }, logical(1L))
+  stopifnot(Mbarvec_hd[1L] == 0)
   notes_pre <- paste0(
-    "Each cell: breakdown value $\\bar{M}$, disciplined by 4, 6 or 8 pre-treatment ",
-    "event times. Estimator/covariance as Table~\\ref{tab:honestdid}; only ",
-    "\\texttt{min\\_e} changes ($-5$, $-7$, $-9$). 4-lead row: stored aggregation ",
-    "behind Table~\\ref{tab:combined_wide_main}. 6-/8-lead rows: re-aggregated from ",
-    "the same stored fit (seed 1242), two primary outcomes only; point estimates ",
-    "unchanged, SEs a fresh bootstrap draw. Three aggregate outcomes already break ",
-    "at $\\bar{M} = 0$ with four leads, so those cells are left blank"
+    "Each cell: breakdown value $\\bar{M}$, disciplined by ",
+    paste(head(numPre_grid, -1L), collapse = ", "), " or ", tail(numPre_grid, 1L),
+    " pre-treatment event times. Estimator/covariance as Table~\\ref{tab:honestdid}; ",
+    "only the first event time of the dynamic aggregation changes (",
+    paste(sprintf("$%d$", -(numPre_grid + 1L)), collapse = ", "), "). ",
+    numPre_grid[1L], "-lead row: the event-study estimates behind ",
+    "Table~\\ref{tab:combined_wide_main}. ",
+    paste(numPre_grid[-1L], collapse = "-/"), "-lead rows: the same estimates aggregated ",
+    "over a longer pre-treatment window (seed 1242), for ", lab_of(PRIMARY_OUTCOMES),
+    " only; point estimates unchanged, SEs a new bootstrap draw. ",
+    if (all(np_break0))
+      paste0(lab_of(np_vars), " already break at $\\bar{M} = 0$ with ", numPre_grid[1L],
+             " leads, so their longer-window cells are left blank")
+    else
+      paste0("Longer windows are not computed for ", lab_of(np_vars),
+             " (cells left blank)")
   )
 
   write_tex_float(
@@ -1928,7 +1667,7 @@ if (length(hd_pre) > 0) {
 }
 
 # (iii) Smoothness restriction Delta^SD(M) ------------------------------------
-if (length(hd_sd) > 0) {
+if (!all(vapply(hd_sd, is.null, logical(1L)))) {
   sd_mat <- matrix("---", nrow = length(Mvec_sd), ncol = length(outcomes))
   rownames(sd_mat) <- sprintf("$M = %.2f$", Mvec_sd)
   colnames(sd_mat) <- short_labels_hd
@@ -1961,7 +1700,7 @@ if (length(hd_sd) > 0) {
     "Smoothness restriction $\\Delta^{SD}(M)$ of \\citet{rambachan_roth_2023}: the ",
     "differential trend's slope changes by at most $M$ between periods; $M = 0$ still ",
     "allows an exactly linear violation (not the conventional CI). Confidence sets: ",
-    paste(sd_methods, collapse = "/"), " method, 5\\% level. Estimator, stored fit, ",
+    paste(sd_methods, collapse = "/"), " method, 5\\% level. Estimator, estimates, ",
     "covariance and target weights as Table~\\ref{tab:honestdid}; four pre-treatment ",
     "leads ($e = -5,\\dots,-2$). ``Breakdown $M$'' = smallest grid value at which the ",
     "robust CI contains zero. $M$ is in outcome units per period, not comparable ",
@@ -2025,16 +1764,13 @@ n_treated_plac <- n_distinct(
   did_panel_placebo$country_id[did_panel_placebo$cohort_year > 0])
 # Placebo uses outcome regression (reg): the doubly-robust estimator is not
 # stable on this truncated panel. Inference is the multiplier bootstrap in every
-# case (see the note immediately below) -- the old "bootstrap only when
-# N >= 40" rule is gone, so the reported placebo fit is always the bootstrap
-# one and the analytical twin exists solely to feed the pre-trend test.
+# case (see the note immediately below). The reported placebo fit is the
+# bootstrap one; the analytical twin exists solely to feed the pre-trend test.
 em_plac <- "reg"
-# The `n_treated >= 40` bootstrap switch is removed project-wide -- 40 is a
-# convention, not an estimator requirement, and it disabled the bootstrap
-# exactly where analytical influence-function SEs are most anti-conservative.
-# The multiplier bootstrap is now always on, with an explicit replication count
-# (previously this call passed no `biters` and silently used did's default of
-# 1000 while the table note claimed 999).
+# The multiplier bootstrap is used whatever the number of treated units (a
+# 40-unit cut-off is a convention, not an estimator requirement, and thin
+# cells are where analytical influence-function SEs are most
+# anti-conservative), with the replication count passed explicitly (BITERS).
 bs_plac <- TRUE
 message(sprintf("  N treated (placebo) = %d  ->  est_method = %s  bstrap = %s (%d reps)",
                 n_treated_plac, em_plac, bs_plac, BITERS))
@@ -2102,11 +1838,10 @@ if (!is.null(gt_placebo)) {
   # Analytical dynamic aggregation feeding the pre-trend test only (figure /
   # CI ribbon above still use agg_d_plac from the primary, possibly-bootstrap
   # fit, unchanged).
-  agg_d_plac_analytical <- if (!is.null(gt_placebo_analytical)) tryCatch(
-    aggte(gt_placebo_analytical, type = "dynamic", na.rm = TRUE,
-          min_e = -4, max_e = Inf),
-    error = function(e) NULL
-  ) else NULL
+  if (is.null(agg_s_plac) || is.null(agg_d_plac) || is.null(gt_placebo_analytical))
+    stop("Placebo estimation failed: no table or figure written.")
+  agg_d_plac_analytical <- aggte(gt_placebo_analytical, type = "dynamic", na.rm = TRUE,
+                                 min_e = -4, max_e = Inf)
 
   if (!is.null(agg_s_plac)) {
     att_p   <- agg_s_plac$overall.att
@@ -2121,7 +1856,10 @@ if (!is.null(gt_placebo)) {
   }
 
   if (!is.null(agg_d_plac)) {
-    cv_p <- agg_d_plac$crit.val.egt
+    # Simultaneous (sup-t) 95% band over the plotted event times.
+    cv_p <- sup_t_crit(agg_d_plac$inf.function$dynamic.inf.func.e, agg_d_plac$se.egt,
+                       biters = BITERS)
+    message(sprintf("  Placebo ES sup-t crit (log adaptation commitments): %.4f", cv_p))
     es_plac <- data.frame(
       event_time = agg_d_plac$egt,
       ATT        = agg_d_plac$att.egt,
@@ -2154,15 +1892,7 @@ if (!is.null(gt_placebo)) {
 
   if (!is.null(agg_s_plac)) {
 
-    pt_plac <- if (!is.null(agg_d_plac_analytical))
-      tryCatch(compute_pretrend_test(agg_d_plac_analytical, gt_placebo_analytical),
-               error = function(e) list(stat = NA_real_, pval = NA_real_, df = 0L,
-                                         W_did = NA_real_, Wpval_did = NA_real_,
-                                         df_did = NA_integer_))
-    else
-      list(stat = NA_real_, pval = NA_real_, df = 0L,
-           W_did = NA_real_, Wpval_did = NA_real_,
-           df_did = NA_integer_)
+    pt_plac <- compute_pretrend_test(agg_d_plac_analytical, gt_placebo_analytical)
 
     rows_p     <- did_panel_placebo[!is.na(did_panel_placebo$log_commits), ]
     n_obs_p    <- nrow(rows_p)
@@ -2226,7 +1956,7 @@ if (!is.null(gt_placebo)) {
                            n_clusters = n_cty_p, wpval_did = pt_plac$Wpval_did,
                            pval_wald = pt_plac$pval,
                            wpval_reason = pt_plac$wpval_reason,
-                           ginv_used = pt_plac$ginv_used),
+                           ginv_used = pt_plac$ginv_used, df = pt_plac$df),
       "Implied effect: back-transform on pre-treatment mean; suppressed if ",
       "insignificant at 5\\%. ",
       "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
@@ -2268,7 +1998,7 @@ if (!is.null(gt_placebo)) {
   }
 
 } else {
-  message("  Placebo estimation failed — skipping table and figure.")
+  stop("Placebo estimation failed: no table or figure written.")
 }
 
 message("\n=== Section 25 complete ===\n")
@@ -2287,9 +2017,8 @@ dir.create(dir_figs_mit, recursive = TRUE, showWarnings = FALSE)
 
 mit_panel_path <- here("data", "processed", "mitigation_panel.csv")
 if (!file.exists(mit_panel_path)) {
-  message("WARNING: mitigation_panel.csv not found — skipping Section 26.")
-  message("  Expected path: ", mit_panel_path)
-  message("  This file is produced by 01_prepare_data.R.")
+  stop("mitigation_panel.csv not found at ", mit_panel_path,
+       " (it is produced by 01_prepare_data.R).")
 } else {
 
   mitigation_ry <- as.data.frame(fread(mit_panel_path))
@@ -2297,8 +2026,7 @@ if (!file.exists(mit_panel_path)) {
   required_mit_cols <- c("recipient_name", "year", "commits_mitigation")
   missing_mit <- setdiff(required_mit_cols, names(mitigation_ry))
   if (length(missing_mit) > 0) {
-    message("  mitigation_panel.csv missing columns: ", paste(missing_mit, collapse = ", "))
-    message("  Skipping Section 26.")
+    stop("mitigation_panel.csv missing columns: ", paste(missing_mit, collapse = ", "))
   } else {
 
   did_panel_mit_full <- did_panel_full %>%
@@ -2318,10 +2046,10 @@ if (!file.exists(mit_panel_path)) {
 
     n_treated_mit <- n_distinct(
       did_panel_mit_main$country_id[did_panel_mit_main$cohort_year > 0])
-    em_mit <- if (n_treated_mit >= 40L) "dr" else "reg"
-    # Bootstrap always on (the >= 40 convention is removed project-wide).
-    # With 40 treated units this evaluates to the same TRUE as before, so the
-    # published mitigation SE is unchanged by the rule change itself.
+    # Headline estimator, fixed (no treated-count switch): the falsification
+    # test must use the same estimator as the headline, so a failed DR fit
+    # stops the stage (no fallback to another estimator).
+    em_mit <- "dr"
     bs_mit <- TRUE
     message(sprintf("  N treated = %d  ->  est_method = '%s'  bstrap = %s",
                     n_treated_mit, em_mit, bs_mit))
@@ -2352,22 +2080,9 @@ if (!file.exists(mit_panel_path)) {
       run_mit_att_gt(em_mit, bs_mit),
       error = function(e) {
         message("  att_gt (", em_mit, ") failed: ", conditionMessage(e))
-        if (em_mit == "dr") {
-          message("  Retrying with est_method = 'reg' ...")
-          tryCatch(run_mit_att_gt("reg", FALSE),
-                   error = function(e2) {
-                     message("  reg fallback also failed: ", conditionMessage(e2))
-                     NULL
-                   })
-        } else NULL
+        NULL
       }
     )
-    # Estimator labels (table note, stored spec, analytical twin) follow the
-    # fit actually returned: the DR attempt above can fall back to reg.
-    if (!is.null(gt_mit)) {
-      em_mit <- gt_mit$DIDparams$est_method
-      bs_mit <- gt_mit$DIDparams$bstrap
-    }
 
     # Analytical twin (bstrap = FALSE, otherwise identical est_method) so the
     # pre-trend test below is never bootstrap-based, matching make_wide_table()'s
@@ -2393,11 +2108,10 @@ if (!file.exists(mit_panel_path)) {
       # Analytical dynamic aggregation feeding the pre-trend test only (figure
       # / CI ribbon above still use agg_d_mit from the primary, possibly-
       # bootstrap fit, unchanged).
-      agg_d_mit_analytical <- if (!is.null(gt_mit_analytical)) tryCatch(
-        aggte(gt_mit_analytical, type = "dynamic", na.rm = TRUE,
-              min_e = -5, max_e = Inf),
-        error = function(e) NULL
-      ) else NULL
+      if (is.null(agg_s_mit) || is.null(agg_d_mit) || is.null(gt_mit_analytical))
+        stop("Mitigation estimation failed: no table or figure written.")
+      agg_d_mit_analytical <- aggte(gt_mit_analytical, type = "dynamic", na.rm = TRUE,
+                                    min_e = -5, max_e = Inf)
 
       if (!is.null(agg_s_mit)) {
         att_m   <- agg_s_mit$overall.att
@@ -2416,9 +2130,7 @@ if (!file.exists(mit_panel_path)) {
         # supplies the reported ATT/SE. `ids` records the unit order the
         # influence-function rows correspond to (did sorts panel units by
         # idname), so the alignment can be asserted rather than assumed.
-        agg_s_mit_analytical <- if (!is.null(gt_mit_analytical))
-          tryCatch(aggte(gt_mit_analytical, type = "simple", na.rm = TRUE),
-                   error = function(e) NULL) else NULL
+        agg_s_mit_analytical <- aggte(gt_mit_analytical, type = "simple", na.rm = TRUE)
         saveRDS(list(
           outcome       = "log_commits_mit",
           outcome_label = "log(Mitigation commitments)",
@@ -2444,7 +2156,10 @@ if (!file.exists(mit_panel_path)) {
 
       # Event-study figure
       if (!is.null(agg_d_mit)) {
-        cv_m <- agg_d_mit$crit.val.egt
+        # Simultaneous (sup-t) 95% band over the plotted event times.
+        cv_m <- sup_t_crit(agg_d_mit$inf.function$dynamic.inf.func.e, agg_d_mit$se.egt,
+                           biters = BITERS)
+        message(sprintf("  Mitigation ES sup-t crit (log mitigation commitments): %.4f", cv_m))
         es_mit <- data.frame(
           event_time = agg_d_mit$egt,
           ATT        = agg_d_mit$att.egt,
@@ -2480,15 +2195,7 @@ if (!file.exists(mit_panel_path)) {
       # LaTeX table
       if (!is.null(agg_s_mit)) {
 
-        pt_mit <- if (!is.null(agg_d_mit_analytical))
-          tryCatch(compute_pretrend_test(agg_d_mit_analytical, gt_mit_analytical),
-                   error = function(e) list(stat = NA_real_, pval = NA_real_, df = 0L,
-                                             W_did = NA_real_, Wpval_did = NA_real_,
-                                             df_did = NA_integer_))
-        else
-          list(stat = NA_real_, pval = NA_real_, df = 0L,
-               W_did = NA_real_, Wpval_did = NA_real_,
-               df_did = NA_integer_)
+        pt_mit <- compute_pretrend_test(agg_d_mit_analytical, gt_mit_analytical)
 
         rows_m     <- did_panel_mit_main[!is.na(did_panel_mit_main$log_commits_mit), ]
         n_obs_m    <- nrow(rows_m)
@@ -2555,7 +2262,7 @@ if (!file.exists(mit_panel_path)) {
                                n_clusters = n_cty_m, wpval_did = pt_mit$Wpval_did,
                                pval_wald = pt_mit$pval,
                                wpval_reason = pt_mit$wpval_reason,
-                               ginv_used = pt_mit$ginv_used),
+                               ginv_used = pt_mit$ginv_used, df = pt_mit$df),
           "Implied effect: naive back-transform on the pre-treatment mean; suppressed if ",
           "insignificant at 5\\%. ",
           "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
@@ -2574,7 +2281,7 @@ if (!file.exists(mit_panel_path)) {
       }
 
     } else {
-      message("  Mitigation estimation failed — skipping table and figure.")
+      stop("Mitigation estimation failed: no table or figure written.")
     }
   }
 }
@@ -2582,10 +2289,10 @@ if (!file.exists(mit_panel_path)) {
 message("\n=== Section 26 complete ===\n")
 
 # ==============================================================================
-# SECTION A. §27 de Chaisemartin & D'Haultfoeuille (2024) estimator
+# SECTION A. §27 de Chaisemartin & D'Haultfoeuille (2026, REStat) estimator
 # Alternative heterogeneity-robust DID estimator on the headline outcome
-# (log adaptation commitments).  Per the project's locked decision, dCDH uses the
-# SAME controls as the CS main spec (WGI gov. effectiveness + log population).
+# (log adaptation commitments).  dCDH uses the SAME controls as the CS main
+# spec (WGI gov. effectiveness + log population), so the two are comparable.
 # Panel: thin-dropped main panel.  Treatment is the current-treatment dummy
 # treated_post = 1{cohort > 0 & year >= cohort}; never-treated and not-yet-treated
 # units serve as controls.  4 dynamic effects, 3 placebos.  This is an APPENDIX
@@ -2593,7 +2300,7 @@ message("\n=== Section 26 complete ===\n")
 # Seed rule (reproduces the published SEs): set.seed(1242) immediately before the estimator call.
 # ==============================================================================
 
-message("\n=== Section A (27): de Chaisemartin & D'Haultfoeuille (2024) ===\n")
+message("\n=== Section A (27): de Chaisemartin & D'Haultfoeuille (2026) ===\n")
 
 dir_tabs_dcdh <- file.path(here("output", "tables"),  "dcdh")
 dir_figs_dcdh <- file.path(here("output", "figures"), "dcdh")
@@ -2626,7 +2333,7 @@ res_dcdh <- tryCatch(
 )
 
 if (is.null(res_dcdh)) {
-  message("  dCDH estimation returned NULL — skipping table and figure.")
+  stop("dCDH estimation failed: no table or figure written.")
 } else {
 
   # --- Pull results.  Package column names: "Estimate","SE","LB CI","UB CI","N","Switchers".
@@ -2738,21 +2445,22 @@ if (is.null(res_dcdh)) {
   )
 
   notes_dcdh <- paste0(
-    "de Chaisemartin--D'Haultfoeuille (2024) estimator, current-treatment dummy; ",
+    "de Chaisemartin--D'Haultf{\\oe}uille (2026) estimator, current-treatment dummy; ",
     "never- and not-yet-treated controls; same controls as the CS main specification. ",
+    "Effect $+\\ell$ is event time $e = \\ell - 1$ of the Callaway--Sant'Anna event studies ",
+    "($\\ell = 1$ is the adoption year, $e = 0$), and Placebo $-\\ell$ is $e = -1 - \\ell$. ",
     "Last row: package's own joint test that all ", n_plac, " placebo estimates are ",
     "zero ($p$-value in the CI column), accounting for the ",
-    "covariance across placebo horizons; $p$-value taken from field \\texttt{",
-    gsub("_", "\\\\_", ifelse(is.na(nm_pjoint), "not returned", nm_pjoint)),
-    "} of \\texttt{did\\_multiplegt\\_dyn}'s results object (v",
+    "covariance across placebo horizons. The package (DIDmultiplegtDYN ",
     as.character(utils::packageVersion("DIDmultiplegtDYN")),
-    "), which returns no accompanying statistic (Estimate column blank)"
+    ") reports only the $p$-value of this test, so the Estimate column is blank",
+    if (is.na(nm_pjoint)) " (not returned by this run)" else ""
   )
   source_dcdh <- "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
 
   write_tex_float(
     out_path      = file.path(dir_tabs_dcdh, "att_dcdh.tex"),
-    caption_title = "Robustness: de Chaisemartin and D'Haultfoeuille (2024) estimator",
+    caption_title = "Robustness: de Chaisemartin and D'Haultf{\\oe}uille (2026) estimator",
     label         = "tab:dcdh",
     tabular_lines = raw_dcdh,
     notes_text    = notes_dcdh,
@@ -2763,10 +2471,15 @@ if (is.null(res_dcdh)) {
                   est_vec[1L], se_vec[1L], lb_vec[1L], ub_vec[1L]))
 
   # --- §A event-study figure: built MANUALLY from Effects (+1..+4) and Placebos
-  # (-1..-3), with a normalized point at event time 0 = 0.  Ribbon/linerange uses
-  # the package 95% CI (LB CI / UB CI).  No in-figure title/subtitle/caption.
+  # (-1..-3), plotted on Figure 2's event-time axis e = t - F_g. In
+  # did_multiplegt_dyn(), Effect_l compares F_g - 1 + l with F_g - 1 (Effect_1 is
+  # the adoption period F_g) and Placebo_k compares F_g - 1 - k with F_g - 1
+  # (checked on simulated data with known effects). So Effect_l sits at
+  # e = l - 1, the normalized reference period F_g - 1 at e = -1, and Placebo_k
+  # at e = -1 - k. Ribbon/linerange uses the package 95% CI (LB CI / UB CI).
+  # No in-figure title/subtitle/caption.
   es_dcdh <- data.frame(
-    event_time = c(-rev(seq_len(n_plac)), 0L, seq_len(n_eff)),
+    event_time = c(-1L - rev(seq_len(n_plac)), -1L, seq_len(n_eff) - 1L),
     estimate   = c(rev(vapply(seq_len(n_plac), function(i) pull_col(plac_mat, i, "Estimate"), numeric(1L))),
                    0,
                    vapply(seq_len(n_eff), function(i) pull_col(eff_mat, i, "Estimate"), numeric(1L))),
@@ -2819,7 +2532,7 @@ message("\n=== Section A complete ===\n")
 #      column.
 #  (b) bacon() needs a STRONGLY BALANCED panel — subset to countries observed in
 #      all years first.
-# Wrapped in tryCatch -> NULL/skip on failure.
+# A failure stops the stage (no table or figure is written).
 # ==============================================================================
 
 message("\n=== Section B (28): Goodman-Bacon decomposition ===\n")
@@ -2853,7 +2566,7 @@ bd <- tryCatch(
 )
 
 if (is.null(bd)) {
-  message("  Goodman-Bacon decomposition returned NULL — skipping table and figure.")
+  stop("Goodman-Bacon decomposition failed: no table or figure written.")
 } else {
 
   # --- Aggregate by comparison type: total weight and weighted-mean estimate.
@@ -2911,8 +2624,8 @@ if (is.null(bd)) {
   )
 
   notes_bacon <- paste0(
-    "Decomposition of the static two-way fixed-effects estimate of \\texttt{post\\_nap} ",
-    "(an indicator for years after NAP adoption) on log adaptation commitments into ",
+    "Decomposition of the static two-way fixed-effects estimate of a post-adoption ",
+    "indicator (1 in the years after NAP adoption) on log adaptation commitments into ",
     "$2\\times2$ comparison groups (Goodman-Bacon 2021); the weights sum to one. ",
     "The ``Later vs Earlier Treated'' group is the problematic forbidden comparison ",
     "that uses already-treated units as controls. ",
@@ -3034,6 +2747,11 @@ message("\n=== Section E: panel 2010-2024 ===\n")
 
 did_panel_2010 <- did_panel_full %>%
   filter(!(cohort_year %in% thin_cohorts), year >= 2010)
+# Text number: recipients with any adaptation-marked commitment in 2009.
+panel_2009 <- did_panel_full %>% filter(year == 2009L)
+message(sprintf("2009: %d of %d panel recipients record any adaptation-marked commitment",
+                sum(crs_positive(panel_2009$commitments), na.rm = TRUE),
+                n_distinct(panel_2009$recipient_name)))
 
 make_wide_table(
   did_panel_in  = did_panel_2010,
