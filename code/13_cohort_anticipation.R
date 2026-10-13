@@ -503,11 +503,11 @@ SPEC_NOTE <- paste0(SPEC_NOTE_PREAMBLE, " ",
 # Tables without a "Pre-trend p" column must not define one.
 SPEC_NOTE_NOPT <- SPEC_NOTE_PREAMBLE
 
-# Pre-sized accumulator: 4 LOCO + 2 drop-2024 + 3 balanced + 4 grid
-# cells + 2 anticipation + 3 event-date + 3 placebo rungs + 1 conditioning = 22.
+# Pre-sized accumulator: 4 LOCO + 1 drop-2024 + 3 balanced + 4 grid
+# cells + 2 anticipation + 3 event-date + 3 placebo rungs + 1 conditioning = 21.
 # add_to_battery() fills the first empty slot and grows only if that estimate is
 # ever exceeded, so the common path never reallocates.
-battery_summary <- vector("list", 22L)
+battery_summary <- vector("list", 21L)
 
 #' Append a record to the combined battery summary.
 #'
@@ -556,9 +556,6 @@ for (g in kept_cohorts) {
 
 message("\n=== A.2: dropping 2024 (cohort / calendar year) ===\n")
 
-panel_no2024_cohort <- did_panel_main %>% filter(cohort_year != 2024)
-res_no2024_cohort   <- run_spec(panel_no2024_cohort, yname = "log_commits")
-
 # Dropping 2024 as a CALENDAR year leaves the 2024 cohort with no post-treatment
 # period; att_gt() then has no estimable ATT(g,t) for g = 2024, so that cohort
 # is removed as well. We drop it explicitly to keep the message honest.
@@ -566,10 +563,9 @@ panel_no2024_year <- did_panel_main %>%
   filter(year < 2024, cohort_year != 2024)
 res_no2024_year   <- run_spec(panel_no2024_year, yname = "log_commits")
 
+# Dropping only the 2024 cohort is the leave-one-cohort-out row above.
 battery_summary <- add_to_battery(battery_summary, "Drop 2024",
-                                  "Drop the 2024 adoption cohort", res_no2024_cohort)
-battery_summary <- add_to_battery(battery_summary, "Drop 2024",
-                                  "Drop calendar year 2024", res_no2024_year)
+                                  "Drop the 2024 cohort and calendar year 2024", res_no2024_year)
 
 # ==============================================================================
 # SECTION 5. A.3 — balanced event windows (balance_e = 1, 2)
@@ -1568,7 +1564,7 @@ write_tex_float(
          "; descriptive, not a test; not shown for the placebo rows, which estimate a ",
          "fictitious effect. ",
          if (length(bat_extra) == 0L) "" else paste0(paste(bat_extra, collapse = " "), " "),
-         sub("\\.$", "", SPEC_NOTE_NOPT)),
+         SPEC_NOTE_NOPT, " ", STAR_NOTE, " (normal approximation)"),
   SRC_NOTE)
 
 message("\n=== 13_cohort_anticipation.R: complete ===\n")
