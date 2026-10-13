@@ -494,7 +494,8 @@ did_pretest_reason <- function(stats_list, labels) {
 # Helper: build_wide_table() -- assembles the common row block (metrics x
 # outcome columns) into a bare tabular, via xtable, matching 03/04/05's style.
 # ------------------------------------------------------------------------
-build_wide_table <- function(stats_list, col_labels, extra_row_lines = character(0)) {
+build_wide_table <- function(stats_list, col_labels, extra_row_lines = character(0),
+                             drop_rows = character(0)) {
 
   row_labels <- c(
     "ATT", "SE", "$t$-statistic",
@@ -517,6 +518,9 @@ build_wide_table <- function(stats_list, col_labels, extra_row_lines = character
     )
     tab_wide[[esc_header(col_labels[i])]] <- col
   }
+  # Rows that have no meaning for an outcome (e.g. a USD effect on a share).
+  stopifnot(all(drop_rows %in% row_labels))
+  tab_wide <- tab_wide[!row_labels %in% drop_rows, , drop = FALSE]
 
   xtab <- xtable(tab_wide)
   align(xtab) <- paste0("ll", paste(rep("c", length(col_labels)), collapse = ""))
@@ -778,7 +782,8 @@ for (w in list(list(fit = fit_share_within, stats = stats_share_within, y = "sha
 
 tab_lines_r4 <- build_wide_table(
   stats_list = list(stats_share_within, stats_logit_within),
-  col_labels = c("Within-country share (%, level)", "Within-country share (logit)")
+  col_labels = c("Within-country share (%, level)", "Within-country share (logit)"),
+  drop_rows  = "Implied effect (USD M, exp(ATT)$-$1 $\\times$ pre-treat.\\ mean)"
 )
 
 notes_r4 <- paste0(
