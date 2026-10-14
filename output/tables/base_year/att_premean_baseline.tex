@@ -1,0 +1,27 @@
+\begin{table}[H]
+\centering
+\caption{Simple ATT against each cohort's pre-period mean instead of its $g-1$ base year}
+\label{tab:premean_baseline}
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lcc}
+\toprule
+Baseline & All cohorts & Without the 2024 cohort \\
+\midrule
+\multicolumn{3}{l}{\textit{log(Adaptation commitments)}: main estimate 0.3036 (0.1256)} \\
+\quad Mean of 2010 to $g-1$ & 0.1055 (0.1565) & 0.0208 (0.1648) \\
+\quad Mean of $g-5$ to $g-1$ & 0.1543 (0.1514) & 0.0775 (0.1524) \\
+\multicolumn{3}{l}{\textit{Adaptation share (\% of global)}: main estimate 0.3356 (0.1388)} \\
+\quad Mean of 2010 to $g-1$ & 0.2187* (0.1307) & 0.1500 (0.1312) \\
+\quad Mean of $g-5$ to $g-1$ & 0.2449** (0.1248) & 0.1886 (0.1309) \\
+\multicolumn{3}{l}{\textit{Within-country adaptation share (pp)}: main estimate 2.6507 (0.8645)} \\
+\quad Mean of 2010 to $g-1$ & 1.6959* (0.9572) & 1.2231 (1.0258) \\
+\quad Mean of $g-5$ to $g-1$ & 2.0028** (0.8712) & 1.6543* (0.9280) \\
+\bottomrule
+\end{tabular}
+}
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: Each post-treatment cell $ATT(g,t)$ of the main specification is re-expressed against the mean of cohort $g$'s cells over the stated pre-treatment window, the $g-1$ cell (zero by construction) included: $ATT(g,t) - \frac{1}{|W_g|}\sum_{s \in W_g} ATT(g,s)$. This is the difference-in-differences against the cohort's average pre-treatment level relative to controls, rather than its level in $g-1$ alone. The cells are then aggregated with the simple-ATT weights of Table~\ref{tab:combined_wide_main}. The window starts in 2010 because the adaptation marker is routinely reported only from 2010. $g-5$ to $g-1$ is the window of the four-lead test. The cells and their influence functions are those of the stored main-specification fits (CS(2021) DR, never-treated controls, WGI GE + log population, cohorts $\geq 5$), re-aggregated without re-estimation; SE from the multiplier bootstrap (999 reps, seed 1242; \texttt{did} 2.5.0). The main estimate is that of Table~\ref{tab:combined_wide_main} (log commitments, global share) and Table~\ref{tab:within_share_wide} (within-country share). The 2024 cohort has one post-treatment year. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

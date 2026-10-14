@@ -7,6 +7,11 @@ Rplots.pdf
 .RData
 .Rproj.user/
 .DS_Store
+# Stage-09 diagnostics, regenerated on every run
+output/tables/remarking/id_linkage_diagnostic.csv
+output/tables/remarking/reconciliation_check.csv
+output/tables/remarking/remarking_results.rds
+output/tables/remarking/singleton_shares.csv
 # EM-DAT data may not be redistributed (data/raw/emdat/README.md)
 data/raw/emdat/*.csv
 data/raw/emdat/*.xlsx

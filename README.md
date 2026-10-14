@@ -1,4 +1,4 @@
-# Replication package for "A Larger Slice, Not a Larger Pie: National Adaptation Plans and the Composition of Adaptation Finance"
+# Replication package for "Do National Adaptation Plans Attract Adaptation Finance? Evidence from the Composition of Aid"
 
 Pierre Beaucoral, Michaël Goujon and Sébastien Marchand (Université Clermont Auvergne, CNRS, IRD, CERDI).
 
@@ -10,7 +10,7 @@ The code is written in R. One master script, `run_all.R`, runs 13 stage scripts 
 
 There are two ways to run the package:
 
-- **Default (about 11 minutes).** Start from the CRS-derived panels shipped in `data/processed/`. No external download is needed. Every exhibit is regenerated except the three scope tables built from the raw CRS files (they are shipped) and the two tables that need EM-DAT data, which cannot be redistributed (see below).
+- **Default (about 12 minutes with the shipped permutation draws).** Start from the CRS-derived panels shipped in `data/processed/`. No external download is needed. Every exhibit is regenerated except the three scope tables built from the raw CRS files (they are shipped) and the two tables that need EM-DAT data, which cannot be redistributed (see below).
 - **Full rebuild from raw data (`NAP_FROM_RAW=1`).** Download the raw OECD CRS files (about 4.8 GB). `run_all.R` checks their SHA-256 checksums against the vintage used in the paper, rebuilds `data/processed/` from scratch, compares every rebuilt file with the shipped one, and then runs the whole analysis on the rebuilt data.
 
 The exhibits shipped in `output/` are the ones in the paper. A default run reproduces every regenerated `.tex` table exactly; the only difference is the date-stamp comment line (e.g. `% Wed Sep 23 10:52:40 2026`) that the `xtable` package writes at the top of some tables.
@@ -98,7 +98,7 @@ Details for each source:
 
 ### Hardware and memory
 
-The results were produced on an Apple M2 Pro (10 cores), 32 GB RAM, macOS 26 (Darwin 25.6.0). No GPU is used.
+The results were produced on an Apple M2 Pro (10 cores), 32 GB RAM, macOS 27 (Darwin 27.0.0). No GPU is used.
 
 - Default mode peaks at about 6 GB of RAM (measured peak resident memory 5.9 GB in stage 09, which reads the 3.65 million-row activity extract; 6.55 GB for the whole run). **8 GB of free RAM is recommended.**
 - Full rebuild: stage 01 reads each raw CRS year (up to 520 MB of text) with `data.table::fread()`. Keep **at least 8 GB of free RAM** (16 GB recommended), and run the stages one after another, as `run_all.R` does. Do not run two CRS-reading R sessions at the same time.
@@ -114,19 +114,19 @@ Measured on the machine above, stages run one at a time:
 | `01_prepare_data.R` | skipped | 1.5 min | Reads 18 CRS years; can take several minutes when the files are not already in the operating system's disk cache |
 | `02_descriptive_stats.R` | 0.1 min | 0.1 min | |
 | `03_main_results.R` | 0.1 min | 0.1 min | |
-| `04_robustness.R` | 7.4 min | 9.1 min | HonestDiD sensitivity, dCDH, Goodman-Bacon |
+| `04_robustness.R` | 9.0 min | 9.1 min | HonestDiD sensitivity, dCDH, Goodman-Bacon |
 | `05_heterogeneity.R` | 0.1 min | 0.1 min | |
-| `13_cohort_anticipation.R` | 0.1 min | 0.1 min | |
+| `13_cohort_anticipation.R` | 0.2 min | 0.2 min | |
 | `14_hazard_napa.R` | < 0.1 min | < 0.1 min | |
 | `07_principal_and_share.R` | 0.1 min | 0.1 min | |
-| `08_randomization_inference.R` | < 0.1 min | < 0.1 min | With the shipped draws. Full recompute (draws deleted): 8 min on 8 cores of an otherwise idle machine, 17 min under load |
+| `08_randomization_inference.R` | < 0.1 min | < 0.1 min | With the shipped draws. Full recompute (both draw files deleted): about 15 min on 8 cores (10.9 min for the level and global share, 3.6 min for the within-country share), longer under load |
 | `09_remarking_decomposition.R` | 2.2 min | 3.4 min | From-raw: rebuilds the activity extract from 16 CRS years (0.4–10 min depending on disk cache) |
 | `10_model_tests.R` | < 0.1 min | < 0.1 min | |
 | `11_base_year_sensitivity.R` | 0.1 min | 0.1 min | |
 | `12_group_figures.R` | < 0.1 min | < 0.1 min | |
-| **Total** | **about 11 min** | **about 15 min** | Add 8--17 min in either mode to recompute the permutation draws |
+| **Total** | **about 12 min** | **about 15 min** | Add about 15 min in either mode to recompute the permutation draws. A clean-room default run on 13 October 2026 that recomputed both draw files took 20.3 min (stage 04: 6.9 min; stage 08: 10.6 min; stage 09: 2.1 min; peak resident memory 6.53 GB) |
 
-(Measured on 29 September 2026: a default-mode run from stage 03 with the shipped draws, and a from-raw run in a fresh copy of this folder with the draws deleted.)
+(Per-stage times measured on 29 September 2026: a default-mode run from stage 03 with the shipped draws, and a from-raw run in a fresh copy of this folder with the draws deleted. The 13 October 2026 clean-room total is in the last row.)
 
 ## Instructions for replicators
 
@@ -137,18 +137,18 @@ Measured on the machine above, stages run one at a time:
    Rscript run_all.R
    ```
 
-   This is the default mode: it starts at stage 02 from the shipped panels in `data/processed/`. Stage 08 reuses the shipped permutation draws (`output/tables/randomization/ri_draws.csv`) and only rebuilds its table and figure. It reuses them only if they were built on the current estimation sample: the file stores a SHA-256 hash of every recipient's (unit, adoption cohort, World Bank region) triple, and stage 08 also checks the sample size and the two headline ATTs. If any of these differ, it recomputes the draws (see below).
+   This is the default mode: it starts at stage 02 from the shipped panels in `data/processed/`. Stage 08 reuses the shipped permutation draws (`output/tables/randomization/ri_draws.csv` for the level and the global share, `ri_draws_within.csv` for the within-country share) and only rebuilds its tables and figures. It reuses a file only if it was built on the current estimation sample: each file stores a SHA-256 hash of every recipient's (unit, adoption cohort, World Bank region) triple, and stage 08 also checks the sample size and the observed ATTs. If any of these differ, it recomputes those draws (see below).
 3. Compare the regenerated `output/tables/**/*.tex` with the shipped versions, for example with `git diff` if you put the folder under version control before running, or against `MANIFEST.csv` (SHA-256 of every shipped file). Tables match the shipped ones except for the `xtable` date-stamp comment line. On the authors' machine the PNG figures are also byte-identical and the two PDF figures differ only in embedded metadata (they render identically). On other systems, fonts and graphics libraries can change figure files at the byte level without changing their content.
 
 Options (environment variables, combinable):
 
 | Variable | Effect |
 |---|---|
-| `NAP_SKIP_RI=1` | Skip stage 08, only if the cached draws `output/tables/randomization/ri_draws.csv` exist (its table and figure are then the shipped ones). Without that file stage 08 runs anyway. |
-| `NAP_START_AT=<stage file>` | Resume at a stage, e.g. `NAP_START_AT=09_remarking_decomposition.R Rscript run_all.R`. Earlier outputs are used as they are. Stages 04 to 14 read the fits that stages 03, 04 and 07 write to `output/fits/`. That folder is not shipped (about 26 MB, regenerated with the stages), so on a fresh copy run the pipeline once from stage 03 or earlier (the default mode starts at 02) before resuming at a later stage. Cannot be combined with `NAP_FROM_RAW=1` (the rebuild starts at stage 01); `run_all.R` stops if both are set. |
+| `NAP_SKIP_RI=1` | Skip stage 08, only if both cached draw files, `output/tables/randomization/ri_draws.csv` and `ri_draws_within.csv`, exist (its tables and figures are then the shipped ones). Without either file stage 08 runs anyway. |
+| `NAP_START_AT=<stage file>` | Resume at a stage, e.g. `NAP_START_AT=09_remarking_decomposition.R Rscript run_all.R`. Earlier outputs are used as they are. Every stage after 03 reads the fits that stages 03, 04 and 07 write to `output/fits/`. That folder is not shipped (about 26 MB, regenerated with the stages), so on a fresh copy run the pipeline once from stage 03 or earlier (the default mode starts at 02) before resuming at a later stage. Cannot be combined with `NAP_FROM_RAW=1` (the rebuild starts at stage 01); `run_all.R` stops if both are set. |
 | `NAP_FROM_RAW=1` | Full rebuild from raw CRS files (below). |
 
-To recompute the randomization-inference draws from scratch (8--17 minutes on 8 cores), delete `output/tables/randomization/ri_draws.csv` before running. The draws are deterministic (see "Seeds and determinism"), so the recomputed file and table match the shipped ones.
+To recompute the randomization-inference draws from scratch (about 15 minutes on 8 cores), delete `output/tables/randomization/ri_draws.csv` and `ri_draws_within.csv` before running. The draws are deterministic (see "Seeds and determinism"), so the recomputed file and table match the shipped ones.
 
 ### Full rebuild from the raw CRS files
 
@@ -174,7 +174,7 @@ Every stage script sets a global seed at the top (`set.seed(20240601)`). The scr
 
 The randomization-inference draws are generated sequentially in the parent R process (`set.seed(1242)` once per design) before any forking. The forked workers draw no random numbers. The draws therefore do not depend on the number of cores.
 
-`ri_draws.csv` stores each double both as readable decimal text and as an exact hexadecimal column (`*_hex`), which stage 08 reads, so the cached draws reload bit for bit.
+`ri_draws.csv` and `ri_draws_within.csv` store each double both as readable decimal text and as an exact hexadecimal column (`*_hex`), which stage 08 reads, so the cached draws reload bit for bit. The within-country share uses the same permuted assignments as the other two outcomes (each design re-seeds with 1242 before drawing).
 
 ### Package-version note
 
@@ -195,18 +195,20 @@ Each stage runs in a fresh R process, in the order below (stage 06 is an interna
 | 1 | `code/01_prepare_data.R` (from-raw mode only) | `data/raw/CRS/`, `data/raw/shared_nap_data/`, `data/raw/PVCCI.csv`, `data/raw/wdi_cache/` | `data/processed/*.csv`; `output/tables/scope/` |
 | 2 | `code/02_descriptive_stats.R` | `data/processed/adaptationNAP.csv`, `adaptationNAP_donortype_wgi.csv`, `simple_panel_wgi.csv`, `donor_totals.csv`, `data/raw/PVCCI.csv` | descriptive tables and figures at the top level of `output/tables/`, `output/figures/` |
 | 3 | `code/03_main_results.R` | `simple_panel_wgi.csv` | `output/tables/cohorts_dropped/att_combined_wide.tex`, `extensive_margin/`, `nap_cohorts.tex`, main figures; headline fits in `output/fits/` |
-| 4 | `code/04_robustness.R` | `simple_panel_wgi.csv`, `mitigation_panel.csv`, `output/fits/` | `cohorts_retained/`, `balanced_panel/`, `panel_2010/`, `notyettreated/`, `outlier_india/`, `units_zeros/`, `placebo/`, `mitigation/`, `bacon/`, `dcdh/`, HonestDiD tables in `cohorts_dropped/` |
-| 5 | `code/05_heterogeneity.R` | `simple_panel_wgi.csv`, `data/raw/oghist/OGHIST.xlsx`, `output/fits/` | `heterogeneity/` |
-| 6 | `code/13_cohort_anticipation.R` | `simple_panel_wgi.csv`, `output/fits/` | `cohort_battery/`, `anticipation/` |
-| 7 | `code/14_hazard_napa.R` | `simple_panel_wgi.csv`, `emergency_response_panel.csv`, `data/raw/napa/`, `data/raw/emdat/emdat.csv` (if present) | `hazard/`, `napa/`; `data/processed/napa_list.csv` |
-| 8 | `code/07_principal_and_share.R` | `simple_panel_wgi.csv`, `output/fits/` | `principal_share/` |
-| 9 | `code/08_randomization_inference.R` | `simple_panel_wgi.csv`, `output/fits/`, `output/tables/randomization/ri_draws.csv` (cache) | `randomization/` |
+| 4 | `code/07_principal_and_share.R` | `simple_panel_wgi.csv`, `output/fits/` | `principal_share/`; within-country share fits in `output/fits/` |
+| 5 | `code/04_robustness.R` | `simple_panel_wgi.csv`, `mitigation_panel.csv`, `output/fits/` | `cohorts_retained/`, `balanced_panel/`, `panel_2010/`, `notyettreated/`, `outlier_india/`, `units_zeros/`, `placebo/`, `mitigation/`, `bacon/`, `dcdh/`, HonestDiD tables in `cohorts_dropped/`; placebo and mitigation fits in `output/fits/` |
+| 6 | `code/05_heterogeneity.R` | `simple_panel_wgi.csv`, `data/raw/oghist/OGHIST.xlsx`, `output/fits/` | `heterogeneity/` |
+| 7 | `code/13_cohort_anticipation.R` | `simple_panel_wgi.csv`, `output/fits/` | `cohort_battery/`, `anticipation/`, `timing/` |
+| 8 | `code/14_hazard_napa.R` | `simple_panel_wgi.csv`, `emergency_response_panel.csv`, `data/raw/napa/`, `data/raw/emdat/emdat.csv` (if present), `output/fits/` | `hazard/`, `napa/`; `data/processed/napa_list.csv` |
+| 9 | `code/08_randomization_inference.R` | `simple_panel_wgi.csv`, `output/fits/`, `output/tables/randomization/ri_draws.csv` and `ri_draws_within.csv` (caches) | `randomization/` |
 | 10 | `code/09_remarking_decomposition.R` | `simple_panel_wgi.csv`, `data/processed/crs_adaptation_activities/` (or raw CRS if absent), `output/fits/` | `remarking/`; run log in `output/logs/` |
 | 11 | `code/10_model_tests.R` | `simple_panel_wgi.csv`, `output/fits/` | `model_tests/` |
 | 12 | `code/11_base_year_sensitivity.R` | `simple_panel_wgi.csv`, `output/fits/` | `base_year/` |
 | 13 | `code/12_group_figures.R` | `simple_panel_wgi.csv` | `output/figures/group/` |
 
-`code/functions/pretrend_test.R` holds the joint Wald pre-trend test (`compute_pretrend_test()`). Stages 03, 04, 05, 07, 09, 11 and 13 source it, so every pre-trend statistic in the paper comes from one function. It inverts the pre-treatment covariance block with `solve()` at full rank, and with an SVD pseudo-inverse otherwise, in which case the test's degrees of freedom are the block's numerical rank. `code/functions/read_headline_fit.R` reads the headline fits that stage 03 stores in `output/fits/`; stages 04, 05, 07, 08, 09, 10, 11, 13 and 14 report the headline specification (ATT, SE, pre-trend test) from them instead of re-estimating it. Stage 04 stores the placebo and mitigation fits (read by 05 and 13) and stage 07 the within-country share fits (read by 11). `code/functions/mde.R` holds the one minimum-detectable-effect formula, $(z_{0.975} + z_{0.80}) \times$ SE $= 2.8016 \times$ SE, used by stages 03, 05, 13 and 14. `code/functions/make_wide_table.R` builds the wide tables of simple ATTs across outcomes (Table 2 in stage 03, the robustness variants in stage 04, the donor-type table in stage 05). `code/functions/make_country_id.R` builds the unit identifiers (see "Locale" above) and `code/functions/crs_positive.R` the zero/positive split of summed CRS amounts (stages 03, 04, 07 and 11), with a tolerance for the residue that offsetting negative CRS records can leave.
+`code/diagnostics/crs_commitment_date_check.py` (Python 3, standard library; from-raw only, about 15 s) is not part of `run_all.R`. It scans the raw 2021–2024 CRS files and writes `output/logs/diag_crs_commitment_dates.log`, the source of the commitment-date figures in the timing appendix (Appendix C, "Timing: adopters-only comparisons and the 2020–21 window").
+
+`code/functions/pretrend_test.R` holds the joint Wald pre-trend test (`compute_pretrend_test()`). Stages 03, 04, 05, 07, 09, 11 and 13 source it, so every pre-trend statistic in the paper comes from one function. It inverts the pre-treatment covariance block with `solve()` at full rank, and with an SVD pseudo-inverse otherwise, in which case the test's degrees of freedom are the block's numerical rank. `code/functions/read_headline_fit.R` reads the headline fits that stage 03 stores in `output/fits/`; stages 04, 05, 07, 08, 09, 10, 11, 13 and 14 report the headline specification (ATT, SE, pre-trend test) from them instead of re-estimating it. Stage 04 stores the placebo and mitigation fits (read by 05 and 13) and stage 07 the within-country share fits (read by 04, 08, 11 and 13), which is why 07 runs right after 03. `code/functions/simple_att_event_weights.R` gives the event-time weights that reproduce a simple ATT, the target of the HonestDiD analyses (stages 03 and 07). `code/functions/mde.R` holds the one minimum-detectable-effect formula, $(z_{0.975} + z_{0.80}) \times$ SE $= 2.8016 \times$ SE, used by stages 03, 05, 13 and 14. `code/functions/make_wide_table.R` builds the wide tables of simple ATTs across outcomes (Table 2 in stage 03, the robustness variants in stage 04, the donor-type table in stage 05). `code/functions/make_country_id.R` builds the unit identifiers (see "Locale" above) and `code/functions/crs_positive.R` the zero/positive split of summed CRS amounts (stages 01, 02, 03, 04, 05, 07, 08, 11 and 13), with a tolerance for the residue that offsetting negative CRS records can leave.
 
 **Failed runs.** Stages 04, 05, 07 to 11, 13 and 14 delete the exhibits they own before re-estimating them, and stages 03, 04 and 07 delete the fits they store in `output/fits/`; stages 01, 02, 03 and 12 overwrite their exhibits in place. Every stage stops (so `run_all.R` stops) if an estimation step fails, including the analytical fit and aggregation behind a pre-trend test, so a failed run cannot report success with an old exhibit or fit, or with an empty cell in place of an estimate. The exceptions, each disclosed in the exhibit concerned:
 
@@ -221,7 +223,7 @@ With the shipped data, the only exception that applies is the cloglog column of 
 
 After the last stage, `run_all.R` wraps each table's `tabular` in `\adjustbox{max width=\textwidth}` and sets floats to `[H]` (idempotent). Folder names under `output/tables/` and `output/figures/` are the same.
 
-**Table format.** Stages 02 to 14 write each table as a complete LaTeX float (`table` environment with caption, label, notes and source), which the paper includes with `\input` as it stands. The three scope tables written by stage 01 (`output/tables/scope/`) are the exception: they are bare `tabular` environments, and the manuscript supplies their float, caption and notes.
+**Table format.** Stages 02 to 14 write each table as a complete LaTeX float (`table` environment with caption, label, notes and source), which the paper includes with `\input` as it stands. The three scope tables written by stage 01 (`output/tables/scope/`) are the exception: they contain only the `tabular` (wrapped in `\adjustbox` by `run_all.R`, like every table), and the manuscript supplies their float, caption and notes.
 
 **Logs.** `run_all.R` copies each stage's console output, messages included, to `output/logs/<stage>.log` (e.g. `output/logs/03_main_results.log`), overwriting it on every run. Numbers that the paper quotes but that appear in no table or figure are printed there by the stage that computes them: for example the recipients that leave the DAC List or enter late and the NAP-adopter reconciliation (stage 01), the number of reporting donors and the recipients of the 2009 summary-statistics row (stage 02), the cohort-level ATTs (stages 03 and 04), the exact zeros in 2009 and the 2009 reporters (stage 04), the income-classification changes (stage 05), the listwise-deletion losses of each specification (stages 05 and 13), the propensity-score range (stage 13), the prior-NAPA by LDC-status counts of the NAP adopters (stage 14), the recipients without an EM-DAT entity, the NAPA submission years, the NAPA check's cohorts, control pool, estimate to eight significant digits (ATT 0.49002138, SE 0.30103212) and minimum detectable effect (stage 14), the extensive-margin minimum detectable effect (stage 03), the event-study coefficients of the governance split (stage 05) and of the within-country share (stage 07), and every cell of the within-share panels of the base-year table (stage 11). Stage 09 also writes its own detailed log, `output/logs/09_remarking_decomposition_log.txt` (rewritten on every run), which includes the activity-linkage rates. `output/logs/` is not shipped.
 
@@ -229,7 +231,7 @@ Processed data files (`data/processed/`): `simple_panel_wgi.csv` (estimation pan
 
 ## List of tables and figures
 
-Numbers refer to the paper as compiled on 1 October 2026 (Appendix A: model; Appendix B: data; Appendix C: supplementary estimation results). All files are in `output/`.
+Numbers refer to the paper as compiled on 13 October 2026 (Appendix A: model; Appendix B: data; Appendix C: supplementary estimation results). All files are in `output/`.
 
 | Exhibit | Location | File in `output/` | Produced by |
 |---|---|---|---|
@@ -284,32 +286,38 @@ Numbers refer to the paper as compiled on 1 October 2026 (Appendix A: model; App
 | Figure C.6 | Appendix | `figures/randomization/fig_ri_distributions.png` | `code/08_randomization_inference.R` |
 | Table C.15 | Appendix | `tables/cohorts_dropped/honestdid_prepriods.tex` | `code/04_robustness.R` |
 | Table C.16 | Appendix | `tables/cohorts_dropped/honestdid_sd.tex` | `code/04_robustness.R` |
-| Table C.17 | Appendix | `tables/base_year/pretrend_tests_full.tex` | `code/11_base_year_sensitivity.R` |
-| Table C.18 | Appendix | `tables/base_year/pretrend_cells_2021.tex` | `code/11_base_year_sensitivity.R` |
-| Figure C.7 | Appendix | `figures/base_year/fig_pretrend_cells_by_cohort.png` | `code/11_base_year_sensitivity.R` |
-| Figure C.8 | Appendix | `figures/base_year/fig_es_full_window.png` | `code/11_base_year_sensitivity.R` |
-| Table C.19 | Appendix | `tables/base_year/base_year_sensitivity_logit.tex` | `code/11_base_year_sensitivity.R` |
-| Table C.20 | Appendix | `tables/notyettreated/att_notyettreated_wide.tex` | `code/04_robustness.R` |
-| Figure C.9 | Appendix | `figures/notyettreated/did_notyettreated_es.png` | `code/04_robustness.R` |
-| Figure C.10 | Appendix | `figures/cohorts_retained/did_combined_cohort_wgi.png` | `code/04_robustness.R` |
-| Table C.21 | Appendix | `tables/cohorts_retained/att_group_retained.tex` | `code/04_robustness.R` |
-| Table C.22 | Appendix | `tables/dcdh/att_dcdh.tex` | `code/04_robustness.R` |
-| Figure C.11 | Appendix | `figures/dcdh/did_dcdh_es.png` | `code/04_robustness.R` |
-| Table C.23 | Appendix | `tables/bacon/bacon_decomp.tex` | `code/04_robustness.R` |
-| Table C.24 | Appendix | `tables/units_zeros/diagnostic_units_zeros.tex` | `code/04_robustness.R` |
-| Table C.25 | Appendix | `tables/cohort_battery/att_2x2.tex` | `code/13_cohort_anticipation.R` |
-| Table C.26 | Appendix | `tables/anticipation/att_placebo_ladder.tex` | `code/13_cohort_anticipation.R` |
-| Table C.27 | Appendix | `tables/principal_share/principal_retained.tex` | `code/07_principal_and_share.R` |
-| Table C.28 | Appendix | `tables/remarking/att_remarking_counts.tex` | `code/09_remarking_decomposition.R` |
-| Table C.29 | Appendix | `tables/remarking/att_remarking_exclusions.tex` | `code/09_remarking_decomposition.R` |
-| Table C.30 | Appendix | `tables/remarking/tab_remarking_sectors.tex` | `code/09_remarking_decomposition.R` |
-| Table C.31 | Appendix | `tables/remarking/remarking_flag_shares_by_group.tex` | `code/09_remarking_decomposition.R` |
-| Table C.32 | Appendix | `tables/remarking/att_remarking_exclusions_regex_comparison.tex` | `code/09_remarking_decomposition.R` |
-| Table C.33 | Appendix | `tables/heterogeneity/donor_type/zero_shares.tex` | `code/05_heterogeneity.R` |
-| Table C.34 | Appendix | `tables/heterogeneity/governance/het_gov_wide.tex` | `code/05_heterogeneity.R` |
-| Table C.35 | Appendix | `tables/heterogeneity/ldc/het_ldc_wide.tex` | `code/05_heterogeneity.R` |
-| Table C.36 | Appendix | `tables/heterogeneity/income_group/het_income_wide.tex` | `code/05_heterogeneity.R` |
-| Figure C.12 | Appendix | `figures/heterogeneity/fig_het_es_panel.png` | `code/05_heterogeneity.R` |
+| Table C.17 | Appendix | `tables/randomization/ri_pvalues_within.tex` | `code/08_randomization_inference.R` |
+| Figure C.7 | Appendix | `figures/randomization/fig_ri_distributions_within.png` | `code/08_randomization_inference.R` |
+| Table C.18 | Appendix | `tables/cohorts_dropped/honestdid_within.tex` | `code/04_robustness.R` |
+| Table C.19 | Appendix | `tables/base_year/pretrend_tests_full.tex` | `code/11_base_year_sensitivity.R` |
+| Table C.20 | Appendix | `tables/base_year/pretrend_cells_2021.tex` | `code/11_base_year_sensitivity.R` |
+| Figure C.8 | Appendix | `figures/base_year/fig_pretrend_cells_by_cohort.png` | `code/11_base_year_sensitivity.R` |
+| Figure C.9 | Appendix | `figures/base_year/fig_es_full_window.png` | `code/11_base_year_sensitivity.R` |
+| Table C.21 | Appendix | `tables/base_year/base_year_sensitivity_logit.tex` | `code/11_base_year_sensitivity.R` |
+| Table C.22 | Appendix | `tables/base_year/att_premean_baseline.tex` | `code/11_base_year_sensitivity.R` |
+| Table C.23 | Appendix | `tables/timing/att_adopters_only.tex` | `code/13_cohort_anticipation.R` |
+| Table C.24 | Appendix | `tables/timing/cohort_submission_months.tex` | `code/13_cohort_anticipation.R` |
+| Table C.25 | Appendix | `tables/notyettreated/att_notyettreated_wide.tex` | `code/04_robustness.R` |
+| Figure C.10 | Appendix | `figures/notyettreated/did_notyettreated_es.png` | `code/04_robustness.R` |
+| Figure C.11 | Appendix | `figures/cohorts_retained/did_combined_cohort_wgi.png` | `code/04_robustness.R` |
+| Table C.26 | Appendix | `tables/cohorts_retained/att_group_retained.tex` | `code/04_robustness.R` |
+| Table C.27 | Appendix | `tables/dcdh/att_dcdh.tex` | `code/04_robustness.R` |
+| Figure C.12 | Appendix | `figures/dcdh/did_dcdh_es.png` | `code/04_robustness.R` |
+| Table C.28 | Appendix | `tables/bacon/bacon_decomp.tex` | `code/04_robustness.R` |
+| Table C.29 | Appendix | `tables/units_zeros/diagnostic_units_zeros.tex` | `code/04_robustness.R` |
+| Table C.30 | Appendix | `tables/cohort_battery/att_2x2.tex` | `code/13_cohort_anticipation.R` |
+| Table C.31 | Appendix | `tables/anticipation/att_placebo_ladder.tex` | `code/13_cohort_anticipation.R` |
+| Table C.32 | Appendix | `tables/principal_share/principal_retained.tex` | `code/07_principal_and_share.R` |
+| Table C.33 | Appendix | `tables/remarking/att_remarking_counts.tex` | `code/09_remarking_decomposition.R` |
+| Table C.34 | Appendix | `tables/remarking/att_remarking_exclusions.tex` | `code/09_remarking_decomposition.R` |
+| Table C.35 | Appendix | `tables/remarking/tab_remarking_sectors.tex` | `code/09_remarking_decomposition.R` |
+| Table C.36 | Appendix | `tables/remarking/remarking_flag_shares_by_group.tex` | `code/09_remarking_decomposition.R` |
+| Table C.37 | Appendix | `tables/remarking/att_remarking_exclusions_regex_comparison.tex` | `code/09_remarking_decomposition.R` |
+| Table C.38 | Appendix | `tables/heterogeneity/donor_type/zero_shares.tex` | `code/05_heterogeneity.R` |
+| Table C.39 | Appendix | `tables/heterogeneity/governance/het_gov_wide.tex` | `code/05_heterogeneity.R` |
+| Table C.40 | Appendix | `tables/heterogeneity/ldc/het_ldc_wide.tex` | `code/05_heterogeneity.R` |
+| Table C.41 | Appendix | `tables/heterogeneity/income_group/het_income_wide.tex` | `code/05_heterogeneity.R` |
+| Figure C.13 | Appendix | `figures/heterogeneity/fig_het_es_panel.png` | `code/05_heterogeneity.R` |
 
 Table 1 (mapping of the IPCC AR6 risk components onto aid-allocation roles) is typed directly in the manuscript and is not produced by code. Every other table and figure is listed above.
 
@@ -319,9 +327,9 @@ Code (`run_all.R`, `code/`): MIT License. Data compiled by the authors, the proc
 
 ## How to cite
 
-Beaucoral, P., M. Goujon and S. Marchand (2026). "A Larger Slice, Not a Larger Pie: National Adaptation Plans and the Composition of Adaptation Finance." Working paper, CERDI, Université Clermont Auvergne.
+Beaucoral, P., M. Goujon and S. Marchand (2026). "Do National Adaptation Plans Attract Adaptation Finance? Evidence from the Composition of Aid." Working paper, CERDI, Université Clermont Auvergne.
 
-Replication package: Beaucoral, P., M. Goujon and S. Marchand (2026). Replication package for "A Larger Slice, Not a Larger Pie: National Adaptation Plans and the Composition of Adaptation Finance." **[REPOSITORY DOI: TO BE ADDED ON DEPOSIT]**
+Replication package: Beaucoral, P., M. Goujon and S. Marchand (2026). Replication package for "Do National Adaptation Plans Attract Adaptation Finance? Evidence from the Composition of Aid." **[REPOSITORY DOI: TO BE ADDED ON DEPOSIT]**
 
 ## Acknowledgements
 

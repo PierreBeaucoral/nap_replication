@@ -33,6 +33,9 @@
 #   02_descriptive_stats.R         descriptive tables and figures
 #   03_main_results.R              main Callaway-Sant'Anna results; stores the
 #                                  headline fits in output/fits/ for later stages
+#   07_principal_and_share.R       principal-marker-only outcome, within-country
+#                                  share (its fits feed 04, 08, 11, 13),
+#                                  global-share reconciliation
 #   04_robustness.R                robustness, HonestDiD, placebo, mitigation,
 #                                  dCDH, Goodman-Bacon
 #   05_heterogeneity.R             heterogeneity (donor type, LDC, governance,
@@ -41,8 +44,6 @@
 #                                  placebo ladder, conditioning sets
 #   14_hazard_napa.R               EM-DAT hazard controls and NAP-timing checks,
 #                                  prior-NAPA split, NAPA falsification check
-#   07_principal_and_share.R       principal-marker-only outcome, within-country
-#                                  share, global-share reconciliation
 #   08_randomization_inference.R   Fisher randomization inference
 #   09_remarking_decomposition.R   activity-level re-marking decomposition
 #   10_model_tests.R               testable implications of the model
@@ -55,15 +56,15 @@
 #   NAP_START_AT=<script file>     resume from that stage (earlier stages are
 #                                  assumed complete), e.g.
 #                                  NAP_START_AT=07_principal_and_share.R
-#                                  Stages 04-14 read output/fits/, which stages
+#                                  Every stage after 03 reads output/fits/, which stages
 #                                  03, 04 and 07 write and which is not shipped:
 #                                  run once from 03 or earlier before resuming
 #                                  later.
 #                                  Not combinable with NAP_FROM_RAW=1 unless it
 #                                  names stage 01 (the rebuild starts at 01).
 #   NAP_SKIP_RI=1                  skip stage 08 when its cached permutation
-#                                  draws (output/tables/randomization/ri_draws.csv)
-#                                  exist. Without this flag stage 08 uses the
+#                                  draws (output/tables/randomization/ri_draws.csv
+#                                  and ri_draws_within.csv) both exist. Without this flag stage 08 uses the
 #                                  cached draws only if they match the current
 #                                  panel and assignment design (hash check) and
 #                                  otherwise recomputes them (8-29 min); delete
@@ -86,11 +87,11 @@ t0 <- Sys.time()
 scripts <- c("01_prepare_data.R",
              "02_descriptive_stats.R",
              "03_main_results.R",
+             "07_principal_and_share.R",
              "04_robustness.R",
              "05_heterogeneity.R",
              "13_cohort_anticipation.R",
              "14_hazard_napa.R",
-             "07_principal_and_share.R",
              "08_randomization_inference.R",
              "09_remarking_decomposition.R",
              "10_model_tests.R",
@@ -99,7 +100,7 @@ scripts <- c("01_prepare_data.R",
 
 from_raw       <- identical(Sys.getenv("NAP_FROM_RAW"), "1")
 skip_ri        <- identical(Sys.getenv("NAP_SKIP_RI"), "1")
-ri_draws_cache <- here("output", "tables", "randomization", "ri_draws.csv")
+ri_draws_cache <- here("output", "tables", "randomization", c("ri_draws.csv", "ri_draws_within.csv"))
 processed_dir  <- here("data", "processed")
 shipped_dir    <- here("data", "processed_shipped")
 
@@ -260,10 +261,10 @@ for (i in seq_along(scripts)) {
   }
 
   if (identical(script, "08_randomization_inference.R") &&
-      skip_ri && file.exists(ri_draws_cache)) {
+      skip_ri && all(file.exists(ri_draws_cache))) {
     message(sprintf(
-      "\n[%d/%d] skipping %s (NAP_SKIP_RI=1 and cached draws found at %s)",
-      i, n_steps, script, ri_draws_cache))
+      "\n[%d/%d] skipping %s (NAP_SKIP_RI=1 and cached draws found: %s)",
+      i, n_steps, script, paste(basename(ri_draws_cache), collapse = ", ")))
     next
   }
 

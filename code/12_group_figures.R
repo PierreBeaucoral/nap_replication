@@ -162,8 +162,8 @@ yearly_marginal <- yearly_marginal %>%
     idx_nonadapt = commitments_nonadapt / base_nonadapt * 100
   )
 
-# Numbers-in-caption check (printed, not asserted -- see header verification
-# block; kept here so a future rerun on updated data surfaces any drift).
+# Numbers-in-caption check (printed under "Caption values" at the end, not
+# asserted, so a future rerun on updated data surfaces any drift).
 share_2010     <- yearly_marginal$share_pct[yearly_marginal$year == FIG_START]
 share_2024     <- yearly_marginal$share_pct[yearly_marginal$year == FIG_END]
 share_pooled   <- sum(yearly_marginal$commitments) / sum(yearly_marginal$commitments_all) * 100

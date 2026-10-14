@@ -5,6 +5,9 @@
 #
 # Inputs:
 #   data/processed/simple_panel_wgi.csv
+#   data/raw/oghist/OGHIST.xlsx           (World Bank FY2013 income groups; SHA-256 checked)
+#   output/fits/headline_*_dr_bs.rds      (headline fits, written by 03)
+#   output/fits/mitigation_dr_bs.rds      (mitigation fit, written by 04)
 #
 # Outputs (all under output/):
 #   tables/heterogeneity/donor_type/att_combined_wide.tex   (§21)
@@ -42,12 +45,18 @@ library(did)
 # An older install reproduces the ATTs but not the SEs / pre-trend tests.
 if (utils::packageVersion("did") < "2.5.0") {
   stop(sprintf(paste0(
-    "did %s is installed but the paper's results require did >= 2.5.0.\n",
+    "did %s is installed but the paper's results require did 2.5.0.\n",
     "  Older versions reproduce the ATTs but NOT the standard errors and\n",
     "  pre-trend tests on unbalanced panels (South Sudan has 14/16 years).\n",
     "  Fix: run renv::restore() from the project root (renv.lock pins did 2.5.0),\n",
-    "  or install.packages(\"did\") to get >= 2.5.0, then rerun this script."),
+    "  or remotes::install_version(\"did\", \"2.5.0\"), then rerun this script."),
     utils::packageVersion("did")))
+} else if (utils::packageVersion("did") != "2.5.0") {
+  warning(sprintf(paste0(
+    "did %s is installed; the paper's results were produced with did 2.5.0 ",
+    "(renv.lock). Later versions may change SEs: renv::restore() or ",
+    "remotes::install_version(\"did\", \"2.5.0\")."), utils::packageVersion("did")),
+    call. = FALSE)
 }
 library(countrycode)
 # FY2013 (July 2012) World Bank income classification is read from the
@@ -62,6 +71,7 @@ source(here("code", "functions", "mde.R"))                # mde()
 source(here("code", "functions", "make_country_id.R"))    # make_country_id()
 source(here("code", "functions", "make_wide_table.R"))    # make_wide_table()
 source(here("code", "functions", "sup_t_crit.R"))         # sup_t_crit()
+source(here("code", "functions", "crs_positive.R"))       # crs_positive()
 
 set.seed(20240601)  # global seed — local set.seed(1242) calls follow each estimator
 
@@ -668,6 +678,9 @@ make_het_wide_table <- function(groups, outcome_var, raw_var,
       implied_fmt  <- "---"
     }
 
+    if (!is.finite(pt$stat) || !is.finite(pt$pval))
+      stop(sprintf("Pre-trend test unavailable for '%s' (%d usable leads): refusing to print NA.",
+                   lbl, pt$n_leads), call. = FALSE)
     col_stats[[lbl]] <- list(
       att_fmt      = paste0(sprintf("%.4f", att), stars),
       se_fmt       = sprintf("(%.4f)", se),
@@ -1076,6 +1089,12 @@ ge_never <- did_panel_full %>%
   summarise(ge_base = mean(ge_est, na.rm = TRUE), .groups = "drop")
 
 ge_all  <- bind_rows(ge_baseline, ge_never)
+# The two baseline windows differ (m7, disclosed in the notes, not changed):
+# adopters average over their pre-adoption years, never-treated recipients
+# over the whole panel window.
+ge_window_txt <- sprintf(paste0("baseline WGI GE = mean over the years before adoption for ",
+                                "adopters and over %d--%d for never-treated recipients"),
+                         as.integer(min(did_panel_full$year)), as.integer(max(did_panel_full$year)))
 ge_med  <- median(ge_all$ge_base, na.rm = TRUE)
 ge_all  <- ge_all %>% mutate(hi_gov = as.integer(ge_base >= ge_med))
 message(sprintf("  GE median split: %.3f  |  hi_gov N=%d  lo_gov N=%d",
@@ -1098,7 +1117,7 @@ het_stats_gov <- make_het_wide_table(
   raw_var     = "commitments",
   dir_tabs    = dir_tabs_h3,
   tex_label   = "tab:het_gov_wide",
-  caption_txt = "Heterogeneity by governance level: ATT on log(adaptation commitments). CS (2021), not-yet-treated controls; median WGI GE split at baseline."
+  caption_txt = paste0("Heterogeneity by governance level: ATT on log(adaptation commitments). CS (2021), not-yet-treated controls; median split of ", ge_window_txt, ".")
 )
 
 # Event-study curves (one panel of the 2x2 figure, §24b)
@@ -1516,7 +1535,7 @@ cap_notes <- paste0(
   "ATT/SE: multiplier-bootstrap (", BITERS, " reps, clustered by recipient, seed 1242); ",
   "pre-trend: separate analytical fit. ",
   PRETREND_NOTE_AGG(min(cap_leads[[1L]]), max(cap_leads[[1L]]), cap_df), ". ",
-  "Panel A: median of pre-treatment mean WGI GE. Panel B: pre-treatment vintage of the UN LDC ",
+  "Panel A: median split of ", ge_window_txt, ". Panel B: pre-treatment vintage of the UN LDC ",
   "list. Panel C: ", income_vintage, "; high-income and unclassified recipients excluded. ",
   "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
 )
@@ -1980,7 +1999,7 @@ if (length(missing_zero_vars) > 0L) {
       v <- sub[[zero_vars[[j]]]]
       v <- v[!is.na(v)]
       zero_mat[i, j] <- if (length(v) == 0L) "---" else
-        sprintf("%.1f", 100 * mean(v <= 0))
+        sprintf("%.1f", 100 * mean(!crs_positive(v)))
     }
     zero_mat[i, length(zero_vars) + 1L] <- format(nrow(sub), big.mark = ",")
     zero_mat[i, length(zero_vars) + 2L] <- as.character(n_distinct(sub$country_id))

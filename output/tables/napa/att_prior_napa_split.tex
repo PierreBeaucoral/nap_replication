@@ -7,16 +7,16 @@
 \toprule
 Group & ATT & SE & $p$-value & $N$ units & $N_{treated}$ \\
 \midrule
-Prior NAPA & 0.1304 & (0.1256) & 0.299 & 105 & 19 \\
-No prior NAPA & 0.7085** & (0.2935) & 0.016 & 107 & 21 \\
+Prior NAPA & 0.1777 & (0.1318) & 0.178 & 105 & 19 \\
+No prior NAPA & 0.4831** & (0.2457) & 0.049 & 107 & 21 \\
 \midrule
-Difference (Prior $-$ No prior) & -0.5781 & (0.3192) & 0.070 & & \\
+Difference (Prior $-$ No prior) & -0.3054 & (0.2789) & 0.273 & & \\
 \bottomrule
 \end{tabular}
 }
 \par\vspace{4pt}
 \begin{minipage}{\linewidth}\footnotesize
-Notes: CS\,(2021) DR, never-treated controls, WGI GE + log population, cohorts $\geq 5$, \texttt{did} 2.5.0. Multiplier-bootstrap SE (999 reps, clustered by recipient, seed 1242). ``Prior NAPA'': submitted a NAPA to the UNFCCC before the NAP; NAPA list: UNFCCC `NAPAs received' page (51 NAPAs, latest South Sudan, Feb.\ 2017), transcribed by the authors 2026-09-15, cross-checked 51/51 against the archived page PDF (shipped with the replication package). Difference row: independence approximation (aligned influence functions not implemented; the independence SE is conservative, so $p$ is an upper bound). Sample: 2009--2024. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Notes: CS\,(2021), outcome-regression estimator (doubly robust is used only for cells with $\geq 40$ treated units; both cells have fewer), never-treated controls (all never-treated units enter both cells), WGI GE + log population, cohorts $\geq 5$, \texttt{did} 2.5.0. Multiplier-bootstrap SE (999 reps, clustered by recipient, seed 1242). ``Prior NAPA'': submitted a NAPA to the UNFCCC before the NAP; NAPA list: UNFCCC `NAPAs received' page (51 NAPAs, latest South Sudan, Feb.\ 2017), transcribed by the authors 2026-09-15, cross-checked 51/51 against the archived page PDF (shipped with the replication package). Difference row: independence approximation (aligned influence functions not implemented; the independence SE is conservative, so $p$ is an upper bound). Sample: 2009--2024. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
 Source: OECD CRS (April 2026 vintage); UNFCCC NAP Central; UNFCCC `NAPAs received' list (transcribed by the authors, verified -- see Notes).
 \end{minipage}
 \end{table}

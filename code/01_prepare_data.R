@@ -55,6 +55,7 @@ library(janitor)
 library(broom)
 library(stringr)
 library(here)
+source(here("code", "functions", "crs_positive.R"))       # crs_positive()
 
 # Single global seed at the top of the script
 set.seed(20240601)
@@ -294,10 +295,9 @@ message("Wrote: data/processed/donor_totals.csv  (", nrow(donor_totals_01), " do
 ##############################################################################
 # §3c. DONOR x RECIPIENT x YEAR ADAPTATION PANEL
 # Persists a donor x recipient x year adaptation-commitments panel derived
-# from the SAME rio_data_adaptation frame already built in §3, so
-# 06_reallocation_spillover.R (leave-one-out reallocation spillover test)
-# never has to reload the raw CRS. Purely additive: does not touch or
-# reorder any other section of this script.
+# from the SAME rio_data_adaptation frame already built in §3, so stage 02
+# (donor counts) never has to reload the raw CRS. Purely additive: does not
+# touch or reorder any other section of this script.
 #
 # Recipient identity is standardized to ISO3 and regional/multi-country
 # flows are excluded, using the single `regionalflows` constant (§0c-3 above)
@@ -659,7 +659,7 @@ adaptation_aid_panel <- adaptation_aid_panel %>%
   )
 
 message("C_oriented distribution:")
-print(table(adaptation_aid_panel$C_oriented, useNA = "ifany"))
+message(paste(capture.output(print(table(adaptation_aid_panel$C_oriented, useNA = "ifany"))), collapse = "\n"))
 
 ##############################################################################
 # §11. EXPORT DONOR-TYPE PANEL
@@ -871,7 +871,7 @@ miss_by_col <- data.frame(
   arrange(desc(n_missing))
 
 message("\n--- Missingness by variable (sorted) ---")
-print(miss_by_col, row.names = FALSE)
+message(paste(capture.output(print(miss_by_col, row.names = FALSE)), collapse = "\n"))
 
 miss_by_country <- aggregated %>%
   select(recipient_name, all_of(num_cols)) %>%
@@ -885,7 +885,7 @@ miss_by_country <- aggregated %>%
   arrange(desc(pct_missing))
 
 message("\n--- Missingness by country (sorted, top 30) ---")
-print(head(miss_by_country, 30), row.names = FALSE)
+message(paste(capture.output(print(head(miss_by_country, 30), row.names = FALSE)), collapse = "\n"))
 
 miss_by_year <- aggregated %>%
   select(year, all_of(num_cols)) %>%
@@ -899,7 +899,7 @@ miss_by_year <- aggregated %>%
   arrange(year)
 
 message("\n--- Missingness by year ---")
-print(miss_by_year, row.names = FALSE)
+message(paste(capture.output(print(miss_by_year, row.names = FALSE)), collapse = "\n"))
 
 complete_vars <- miss_by_col$variable[miss_by_col$n_missing == 0]
 message(sprintf("\n%d variable(s) are complete (no imputation needed):",
@@ -1026,8 +1026,8 @@ aggregated <- aggregated %>%
   )
 
 # Flow type: ODA / OOF / private. Aggregates BOTH commitments and
-# disbursements by flow type in the same pass (the ODA-only panel below needs disbursements_oda too, so it can
-# rebuild disbursements/ldisbursements consistently with the ODA-only
+# disbursements by flow type in the same pass (disbursements_oda is kept so
+# disbursements/ldisbursements can be rebuilt consistently with the ODA-only
 # commitments figure instead of dropping or leaving them stale).
 flow_ry <- lapply(CRS, function(df) {
   df %>%
@@ -1242,8 +1242,8 @@ message("Wrote: data/processed/mitigation_panel.csv  (", nrow(mitigation_ry), " 
 # adaptation panel includes (ODA-only vs. ODA + OOF + private/equity) and
 # (b) which recipient codes the regional-flow exclusion drops and what share
 # of adaptation-marked commitments they represent. Does NOT change the main panel (03/04/05 depend on `adaptation_aid`
-# / `aggregated` exactly as built above) — exports scope tables plus an
-# ODA-only panel variant for a future robustness run. Window: 2009-2024,
+# / `aggregated` exactly as built above) — exports the scope tables only.
+# Window: 2009-2024,
 # matching the main estimation sample (2009 is the first full year of Rio
 # adaptation-marker reporting; see §2's stats_des note in 02).
 ##############################################################################
@@ -1291,7 +1291,7 @@ flow_group_shares <- flow_type_ry %>%
   arrange(desc(commitments))
 
 message("Flow-type composition of the adaptation panel (2009-2024):")
-print(flow_group_shares, row.names = FALSE)
+message(paste(capture.output(print(flow_group_shares, row.names = FALSE)), collapse = "\n"))
 oda_share_scope <- flow_group_shares$share_pct[flow_group_shares$flow_group == "ODA (grants + loans)"]
 message(sprintf(
   "  -> Main panel is %.2f%% ODA; %.2f%% non-ODA (OOF + private/equity + other). Main panel = ODA + OOF + private/equity (all FlowName categories are retained; the panel is NOT restricted to ODA).",
@@ -1397,7 +1397,7 @@ funnel <- data.frame(
   )
 )
 message("\n--- Sample funnel (regional exclusion -> ISO3 mapping -> listwise deletion) ---")
-print(funnel, row.names = FALSE)
+message(paste(capture.output(print(funnel, row.names = FALSE)), collapse = "\n"))
 
 funnel_lines <- c(
   "\\begin{tabular}{lrr}",
@@ -1488,7 +1488,7 @@ message(sprintf(
   paste0("Emergency-response panel: %d recipient-year rows (%d recipients x %d years, ",
         "2008-2024); %d rows with commitments > 0."),
   nrow(emergency_response_panel), length(recipients_scope), length(2008:2024),
-  sum(emergency_response_panel$emergency_commitments > 0)
+  sum(crs_positive(emergency_response_panel$emergency_commitments))
 ))
 
 write.csv(emergency_response_panel,

@@ -1,7 +1,8 @@
 # ==============================================================================
 # code/functions/crs_positive.R
 # The single "is this summed CRS amount positive?" test used where a stage
-# classifies recipient-years as zero or positive (stages 03, 04, 07 and 11).
+# classifies recipient-years as zero or positive (stages 01, 02, 03, 04, 05,
+# 07 and 11).
 # ==============================================================================
 
 #' Positive CRS sum, beyond floating-point residue

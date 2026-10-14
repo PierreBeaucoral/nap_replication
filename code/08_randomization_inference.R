@@ -38,11 +38,16 @@
 #   which is why mclapply is used here instead of future_lapply().
 #
 # Inputs : data/processed/simple_panel_wgi.csv
+#          output/fits/headline_{adaptation,share}_dr_bs.rds (03),
+#          output/fits/within_share_dr_bs.rds (07)
 # Outputs:
 #   output/tables/randomization/ri_pvalues.tex   (tab:ri_pvalues)
 #   output/tables/randomization/ri_draws.csv     (raw permutation draws; also
 #                                                the cache read on later runs)
 #   output/figures/randomization/fig_ri_distributions.png
+#   output/tables/randomization/ri_pvalues_within.tex   (tab:ri_pvalues_within)
+#   output/tables/randomization/ri_draws_within.csv     (within-share draws/cache)
+#   output/figures/randomization/fig_ri_distributions_within.png
 #   (copied to paper/Tables/randomization/ and paper/Figures/randomization/
 #    when a paper/ folder exists)
 # ==============================================================================
@@ -75,16 +80,23 @@ library(parallel)
 library(digest)     # design fingerprint stored with the cached draws
 source(here("code", "functions", "read_headline_fit.R"))  # read_headline_fit()
 source(here("code", "functions", "make_country_id.R"))    # make_country_id()
+source(here("code", "functions", "crs_positive.R"))       # crs_positive()
 
 # Version guard: SEs on unbalanced panels changed in did 2.5.0 (renv.lock pins it).
 if (utils::packageVersion("did") < "2.5.0") {
   stop(sprintf(paste0(
-    "did %s is installed but the paper's results require did >= 2.5.0.\n",
+    "did %s is installed but the paper's results require did 2.5.0.\n",
     "  Older versions reproduce the ATTs but NOT the standard errors and\n",
     "  pre-trend tests on unbalanced panels (South Sudan has 14/16 years).\n",
     "  Fix: run renv::restore() from the project root (renv.lock pins did 2.5.0),\n",
-    "  or install.packages(\"did\") to get >= 2.5.0, then rerun this script."),
+    "  or remotes::install_version(\"did\", \"2.5.0\"), then rerun this script."),
     utils::packageVersion("did")))
+} else if (utils::packageVersion("did") != "2.5.0") {
+  warning(sprintf(paste0(
+    "did %s is installed; the paper's results were produced with did 2.5.0 ",
+    "(renv.lock). Later versions may change SEs: renv::restore() or ",
+    "remotes::install_version(\"did\", \"2.5.0\")."), utils::packageVersion("did")),
+    call. = FALSE)
 }
 
 # ------------------------------------------------------------------------
@@ -360,74 +372,6 @@ read_ri_draws_csv <- function(path) {
 }
 
 # ==============================================================================
-# CACHE-AWARE FAST PATH -- table-only regeneration
-# The permutation-fitting step below (Sections 2, 4-7) is the ~28-minute cost
-# of this script (2,000 draws x 3 designs x 2 outcomes x 2 att_gt() passes).
-# If output/tables/randomization/ri_draws.csv exists AND was built on the
-# current panel and assignment design, skip straight to Section 8 (p-values) /
-# Section 9 (table) / Section 10 (figure) using the saved draws -- do NOT re-run
-# att_gt() for the observed ATTs or for any permutation draw. A cache built on
-# anything else is recomputed (~8-29 min). Delete ri_draws.csv to force it.
-# ==============================================================================
-
-ri_draws_cache_path <- here("output", "tables", "randomization", "ri_draws.csv")
-
-# Fingerprint of the assignment the permutations are drawn from: every
-# (country_id, cohort_year, WB_region) of the estimation sample. Hashed from a
-# canonical text form (serialize = FALSE), so the hash does not depend on the R
-# version. A change in the treated set, the cohorts or the strata (Design C)
-# changes the hash even when the sample size and the ATTs do not.
-design_key  <- unique(base_panel[, .(country_id, cohort_year, WB_region)])[order(country_id)]
-design_hash <- digest(paste(sprintf("%d|%.0f|%s", design_key$country_id,
-                                    design_key$cohort_year, design_key$WB_region),
-                            collapse = "\n"),
-                      algo = "sha256", serialize = FALSE)
-message("Assignment-design hash (country_id, cohort_year, WB_region): ", design_hash)
-
-# The draws are valid only for the panel and assignment they were built on:
-# recompute if the design hash, the sample or the headline ATTs differ.
-USE_CACHED_DRAWS <- FALSE
-if (file.exists(ri_draws_cache_path)) {
-  ri_draws <- read_ri_draws_csv(ri_draws_cache_path)
-  USE_CACHED_DRAWS <- identical(ri_draws$design_hash, design_hash) &&
-    ri_draws$n_countries == ref_head$n_country && ri_draws$n_obs == ref_head$n_obs &&
-    isTRUE(all.equal(unname(ri_draws$att_obs[c("log_commits", "share_adapt")]),
-                     c(ref_head$att, ref_share$att), tolerance = 1e-8))
-  if (!USE_CACHED_DRAWS)
-    message("\n=== Cached draws in ", ri_draws_cache_path, " were built on a different ",
-            "panel or assignment design (hash, sample or headline ATT differ) -- ",
-            "recomputing the permutation draws ===\n")
-}
-
-if (USE_CACHED_DRAWS) {
-
-  message("\n=== Cache hit: ", ri_draws_cache_path, " matches the current panel and ",
-          "design -- loading saved permutation draws and skipping the att_gt() ",
-          "reproduction + permutation-fitting steps ===\n")
-
-  N_DRAWS        <- ri_draws$n_draws
-  thin_threshold <- ri_draws$thin_threshold
-  stopifnot(identical(ri_draws$outcome_vars, outcome_vars))
-  all_designs    <- ri_draws$designs
-  N_CORES        <- if (.Platform$OS.type == "windows") 1L else  # unused on this path; kept for the Section 12 wall-time message
-    max(1L, min(8L, parallel::detectCores() - 1L), na.rm = TRUE)
-
-  message(sprintf("  Loaded: %d draws/design, seed_permutation=%d, generated_at=%s",
-                  N_DRAWS, ri_draws$seed_permutation, format(ri_draws$generated_at)))
-
-} else {
-
-# ==============================================================================
-# SECTION 2. Observed ATTs: read from the stored headline fits above
-# (att_obs, se_obs), not re-estimated.
-# ==============================================================================
-
-TARGET_ATT <- att_obs
-for (oc in outcome_vars)
-  message(sprintf("  %-12s observed ATT = %.4f (SE = %.4f), stored 03 fit",
-                  oc, att_obs[oc], se_obs[oc]))
-
-# ==============================================================================
 # SECTION 3. Permutation-fitting primitives
 # ==============================================================================
 
@@ -634,7 +578,10 @@ run_design <- function(design_name, perm_list, base_panel_in, thin_threshold_in,
       function(i) fit_att_simple(rebuilt_list[[i]]$panel_dt, oc, "dr"),
       mc.cores = n_cores, mc.preschedule = FALSE
     )
-    pass1_failed_local <- vapply(pass1, function(x) is.null(x) || is.na(x), logical(1L))
+    # A worker returns one finite number, or anything else on failure (NULL,
+    # NA, or a "try-error" string from mclapply): only the former is accepted.
+    ok_att <- function(x) is.numeric(x) && length(x) == 1L && is.finite(x)
+    pass1_failed_local <- !vapply(pass1, ok_att, logical(1L))
     for (k in seq_along(valid_idx)) {
       if (!pass1_failed_local[k]) att_perm[valid_idx[k]] <- pass1[[k]]
     }
@@ -650,7 +597,7 @@ run_design <- function(design_name, perm_list, base_panel_in, thin_threshold_in,
       )
       for (k in seq_along(fail_idx)) {
         val <- pass2[[k]]
-        if (!(is.null(val) || is.na(val))) att_perm[fail_idx[k]] <- val
+        if (ok_att(val)) att_perm[fail_idx[k]] <- val
       }
     }
 
@@ -673,6 +620,72 @@ run_design <- function(design_name, perm_list, base_panel_in, thin_threshold_in,
   list(design = design_name, n_draws = length(perm_list),
        n_skipped_thin = n_skipped, outcomes = outcome_results)
 }
+
+# ==============================================================================
+# CACHE-AWARE FAST PATH -- table-only regeneration
+# The permutation-fitting step below (Sections 2, 4-7) is the ~28-minute cost
+# of this script (2,000 draws x 3 designs x 2 outcomes x 2 att_gt() passes).
+# If output/tables/randomization/ri_draws.csv exists AND was built on the
+# current panel and assignment design, skip straight to Section 8 (p-values) /
+# Section 9 (table) / Section 10 (figure) using the saved draws -- do NOT re-run
+# att_gt() for the observed ATTs or for any permutation draw. A cache built on
+# anything else is recomputed (~8-29 min). Delete ri_draws.csv to force it.
+# ==============================================================================
+
+ri_draws_cache_path <- here("output", "tables", "randomization", "ri_draws.csv")
+
+# Fingerprint of the assignment the permutations are drawn from: every
+# (country_id, cohort_year, WB_region) of the estimation sample. Hashed from a
+# canonical text form (serialize = FALSE), so the hash does not depend on the R
+# version. A change in the treated set, the cohorts or the strata (Design C)
+# changes the hash even when the sample size and the ATTs do not.
+design_key  <- unique(base_panel[, .(country_id, cohort_year, WB_region)])[order(country_id)]
+design_hash <- digest(paste(sprintf("%d|%.0f|%s", design_key$country_id,
+                                    design_key$cohort_year, design_key$WB_region),
+                            collapse = "\n"),
+                      algo = "sha256", serialize = FALSE)
+message("Assignment-design hash (country_id, cohort_year, WB_region): ", design_hash)
+
+# The draws are valid only for the panel and assignment they were built on:
+# recompute if the design hash, the sample or the headline ATTs differ.
+USE_CACHED_DRAWS <- FALSE
+if (file.exists(ri_draws_cache_path)) {
+  ri_draws <- read_ri_draws_csv(ri_draws_cache_path)
+  USE_CACHED_DRAWS <- identical(ri_draws$design_hash, design_hash) &&
+    ri_draws$n_countries == ref_head$n_country && ri_draws$n_obs == ref_head$n_obs &&
+    isTRUE(all.equal(unname(ri_draws$att_obs[c("log_commits", "share_adapt")]),
+                     c(ref_head$att, ref_share$att), tolerance = 1e-8))
+  if (!USE_CACHED_DRAWS)
+    message("\n=== Cached draws in ", ri_draws_cache_path, " were built on a different ",
+            "panel or assignment design (hash, sample or headline ATT differ) -- ",
+            "recomputing the permutation draws ===\n")
+}
+
+if (USE_CACHED_DRAWS) {
+
+  message("\n=== Cache hit: ", ri_draws_cache_path, " matches the current panel and ",
+          "design -- loading saved permutation draws and skipping the att_gt() ",
+          "reproduction + permutation-fitting steps ===\n")
+
+  N_DRAWS        <- ri_draws$n_draws
+  thin_threshold <- ri_draws$thin_threshold
+  stopifnot(identical(ri_draws$outcome_vars, outcome_vars))
+  all_designs    <- ri_draws$designs
+
+  message(sprintf("  Loaded: %d draws/design, seed_permutation=%d, generated_at=%s",
+                  N_DRAWS, ri_draws$seed_permutation, format(ri_draws$generated_at)))
+
+} else {
+
+# ==============================================================================
+# SECTION 2. Observed ATTs: read from the stored headline fits above
+# (att_obs, se_obs), not re-estimated.
+# ==============================================================================
+
+TARGET_ATT <- att_obs
+for (oc in outcome_vars)
+  message(sprintf("  %-12s observed ATT = %.4f (SE = %.4f), stored 03 fit",
+                  oc, att_obs[oc], se_obs[oc]))
 
 # ==============================================================================
 # SECTION 6. Generate the three designs and run the permutation fits
@@ -722,6 +735,73 @@ message("Saved: ", ri_draws_cache_path)
 }  # end of `else` -- full recompute branch (USE_CACHED_DRAWS == FALSE)
 
 # ==============================================================================
+# SECTION 7b. Within-country adaptation share (100 x E / S, stage 07): the same
+# three designs and the same assignment draws (each generator re-seeds with
+# 1242), fitted on the within share only, with its own cache
+# (ri_draws_within.csv). The two-outcome draws above and their cache are not
+# touched. Observed statistic: the within-share fit stored by 07.
+# ==============================================================================
+
+path_within_fit <- here("output", "fits", "within_share_dr_bs.rds")
+if (!file.exists(path_within_fit))
+  stop("Stored within-share fit not found: ", path_within_fit, " (written by 07).")
+fit_within <- readRDS(path_within_fit)
+att_obs_w  <- c(share_within = fit_within$att)
+se_obs_w   <- c(share_within = fit_within$se)
+
+# Same rows and order as base_panel; share_within built as in 07.
+base_panel_w <- as.data.table(
+  did_panel_main %>%
+    mutate(share_within = if_else(crs_positive(commitments_all),
+                                  100 * commitments / commitments_all, NA_real_)) %>%
+    select(country_id, recipient_name, year, cohort_year, ge_est,
+           log_population, share_within, WB_region)
+)
+stopifnot(identical(base_panel_w$country_id, base_panel$country_id),
+          identical(base_panel_w$year, base_panel$year))
+# The point estimate on the unpermuted assignment must reproduce 07's fit,
+# so the permutation fits below estimate the same statistic.
+att_rep_w <- fit_att_simple(base_panel_w, "share_within", "dr")
+message(sprintf("  share_within observed ATT = %.4f (SE = %.4f), stored 07 fit; reproduced: %.4f",
+                att_obs_w, se_obs_w, att_rep_w))
+stopifnot("Within-share point estimate not reproduced on the RI panel" =
+            is.finite(att_rep_w) && abs(att_rep_w - att_obs_w) < 1e-8)
+
+ri_within_path <- here("output", "tables", "randomization", "ri_draws_within.csv")
+use_cached_w <- FALSE
+if (file.exists(ri_within_path)) {
+  ri_within <- read_ri_draws_csv(ri_within_path)
+  use_cached_w <- identical(ri_within$design_hash, design_hash) &&
+    ri_within$n_countries == ref_head$n_country && ri_within$n_obs == ref_head$n_obs &&
+    isTRUE(all.equal(unname(ri_within$att_obs["share_within"]), unname(att_obs_w),
+                     tolerance = 1e-8))
+}
+if (use_cached_w) {
+  message("\n=== Cache hit: ", ri_within_path, " -- loading the within-share draws ===\n")
+} else {
+  message("\n=== Within-share permutation fits (", N_DRAWS, " draws x 3 designs) ===\n")
+  designs_w <- list(
+    timing     = run_design("Timing permutation (within adopters)",
+                            generate_perm_timing(observed_cohort_dt, N_DRAWS),
+                            base_panel_w, thin_threshold, "share_within", N_CORES),
+    assignment = run_design("Assignment permutation (across countries)",
+                            generate_perm_assignment(all_ids, observed_cohort_yrs, n_treated, N_DRAWS),
+                            base_panel_w, thin_threshold, "share_within", N_CORES),
+    stratified = run_design("Stratified assignment permutation (by WB region)",
+                            generate_perm_stratified(base_panel, treated_ids, observed_cohort_yrs, N_DRAWS),
+                            base_panel_w, thin_threshold, "share_within", N_CORES))
+  ri_within <- list(
+    seed_global = 20240601L, seed_permutation = 1242L, n_draws = N_DRAWS,
+    thin_threshold = thin_threshold, outcome_vars = "share_within",
+    att_obs = att_obs_w, se_obs = se_obs_w, target_att = att_obs_w,
+    n_countries = n_countries, n_treated = n_treated, n_obs = n_obs,
+    design_hash = design_hash, designs = designs_w, generated_at = Sys.time())
+  write_ri_draws_csv(ri_within, ri_within_path)
+  message("Saved: ", ri_within_path)
+}
+designs_w <- ri_within$designs
+
+# ==============================================================================
 # SECTION 8. Summary statistics — RI p-values, N valid, N fallback, SD, 95% range
 # ==============================================================================
 
@@ -731,41 +811,47 @@ design_labels <- c(timing = "Timing (within adopters)",
                    assignment = "Assignment (across countries)",
                    stratified = "Assignment, stratified (WB region)")
 
-summary_rows <- vector("list", length(all_designs) * length(outcome_vars))
-row_i <- 1L
-for (dname in names(all_designs)) {
-  d <- all_designs[[dname]]
-  for (oc in outcome_vars) {
-    r          <- d$outcomes[[oc]]
-    valid_atts <- r$att_perm[!is.na(r$att_perm)]
-    obs        <- att_obs[oc]
+#' RI summary per design x outcome: p-values, N valid/fallback, and the
+#' permutation distribution's mean, SD and 95% range.
+ri_summary <- function(designs, ocs, obs_vec) {
+  summary_rows <- vector("list", length(designs) * length(ocs))
+  row_i <- 1L
+  for (dname in names(designs)) {
+    d <- designs[[dname]]
+    for (oc in ocs) {
+      r          <- d$outcomes[[oc]]
+      valid_atts <- r$att_perm[!is.na(r$att_perm)]
+      obs        <- obs_vec[oc]
 
-    p_two <- if (length(valid_atts) > 0L) mean(abs(valid_atts) >= abs(obs)) else NA_real_
-    p_one <- if (length(valid_atts) > 0L) mean(valid_atts >= obs)          else NA_real_
-    sd_p  <- if (length(valid_atts) > 1L) sd(valid_atts)                   else NA_real_
-    q_lo  <- if (length(valid_atts) > 0L) as.numeric(quantile(valid_atts, 0.025)) else NA_real_
-    q_hi  <- if (length(valid_atts) > 0L) as.numeric(quantile(valid_atts, 0.975)) else NA_real_
+      p_two <- if (length(valid_atts) > 0L) mean(abs(valid_atts) >= abs(obs)) else NA_real_
+      p_one <- if (length(valid_atts) > 0L) mean(valid_atts >= obs)          else NA_real_
+      sd_p  <- if (length(valid_atts) > 1L) sd(valid_atts)                   else NA_real_
+      q_lo  <- if (length(valid_atts) > 0L) as.numeric(quantile(valid_atts, 0.025)) else NA_real_
+      q_hi  <- if (length(valid_atts) > 0L) as.numeric(quantile(valid_atts, 0.975)) else NA_real_
 
-    summary_rows[[row_i]] <- data.frame(
-      outcome       = oc,
-      design        = unname(design_labels[dname]),
-      att_obs       = obs,
-      p_two         = p_two,
-      p_one         = p_one,
-      n_valid       = r$n_valid,
-      n_fallback    = r$n_fallback,
-      n_skipped     = d$n_skipped_thin,
-      sd_perm       = sd_p,
-      q_lo          = q_lo,
-      q_hi          = q_hi,
-      stringsAsFactors = FALSE
-    )
-    message(sprintf("  %-12s | %-34s | ATT=%.4f | p(2s)=%.3f | p(1s,>=)=%.3f | N=%d | fallback=%d",
-                    oc, design_labels[dname], obs, p_two, p_one, r$n_valid, r$n_fallback))
-    row_i <- row_i + 1L
+      summary_rows[[row_i]] <- data.frame(
+        outcome       = oc,
+        design        = unname(design_labels[dname]),
+        att_obs       = obs,
+        p_two         = p_two,
+        p_one         = p_one,
+        n_valid       = r$n_valid,
+        n_fallback    = r$n_fallback,
+        n_skipped     = d$n_skipped_thin,
+        sd_perm       = sd_p,
+        q_lo          = q_lo,
+        q_hi          = q_hi,
+        mean_perm     = if (length(valid_atts) > 0L) mean(valid_atts) else NA_real_,
+        stringsAsFactors = FALSE
+      )
+      message(sprintf("  %-12s | %-34s | ATT=%.4f | p(2s)=%.3f | p(1s,>=)=%.3f | N=%d | fallback=%d",
+                      oc, design_labels[dname], obs, p_two, p_one, r$n_valid, r$n_fallback))
+      row_i <- row_i + 1L
+    }
   }
+  do.call(rbind, summary_rows)
 }
-summary_df <- do.call(rbind, summary_rows)
+summary_df <- ri_summary(all_designs, outcome_vars, att_obs)
 
 # ==============================================================================
 # SECTION 9. Table tab:ri_pvalues — panel per outcome, row per design
@@ -881,6 +967,65 @@ p_ri <- ggplot(hist_df, aes(x = att)) +
 ggsave(here("output", "figures", "randomization", "fig_ri_distributions.png"),
        p_ri, width = 11, height = 9, dpi = 300)
 message("Saved: ", here("output", "figures", "randomization", "fig_ri_distributions.png"))
+
+# ==============================================================================
+# SECTION 10b. Within-country share: table tab:ri_pvalues_within and figure
+# fig_ri_distributions_within.png (the two-outcome exhibits above unchanged)
+# ==============================================================================
+
+message("\n=== Within-country share RI ===\n")
+summary_w <- ri_summary(designs_w, "share_within", att_obs_w)
+null_all <- rbind(summary_df, summary_w)
+for (i in seq_len(nrow(null_all)))
+  message(sprintf("  Null distribution %-12s | %-34s | mean = %.4f | 95%% range [%.4f, %.4f]",
+                  null_all$outcome[i], null_all$design[i], null_all$mean_perm[i],
+                  null_all$q_lo[i], null_all$q_hi[i]))
+tim <- null_all[null_all$design == design_labels[["timing"]], ]
+tim_lab <- c(log_commits = "log adaptation commitments", share_adapt = "global share (pp)",
+             share_within = "within-country share (pp)")
+within_lines <- c(
+  "\\begin{tabular}{lccccccc}",
+  "\\toprule",
+  "Design & ATT (obs.) & $p$ (two-sided) & $p$ (one-sided, $\\geq$) & $N$ valid & $N$ fallback & SD (perm.) & 95\\% range (perm.) \\\\",
+  "\\midrule",
+  vapply(seq_len(nrow(summary_w)), function(i) fmt_row(summary_w[i, ]), character(1L)),
+  "\\bottomrule", "\\end{tabular}"
+)
+write_tex_float(
+  out_path      = here("output", "tables", "randomization", "ri_pvalues_within.tex"),
+  caption_title = "Randomization inference for the within-country adaptation share",
+  label         = "tab:ri_pvalues_within",
+  tabular_lines = within_lines,
+  notes_text    = paste0(
+    "Outcome: within-country adaptation share ($100 \\times E/S$, Table~\\ref{tab:within_share_wide}); ",
+    "observed ATT and its SE from that table's fit. Designs, ", N_DRAWS, " draws per design, ",
+    "permuted assignments (the same draws as Table~\\ref{tab:ri_pvalues}), estimator, ",
+    "fallback rule and $p$-values as in Table~\\ref{tab:ri_pvalues}. Mean of the ",
+    "timing-permutation distribution, with its 95\\% range, for the three outcomes: ",
+    paste(sprintf("%s %.4f [%.4f, %.4f]", tim_lab[tim$outcome], tim$mean_perm, tim$q_lo, tim$q_hi),
+          collapse = "; ")),
+  source_text   = source_txt
+)
+
+hist_w <- do.call(rbind, lapply(names(designs_w), function(dname) {
+  a <- designs_w[[dname]]$outcomes$share_within$att_perm
+  data.frame(att = a[!is.na(a)], design = unname(design_labels[dname]), stringsAsFactors = FALSE)
+}))
+hist_w$design <- factor(hist_w$design, levels = unname(design_labels))
+p_ri_w <- ggplot(hist_w, aes(x = att)) +
+  geom_histogram(bins = 40, fill = "#2E86C1", colour = "white", alpha = 0.85) +
+  geom_vline(xintercept = unname(att_obs_w), colour = "#C0392B", linewidth = 0.9,
+             linetype = "dashed") +
+  facet_wrap(~ design, ncol = 3L) +
+  labs(title = NULL, subtitle = NULL, caption = NULL,
+       x = "Permutation-draw pooled ATT, within-country share (pp)", y = "Count") +
+  theme_minimal() +
+  theme(text = element_text(family = "serif", size = 11),
+        strip.text = element_text(face = "bold", size = 9),
+        panel.grid.minor = element_blank())
+ggsave(here("output", "figures", "randomization", "fig_ri_distributions_within.png"),
+       p_ri_w, width = 11, height = 3.8, dpi = 300)
+message("Saved: ", here("output", "figures", "randomization", "fig_ri_distributions_within.png"))
 
 # ==============================================================================
 # SECTION 11. Copy this script's own outputs into paper/ — self-contained

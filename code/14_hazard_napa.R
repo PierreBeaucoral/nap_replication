@@ -59,9 +59,18 @@ source(here("code", "functions", "make_country_id.R"))    # make_country_id()
 # changed in did 2.5.0 (renv.lock pins it).
 if (utils::packageVersion("did") < "2.5.0") {
   stop(sprintf(paste0(
-    "did %s is installed but this script's results require did >= 2.5.0.\n",
-    "  Fix: run renv::restore() from the project root (renv.lock pins did 2.5.0)."),
+    "did %s is installed but the paper's results require did 2.5.0.\n",
+    "  Older versions reproduce the ATTs but NOT the standard errors and\n",
+    "  pre-trend tests on unbalanced panels (South Sudan has 14/16 years).\n",
+    "  Fix: run renv::restore() from the project root (renv.lock pins did 2.5.0),\n",
+    "  or remotes::install_version(\"did\", \"2.5.0\"), then rerun this script."),
     utils::packageVersion("did")))
+} else if (utils::packageVersion("did") != "2.5.0") {
+  warning(sprintf(paste0(
+    "did %s is installed; the paper's results were produced with did 2.5.0 ",
+    "(renv.lock). Later versions may change SEs: renv::restore() or ",
+    "remotes::install_version(\"did\", \"2.5.0\")."), utils::packageVersion("did")),
+    call. = FALSE)
 }
 
 # Single set.seed() at top (global). A local set.seed(1242) precedes
@@ -630,11 +639,11 @@ if (!emdat_available) {
 
 } else {
 
-  hazard_headline_spec <- function(yname, xformla, data) {
+  hazard_headline_spec <- function(yname, xformla, data, est_method = "dr") {
     set.seed(1242)  # Seed rule (reproduces the published SEs): seed immediately before the estimator call
     cap <- run_att_gt_captured(
       yname = yname, tname = "year", idname = "country_id", gname = "cohort_year",
-      xformla = xformla, data = data, est_method = "dr", bstrap = TRUE, biters = 999L,
+      xformla = xformla, data = data, est_method = est_method, bstrap = TRUE, biters = 999L,
       cband = FALSE, control_group = "nevertreated", anticipation = 0,
       base_period = "universal", panel = TRUE, allow_unbalanced_panel = TRUE
     )
@@ -657,7 +666,8 @@ if (!emdat_available) {
     list(gt_obj = cap$gt_obj, agg_s = agg_s, n_obs = nrow(data),
         n_treated = n_treated_fit, n_treated_input = n_treated_input,
         n_treated_source = n_treated_source, n_ok_groups = length(ok_groups),
-        warnings = cap$warnings, ids = sort(unique(data$country_id)))
+        warnings = cap$warnings, ids = sort(unique(data$country_id)),
+        est_method = est_method)
   }
 
   did_panel_hazard_ok <- did_panel_main %>% filter(!is.na(log_affected_climate_lag1))
@@ -706,9 +716,19 @@ if (!emdat_available) {
                                        did_panel_hazard_ok)
   fit_a_affected <- hazard_headline_spec(
     "log_commits", ~ ge_est + log_population + log_affected_climate_lag1, did_panel_hazard_ok)
+  # Damage row: on this sample the doubly robust fit leaves post-treatment
+  # cells for far fewer than 40 treated units (the others' cells are NA), so
+  # the project rule (DR only with >= 40 treated) switches it to outcome
+  # regression; the DR estimate is kept for the note.
   fit_a_damage <- hazard_headline_spec(
     "log_commits", ~ ge_est + log_population + log_damage_climate_lag1,
-    did_panel_damage_ok)
+    did_panel_damage_ok, est_method = "dr")
+  fit_a_damage_dr <- fit_a_damage
+  if (fit_a_damage$n_treated < 40L) {
+    fit_a_damage <- hazard_headline_spec(
+      "log_commits", ~ ge_est + log_population + log_damage_climate_lag1,
+      did_panel_damage_ok, est_method = "reg")
+  }
   fit_c_ma3 <- hazard_headline_spec(
     "log_commits", ~ ge_est + log_population + log_affected_climate_ma3,
     did_panel_hazard_ok %>% filter(!is.na(log_affected_climate_ma3)))
@@ -855,9 +875,10 @@ if (!emdat_available) {
         fit = fit_baseline, diff = diff_ref_baseline),
     list(label = "(a) Affected, $t-1$",          set = "Climate-related",
         fit = fit_a_affected, diff = diff_a_affected),
-    list(label = "(a) Damage, $t-1$",            set = "Climate-related",
+    list(label = if (fit_a_damage$est_method == "reg") "(a) Damage, $t-1$ (reg)" else
+                   "(a) Damage, $t-1$",          set = "Climate-related",
         fit = fit_a_damage, diff = diff_a_damage),
-    list(label = "(b) Residualised outcome",     set = "Climate-related",
+    list(label = "(b) Residualized outcome",     set = "Climate-related",
         fit = fit_b_resid, diff = diff_b_resid),
     list(label = "(c) 3-yr moving avg., affected", set = "Climate-related",
         fit = fit_c_ma3, diff = diff_c_ma3),
@@ -878,7 +899,7 @@ if (!emdat_available) {
   })) %>% mutate(stars = stars_of(p), diff_stars = stars_of(diff_p))
 
   message("\n--- Hazard-controls results ---")
-  print(hazard_tab, row.names = FALSE)
+  message(paste(capture.output(print(hazard_tab, row.names = FALSE)), collapse = "\n"))
 
   hazard_lines <- c(
     "\\begin{tabular}{llccccccc}",
@@ -897,18 +918,24 @@ if (!emdat_available) {
 
   write_tex_float(
     out_path      = here("output", "tables", "hazard", "att_hazard_controls.tex"),
-    caption_title = "NAP effect on log adaptation commitments with EM-DAT hazard-realisation controls",
+    caption_title = "NAP effect on log adaptation commitments with EM-DAT hazard-realization controls",
     label         = "tab:hazard_controls",
     tabular_lines = hazard_lines,
     notes_text    = paste0(
       "CS\\,(2021) DR, never-treated controls, WGI GE + log population, cohorts $\\geq 5$, ",
       "multiplier-bootstrap SE (999 reps, seed 1242), \\texttt{did} ", DID_VERSION,
+      if (fit_a_damage$est_method == "reg") paste0(
+        "; the damage row (reg) uses outcome regression: the doubly robust fit on that sample ",
+        "leaves post-treatment cells for only ", fit_a_damage_dr$n_treated,
+        " treated units (doubly robust is used only with $\\geq 40$; its estimate is ",
+        sprintf("%.4f", fit_a_damage_dr$agg_s$overall.att), ", SE ",
+        sprintf("%.4f", fit_a_damage_dr$agg_s$overall.se), ")") else "",
       ". Row 1: the headline estimate. Row 2: hazard sample (missing EM-DAT ",
       "lag dropped). $\\Delta$ vs.\\ reference $=$ reference ATT $-$ row ATT; the reference is ",
       "Row 1 for Row 2 and Row 2 for Rows 3--", length(hazard_rows), ". Hazards: climate-related events unless noted (last row: all natural ",
       "hazards). (a) adds the one-year-lagged hazard measure to the covariates (each ",
       "observation's own lag: the panel is unbalanced, so \\texttt{did} estimates it as repeated ",
-      "cross-sections); (b) residualises the ",
+      "cross-sections); (b) residualizes the ",
       "outcome on it via never-treated FE, re-estimates on the residual; (c) uses a 3-yr ",
       "moving average. $N_{treated}$: recipients in cohorts with an estimable post-treatment ",
       "cell. $p(\\Delta)$: aligned influence functions for (a) affected and (b); independence ",
@@ -1010,12 +1037,17 @@ run_orthogonality_battery <- function(lag1_var, lag2_var, out_path, caption_titl
   wald_p <- c(wald_lpm$p, NA_real_, NA_real_, wald_nocovid$p, wald_cloglog$p)
   n_rows <- c(nrow(two_lag), nrow(two_lag), nrow(two_lag), nrow(two_lag_nocovid),
               if (is.null(m_cloglog)) NA_integer_ else nrow(two_lag))
+  # Events per column: column 4 is estimated on the 2020--22-excluded sample.
+  n_events <- c(sum(two_lag$nap_submit), sum(two_lag$nap_submit), sum(two_lag$nap_submit),
+                sum(two_lag_nocovid$nap_submit),
+                if (is.null(m_cloglog)) NA_integer_ else sum(two_lag$nap_submit))
   # A model that could not be estimated is dropped from the table and named in
   # the note, rather than shown as a column of dashes.
   est_ok <- !vapply(models, function(x) is.null(x$m), logical(1L))
   models <- models[est_ok]
   wald_p <- wald_p[est_ok]
   n_rows <- n_rows[est_ok]
+  n_events <- n_events[est_ok]
 
   col1 <- vapply(seq_along(models), function(i) {
     if (!models[[i]]$has1) return("--")
@@ -1046,7 +1078,7 @@ run_orthogonality_battery <- function(lag1_var, lag2_var, out_path, caption_titl
   row_wald    <- paste0("Joint Wald $p$ (both lags) & ", paste(fmt3(wald_p), collapse = " & "), " \\\\")
   row_n       <- paste0("$N$ & ", paste(ifelse(is.na(n_rows), "--", format(n_rows, big.mark = ",")), collapse = " & "), " \\\\")
   row_events  <- paste0("NAP-submission events & ",
-                        paste(rep(sum(two_lag$nap_submit), length(models)), collapse = " & "),
+                        paste(n_events, collapse = " & "),
                         " \\\\")
   row_fe      <- sprintf("Country + year FE & \\multicolumn{%d}{c}{Yes} \\\\", length(models))
 
@@ -1057,28 +1089,6 @@ run_orthogonality_battery <- function(lag1_var, lag2_var, out_path, caption_titl
     row_lag1, row_lag1_se, row_lag2, row_lag2_se, "\\midrule",
     row_wald, row_n, row_events, row_fe,
     "\\bottomrule", "\\end{tabular}"
-  )
-
-  # Auto-generated joint-rejection / COVID-sensitivity sentence: states, with the actual computed numbers, whether
-  # the two-lag joint test rejects, and whether that rejection survives
-  # dropping 2020-2022 -- rather than a hand-written claim that can drift out
-  # of sync with the numbers.
-  reject_full    <- !is.na(wald_lpm$p) && wald_lpm$p < 0.05
-  reject_nocovid <- !is.na(wald_nocovid$p) && wald_nocovid$p < 0.05
-  lag1_sig <- !is.na(extract(m_lpm, lag1_var)$p) && extract(m_lpm, lag1_var)$p < 0.05
-  lag2_sig <- !is.na(extract(m_lpm, lag2_var)$p) && extract(m_lpm, lag2_var)$p < 0.05
-  driver <- if (lag2_sig && !lag1_sig) "lag-2" else if (lag1_sig && !lag2_sig) "lag-1" else
-    if (lag1_sig && lag2_sig) "both lags" else "neither lag individually"
-  rejection_sentence <- if (is.na(wald_lpm$p)) "" else paste0(
-    "Joint two-lag test ", if (reject_full) "rejects" else "does not reject",
-    " the null at 5\\% ($p = ", fmt3(wald_lpm$p), "$), driven by ", driver,
-    "; dropping 2020--2022 ",
-    if (is.na(wald_nocovid$p)) "could not be tested" else paste0(
-      "gives $p = ", fmt3(wald_nocovid$p), "$ (",
-      if (reject_full && !reject_nocovid) "not significant -- COVID-sensitive"
-      else if (reject_full && reject_nocovid) "still significant -- not just COVID"
-      else "still not significant", ")"
-    ), ". "
   )
 
   n_countries_two_lag <- n_distinct(two_lag$recipient_name)
@@ -1132,7 +1142,7 @@ if (emdat_available) {
   res_emdat <- run_orthogonality_battery(
     lag1_var = "log_affected_climate_lag1", lag2_var = "log_affected_climate_lag2",
     out_path = here("output", "tables", "hazard", "nap_timing_vs_emdat_hazard.tex"),
-    caption_title = "NAP submission timing and lagged EM-DAT natural-hazard realisations",
+    caption_title = "NAP submission timing and lagged EM-DAT natural-hazard realizations",
     label = "tab:nap_timing_emdat_hazard",
     hazard_desc = paste0("one- and two-year-lagged log(1+Total Affected), climate-related ",
                          "EM-DAT hazard set (Hydrological/Meteorological/Climatological)"),
@@ -1231,9 +1241,12 @@ stopifnot(length(ldc_iso3_2013) == 49L, !anyDuplicated(ldc_iso3_2013))
 # SECTION 7. Prior-NAPA split
 # Among NAP adopters in the main sample (cohorts >= 5 treated units), split
 # by whether the country had submitted a NAPA before its NAP, and estimate
-# the NAP effect in each cell (same spec as the LDC split in 05: CS (2021),
-# doubly-robust, never-treated control, multiplier-bootstrap SE -- see 05 §22 for the
-# split machinery this mirrors).
+# the NAP effect in each cell: CS (2021), never-treated controls (every
+# never-treated unit enters both cells), WGI GE + log population,
+# multiplier-bootstrap SE. Estimator by the project rule: doubly robust only
+# when the cell has >= 40 treated units, otherwise outcome regression ("reg");
+# both cells have fewer than 40, so both use "reg". This differs from the
+# stage-05 LDC split, which uses not-yet-treated controls.
 #
 # Because every
 # verified NAPA year is <= 2017 and every main-sample cohort is 2021-2024,
@@ -1257,7 +1270,7 @@ adopters_prior_napa <- did_panel_napa %>%
   filter(cohort_year > 0) %>%
   distinct(recipient_name, cohort_year, prior_napa, is_ldc)
 message("Adopters in the main sample by prior-NAPA status:")
-print(count(adopters_prior_napa, prior_napa), row.names = FALSE)
+message(paste(capture.output(print(count(adopters_prior_napa, prior_napa), row.names = FALSE)), collapse = "\n"))
 
 # --- Cross-tab: prior_napa x LDC status, treated-unit counts (stage log; the
 # text quotes them) ---------------------------------------------------------
@@ -1278,6 +1291,8 @@ for (r in seq_len(nrow(cross_tab_full)))
 napa_split_spec <- function(panel_in, keep_treated_flag) {
   panel_split <- panel_in %>%
     filter(cohort_year == 0 | prior_napa == keep_treated_flag)
+  n_tr_split <- n_distinct(panel_split$country_id[panel_split$cohort_year > 0])
+  em_split   <- if (n_tr_split >= 40L) "dr" else "reg"
   # Global seed set as in 05's splits (later sections re-seed anyway); the bootstrap fit
   # and its simple aggregation draw inside withr::with_seed(1242), seeded
   # immediately before the estimator as in 05's sample splits, so the reported
@@ -1287,7 +1302,7 @@ napa_split_spec <- function(panel_in, keep_treated_flag) {
   fit <- withr::with_seed(1242L, {
     cap <- run_att_gt_captured(
       yname = "log_commits", tname = "year", idname = "country_id", gname = "cohort_year",
-      xformla = ~ ge_est + log_population, data = panel_split, est_method = "dr",
+      xformla = ~ ge_est + log_population, data = panel_split, est_method = em_split,
       bstrap = TRUE, biters = 999L, cband = FALSE, control_group = "nevertreated",
       anticipation = 0, base_period = "universal", panel = TRUE,
       allow_unbalanced_panel = TRUE
@@ -1301,7 +1316,7 @@ napa_split_spec <- function(panel_in, keep_treated_flag) {
   if (is.null(cap$gt_obj)) return(list(gt_obj = NULL, agg_s = NULL, n_units = NA_integer_,
                                        ids = integer(0)))
   list(gt_obj = cap$gt_obj, agg_s = agg_s, n_units = n_distinct(panel_split$country_id),
-      ids = sort(unique(panel_split$country_id)))
+      ids = sort(unique(panel_split$country_id)), est_method = em_split)
 }
 
 fit_prior_yes <- napa_split_spec(did_panel_napa, 1L)
@@ -1347,6 +1362,12 @@ diff_napa <- {
 message(sprintf("Difference (prior NAPA - no prior NAPA) = %.4f, SE = %.4f, p = %.3f [%s]",
                 diff_napa$diff, diff_napa$se, diff_napa$pval, diff_napa$method))
 
+napa_em_used  <- unique(c(fit_prior_yes$est_method, fit_prior_no$est_method))
+napa_em_label <- if (identical(napa_em_used, "reg")) {
+  paste0("outcome-regression estimator (doubly robust is used only for cells with ",
+         "$\\geq 40$ treated units; both cells have fewer)")
+} else if (identical(napa_em_used, "dr")) "doubly robust" else
+  "doubly robust in cells with $\\geq 40$ treated units, outcome regression otherwise"
 napa_split_lines <- c(
   "\\begin{tabular}{lccccc}",
   "\\toprule",
@@ -1370,7 +1391,10 @@ write_tex_float(
   label         = "tab:prior_napa_split",
   tabular_lines = napa_split_lines,
   notes_text    = paste0(
-    "CS\\,(2021) DR, never-treated controls, WGI GE + log population, cohorts $\\geq 5$, ",
+    "CS\\,(2021), ",
+    napa_em_label,
+    ", never-treated controls (all never-treated units enter both cells), ",
+    "WGI GE + log population, cohorts $\\geq 5$, ",
     "\\texttt{did} ", DID_VERSION, ". Multiplier-bootstrap SE (999 reps, clustered by ",
     "recipient, seed 1242)",
     ". ``Prior NAPA'': submitted a NAPA ",
@@ -1435,7 +1459,7 @@ message(sprintf(
         "%d NAPA-listed countries; the rest predate first_year or fall after the cutoff and ",
         "are pooled with never-treated)."),
   first_year, placebo_cutoff_year, n_late_napa, sum(!is.na(napa_cohort_lookup$napa_year))))
-print(napa_treated_names %>% select(recipient_name, napa_cohort_year), row.names = FALSE)
+message(paste(capture.output(print(napa_treated_names %>% select(recipient_name, napa_cohort_year), row.names = FALSE)), collapse = "\n"))
 
 did_panel_placebo <- did_panel_full %>%
   select(-any_of("napa_cohort_year")) %>%
@@ -1489,7 +1513,7 @@ if (n_late_napa < 5L) {
     count(cohort_year, name = "n_treated")
   napa_thin <- napa_cohort_sizes$cohort_year[napa_cohort_sizes$n_treated < thin_threshold]
   message("NAPA-cohort sizes (falsification treatment, restricted window):")
-  print(napa_cohort_sizes, row.names = FALSE)
+  message(paste(capture.output(print(napa_cohort_sizes, row.names = FALSE)), collapse = "\n"))
 
   # With treated units spread thinly across several NAPA-adoption years, no
   # individual cohort may meet the project's per-cohort thin_threshold = 5.

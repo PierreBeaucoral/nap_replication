@@ -1,0 +1,38 @@
+\begin{table}[H]
+\centering
+\caption{HonestDiD robust 95\% CI for the within-country adaptation share}
+\label{tab:honestdid_within}
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lc}
+\toprule
+ & Within-country adaptation share (pp) \\
+\midrule
+Conventional 95\% CI & [0.977, 4.324] \\
+\midrule
+\multicolumn{2}{l}{\textit{Panel A: relative magnitudes, $\Delta^{RM}(\bar{M})$}} \\
+$\bar{M} = 0.00$ & [1.008, 4.290] \\
+$\bar{M} = 0.25$ & [-0.222, 5.555] \\
+$\bar{M} = 0.50$ & [-2.068, 7.435] \\
+$\bar{M} = 0.75$ & [-4.154, 9.521] \\
+$\bar{M} = 1.00$ & [-6.307, 11.640] \\
+$\bar{M} = 1.25$ & [-8.461, 13.794] \\
+$\bar{M} = 1.50$ & [-10.615, 15.948] \\
+$\bar{M} = 1.75$ & [-12.768, 17.076] \\
+$\bar{M} = 2.00$ & [-14.956, 17.076] \\
+Breakdown $\bar{M}$ & $0.25$ \\
+\midrule
+\multicolumn{2}{l}{\textit{Panel B: smoothness, $\Delta^{SD}(M)$}} \\
+$M = 0.00$ & [0.711, 5.343] \\
+$M = 0.01$ & [0.710, 5.344] \\
+$M = 0.02$ & [0.700, 5.354] \\
+$M = 0.05$ & [0.636, 5.418] \\
+Breakdown $M$ & $> 0.05$ \\
+\bottomrule
+\end{tabular}
+}
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: Sensitivity of \citet{rambachan_roth_2023} on the within-country share column of Table~\ref{tab:within_share_wide} ($100 \times E/S$, percentage points): CS\,(2021) DR, never-treated controls, multiplier-bootstrap SE (999 reps, seed 1242). Target: group-size-weighted average post-treatment effect ($e=0,\dots,3$), weights (0.3846, 0.3077, 0.2019, 0.1058), reproducing the simple ATT of 2.6507. $\Sigma$ rescaled to the reported bootstrap SEs (max gap 14.9\%). Pre-treatment window: 4 leads ($e=-5,\dots,-2$). Grids, confidence-set methods and breakdown definitions as Tables~\ref{tab:honestdid} and \ref{tab:honestdid_sd}; $M$ is in percentage points per period. Conventional CI: the same estimate and covariance without a restriction.\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

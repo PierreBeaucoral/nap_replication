@@ -1,0 +1,21 @@
+\begin{table}[H]
+\centering
+\caption{Randomization inference for the within-country adaptation share}
+\label{tab:ri_pvalues_within}
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{lccccccc}
+\toprule
+Design & ATT (obs.) & $p$ (two-sided) & $p$ (one-sided, $\geq$) & $N$ valid & $N$ fallback & SD (perm.) & 95\% range (perm.) \\
+\midrule
+Timing (within adopters) & 2.6507 & 0.048 & 0.048 & 2000 & 0 & 0.9293 & [-0.7192, 2.8774] \\
+Assignment (across countries) & 2.6507 & 0.080 & 0.028 & 2000 & 0 & 1.5147 & [-3.2298, 2.7085] \\
+Assignment, stratified (WB region) & 2.6507 & 0.091 & 0.035 & 2000 & 0 & 1.5881 & [-3.1562, 2.9292] \\
+\bottomrule
+\end{tabular}
+}
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: Outcome: within-country adaptation share ($100 \times E/S$, Table~\ref{tab:within_share_wide}); observed ATT and its SE from that table's fit. Designs, 2000 draws per design, permuted assignments (the same draws as Table~\ref{tab:ri_pvalues}), estimator, fallback rule and $p$-values as in Table~\ref{tab:ri_pvalues}. Mean of the timing-permutation distribution, with its 95\% range, for the three outcomes: log adaptation commitments 0.1794 [-0.0646, 0.4315]; global share (pp) 0.1590 [-0.1469, 0.3992]; within-country share (pp) 1.1930 [-0.7192, 2.8774].\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central; World Bank WGI/WDI.
+\end{minipage}
+\end{table}

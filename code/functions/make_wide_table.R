@@ -165,6 +165,9 @@ make_wide_table <- function(did_panel_in, retain_thin, outcomes,
       "---"
     }
 
+    if (!is.finite(pt$stat) || !is.finite(pt$pval))
+      stop(sprintf("Pre-trend test unavailable for '%s' (%d usable leads): refusing to print NA.",
+                   oc$var, pt$n_leads), call. = FALSE)
     table_stats[[oc$var]] <- list(
       att_fmt      = paste0(sprintf("%.4f", att), stars),
       se_fmt       = sprintf("(%.4f)", se),

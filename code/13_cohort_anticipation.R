@@ -4,7 +4,7 @@
 #, and conditioning-set sensitivity.
 # Paper: Beaucoral, Goujon and Marchand (2026) — appendix to §5 (robustness)
 #
-# Three blocks of checks:
+# Four blocks of checks:
 #   A   Cohort-robustness battery: leave-one-cohort-out over every estimation
 #       cohort; drop 2024 as a cohort and as a calendar year; balanced event
 #       windows (aggte balance_e = 1, 2); the 2x2 {main, retained} x {dr, reg} grid
@@ -17,6 +17,9 @@
 #       common-support specification trimming recipients whose estimated
 #       propensity to adopt lies outside [0.05, 0.95]; listwise-deletion losses
 #       for each specification (stage log).
+#   D   Timing (Section 13): an adopters-only design (never-treated dropped,
+#       not-yet-treated controls) on the level, the global share and the
+#       within-country share; submission months by cohort.
 #
 # Inputs :
 #   data/processed/simple_panel_wgi.csv
@@ -32,6 +35,11 @@
 #   output/tables/anticipation/att_anticipation.tex
 #   output/tables/anticipation/att_eventdate.tex
 #   output/tables/anticipation/att_placebo_ladder.tex
+#   output/tables/timing/att_adopters_only.tex           (Section 13a)
+#   output/tables/timing/cohort_submission_months.tex    (Section 13b)
+#
+# Also reads output/fits/headline_share_dr_bs.rds (03) and
+# output/fits/within_share_dr_bs.rds (07) for the adopters-only comparison.
 #
 # This script NEVER touches the raw CRS tree; it reads the processed panel only.
 # ==============================================================================
@@ -61,18 +69,25 @@ library(did)
 # An older install reproduces the ATTs but not the SEs / pre-trend tests.
 if (utils::packageVersion("did") < "2.5.0") {
   stop(sprintf(paste0(
-    "did %s is installed but the paper's results require did >= 2.5.0.\n",
+    "did %s is installed but the paper's results require did 2.5.0.\n",
     "  Older versions reproduce the ATTs but NOT the standard errors and\n",
     "  pre-trend tests on unbalanced panels (South Sudan has 14/16 years).\n",
     "  Fix: run renv::restore() from the project root (renv.lock pins did 2.5.0),\n",
-    "  or install.packages(\"did\") to get >= 2.5.0, then rerun this script."),
+    "  or remotes::install_version(\"did\", \"2.5.0\"), then rerun this script."),
     utils::packageVersion("did")))
+} else if (utils::packageVersion("did") != "2.5.0") {
+  warning(sprintf(paste0(
+    "did %s is installed; the paper's results were produced with did 2.5.0 ",
+    "(renv.lock). Later versions may change SEs: renv::restore() or ",
+    "remotes::install_version(\"did\", \"2.5.0\")."), utils::packageVersion("did")),
+    call. = FALSE)
 }
 library(parallel)   # forked evaluation guard for the segfault-prone dr cell
 source(here("code", "functions", "pretrend_test.R"))      # compute_pretrend_test()
 source(here("code", "functions", "read_headline_fit.R"))  # read_headline_fit()
 source(here("code", "functions", "mde.R"))                # mde()
 source(here("code", "functions", "make_country_id.R"))    # make_country_id()
+source(here("code", "functions", "crs_positive.R"))       # crs_positive()
 
 set.seed(20240601)  # global seed — local set.seed(1242) calls follow each estimator
 
@@ -88,10 +103,12 @@ dir_tabs_cb <- here("output", "tables", "cohort_battery")
 dir_tabs_an <- here("output", "tables", "anticipation")
 dir.create(dir_tabs_cb, recursive = TRUE, showWarnings = FALSE)
 dir.create(dir_tabs_an, recursive = TRUE, showWarnings = FALSE)
+dir_tabs_tm <- here("output", "tables", "timing")
+dir.create(dir_tabs_tm, recursive = TRUE, showWarnings = FALSE)
 # A failed run must not leave the previous run's exhibits in place: they are
 # deleted before anything is estimated, and an estimation failure stops the
 # stage (the one documented exception is the forked 2x2 cell below).
-unlink(list.files(c(dir_tabs_cb, dir_tabs_an), pattern = "\\.(tex|png|pdf)$",
+unlink(list.files(c(dir_tabs_cb, dir_tabs_an, dir_tabs_tm), pattern = "\\.(tex|png|pdf)$",
                   full.names = TRUE))
 
 #' Small counts as words, for table notes
@@ -246,7 +263,7 @@ thin_cohorts   <- cf$thin_cohorts
 kept_cohorts   <- cf$kept_cohorts
 
 message("Cohort sizes:")
-print(cf$sizes, row.names = FALSE)
+message(paste(capture.output(print(cf$sizes, row.names = FALSE)), collapse = "\n"))
 message(sprintf("Estimation cohorts (>= %d treated units): %s",
                 THIN_THRESHOLD, paste(kept_cohorts, collapse = ", ")))
 message(sprintf("Dropped thin cohorts: %s", paste(thin_cohorts, collapse = ", ")))
@@ -740,7 +757,7 @@ contrib_rows <- lapply(e_grid, function(e) {
     check.names = FALSE, stringsAsFactors = FALSE)
 })
 contrib_tab <- bind_rows(contrib_rows)
-print(contrib_tab, row.names = FALSE)
+message(paste(capture.output(print(contrib_tab, row.names = FALSE)), collapse = "\n"))
 
 write_tex_float(
   file.path(dir_tabs_cb, "cohort_contributions.tex"),
@@ -994,7 +1011,7 @@ if (!cohort_month_ok) {
 
   month_counts <- month_lookup %>% count(post_month, name = "n")
   message("  NAP submissions by month (all recipients with a date):")
-  print(as.data.frame(month_counts), row.names = FALSE)
+  message(paste(capture.output(print(as.data.frame(month_counts), row.names = FALSE)), collapse = "\n"))
 
   # Unit-level re-dating map: original cohort, re-dated cohort, and whether the
   # re-dated cohort leaves the panel.
@@ -1039,7 +1056,7 @@ if (!cohort_month_ok) {
   panel_a <- build_month_panel(did_panel_full, ids_main_treated)
   sizes_a <- cohort_sizes_of(panel_a)
   message("  (a) re-dated cohort sizes within the main treated set:")
-  print(as.data.frame(sizes_a), row.names = FALSE)
+  message(paste(capture.output(print(as.data.frame(sizes_a), row.names = FALSE)), collapse = "\n"))
 
   cf_a1 <- apply_cohort_filter(panel_a)
   lost_a1 <- setdiff(sizes_a$cohort_year, cf_a1$kept_cohorts)
@@ -1050,7 +1067,7 @@ if (!cohort_month_ok) {
   res_month_a1 <- run_spec(cf_a1$panel, yname = "log_commits")
   rep_a1 <- cohort_cell_report(res_month_a1$gt, cf_a1$panel)
   if (!is.null(rep_a1)) { message("  (a1) estimable cells per cohort:")
-    print(rep_a1, row.names = FALSE) }
+    message(paste(capture.output(print(rep_a1, row.names = FALSE)), collapse = "\n")) }
   if (!is.null(res_month_a1))
     message(sprintf(paste0("   (a1) ATT = %.4f (SE %.4f, t %.3f) | treated in ",
                            "panel = %d | CONTRIBUTING treated = %d"),
@@ -1079,7 +1096,7 @@ if (!cohort_month_ok) {
   }
   rep_a2 <- cohort_cell_report(res_month_a2$gt, panel_a)
   if (!is.null(rep_a2)) { message("  (a2) estimable cells per cohort:")
-    print(rep_a2, row.names = FALSE) }
+    message(paste(capture.output(print(rep_a2, row.names = FALSE)), collapse = "\n")) }
   if (!is.null(res_month_a2))
     message(sprintf(paste0("   (a2) ATT = %.4f (SE %.4f, t %.3f) | treated in ",
                            "panel = %d | CONTRIBUTING treated = %d | est_method = %s"),
@@ -1119,7 +1136,7 @@ if (!cohort_month_ok) {
   res_month_b <- run_spec(cf_b$panel, yname = "log_commits")
   rep_b <- cohort_cell_report(res_month_b$gt, cf_b$panel)
   if (!is.null(rep_b)) { message("  (b) estimable cells per cohort:")
-    print(rep_b, row.names = FALSE) }
+    message(paste(capture.output(print(rep_b, row.names = FALSE)), collapse = "\n")) }
   if (!is.null(res_month_b))
     message(sprintf(paste0("   (b) ATT = %.4f (SE %.4f, t %.3f) | treated in ",
                            "panel = %d | CONTRIBUTING treated = %d"),
@@ -1161,7 +1178,7 @@ if (!cohort_month_ok) {
                   as.data.frame(ct_mat, stringsAsFactors = FALSE),
                   stringsAsFactors = FALSE)
   rownames(ct_tab) <- NULL
-  print(ct_tab, row.names = FALSE)
+  message(paste(capture.output(print(ct_tab, row.names = FALSE)), collapse = "\n"))
 
   write_tex_float(
     file.path(dir_tabs_an, "cohort_redating_crosstab.tex"),
@@ -1566,5 +1583,183 @@ write_tex_float(
          if (length(bat_extra) == 0L) "" else paste0(paste(bat_extra, collapse = " "), " "),
          SPEC_NOTE_NOPT, " ", STAR_NOTE, " (normal approximation)"),
   SRC_NOTE)
+
+# ==============================================================================
+# SECTION 13. Timing investigation
+# (a) Adopters-only design: the 40 main-sample adopters only, never-treated
+#     recipients dropped, not-yet-treated controls; otherwise the headline
+#     specification (WGI GE + log population, universal base period,
+#     multiplier bootstrap, seed 1242). With no never-treated unit, did uses
+#     the last cohort (2024) as the comparison group and drops calendar years
+#     from 2024 on, so ATT(g, t) is identified for the 2021-2023 cohorts up to
+#     2023 only (read from the fit below, not assumed). Estimator by the
+#     project rule: doubly robust only with >= 40 treated units in the
+#     estimated cohorts, else outcome regression; the other estimator is
+#     reported beside it. Pre-trend test: the four-lead full-covariance Wald of
+#     compute_pretrend_test() on an analytical twin.
+# (b) Submission months by cohort, from the NAP Central posting dates carried
+#     in the panel (data/raw/shared_nap_data/nap_information.csv, parsed by 01).
+# ==============================================================================
+
+message("\n=== Section 13: timing investigation ===\n")
+
+panel_adopt <- did_panel_main %>%
+  filter(cohort_year > 0) %>%
+  mutate(share_within = if_else(crs_positive(commitments_all),
+                                100 * commitments / commitments_all, NA_real_))
+n_adopt <- n_distinct(panel_adopt$country_id)
+stopifnot(n_adopt == n_distinct(did_panel_main$country_id[did_panel_main$cohort_year > 0]))
+
+path_within <- file.path(FITS_DIR, "within_share_dr_bs.rds")
+if (!file.exists(path_within))
+  stop("Stored within-share fit not found: ", path_within, " (written by 07; run 07 before 13).")
+adopt_outcomes <- list(
+  list(var = "log_commits",  label = "log(Adaptation commitments)",
+       main_att = fit_head$att),
+  list(var = "share_adapt",  label = "Adaptation share (\\% of global)",
+       main_att = read_headline_fit("share")$att),
+  list(var = "share_within", label = "Within-country adaptation share (\\%)",
+       main_att = readRDS(path_within)$att)
+)
+
+#' Adopters-only CS fit for one outcome and estimator: bootstrap fit for the
+#' ATT/SE (aggregated inside the same seed), analytical twin for the pre-trend.
+fit_adopters_only <- function(y, em) {
+  args <- list(yname = y, tname = "year", idname = "country_id", gname = "cohort_year",
+               xformla = ~ ge_est + log_population, data = panel_adopt, est_method = em,
+               cband = FALSE, control_group = "notyettreated", anticipation = 0,
+               base_period = "universal", panel = TRUE, allow_unbalanced_panel = TRUE)
+  gt_an  <- suppressMessages(do.call(att_gt, c(args, list(bstrap = FALSE))))
+  agg_da <- aggte(gt_an, type = "dynamic", na.rm = TRUE, min_e = -5, max_e = Inf)
+  pt     <- compute_pretrend_test(agg_da, gt_an)
+  bt <- withr::with_seed(1242L, {
+    gt_b <- suppressMessages(do.call(att_gt, c(args, list(bstrap = TRUE, biters = BITERS))))
+    list(gt = gt_b, s = aggte(gt_b, type = "simple", na.rm = TRUE),
+         d = aggte(gt_b, type = "dynamic", na.rm = TRUE, min_e = -5, max_e = Inf))
+  })
+  groups <- sort(unique(bt$gt$group))
+  att <- bt$s$overall.att; se <- bt$s$overall.se
+  if (!is.finite(att) || !is.finite(se) || !is.finite(pt$stat))
+    stop("Adopters-only fit failed for ", y, " (", em, ")")
+  list(var = y, em = em, att = att, se = se, p = 2 * pnorm(-abs(att / se)),
+       pt = pt, groups = groups, years = range(bt$gt$t),
+       n_treated = n_distinct(panel_adopt$country_id[panel_adopt$cohort_year %in% groups]),
+       n_obs = sum(!is.na(panel_adopt[[y]]) & panel_adopt$year <= max(bt$gt$t)),
+       egt = bt$d$egt, att_egt = bt$d$att.egt, se_egt = bt$d$se.egt)
+}
+
+adopt_fits <- lapply(adopt_outcomes, function(oc)
+  lapply(c(reg = "reg", dr = "dr"), function(em) fit_adopters_only(oc$var, em)))
+names(adopt_fits) <- vapply(adopt_outcomes, `[[`, character(1L), "var")
+
+f0 <- adopt_fits[[1L]]$reg
+em_rule <- if (f0$n_treated >= 40L) "dr" else "reg"
+control_only <- setdiff(sort(unique(panel_adopt$cohort_year)), f0$groups)
+message(sprintf(paste0("  Adopters-only: %d adopters; estimated cohorts %s (%d treated units); ",
+                       "comparison-only cohort(s) %s; years %d-%d; rule estimator: %s"),
+                n_adopt, paste(f0$groups, collapse = ", "), f0$n_treated,
+                paste(control_only, collapse = ", "), f0$years[1L], f0$years[2L], em_rule))
+for (v in names(adopt_fits)) for (em in c("reg", "dr")) {
+  f <- adopt_fits[[v]][[em]]
+  message(sprintf(paste0("  %-12s %-3s ATT = %.4f (SE %.4f, p = %.3f) | pre-trend chi2(%d) = %.3f, ",
+                         "p = %.3f | dynamic: %s"),
+                  v, em, f$att, f$se, f$p, f$pt$df, f$pt$stat, f$pt$pval,
+                  paste(sprintf("e=%d %.4f (%.4f)", as.integer(f$egt), f$att_egt, f$se_egt),
+                        collapse = "; ")))
+}
+
+em_lab <- c(reg = "Outcome regression", dr = "Doubly robust")
+adopt_rows <- unlist(lapply(seq_along(adopt_outcomes), function(k) {
+  oc <- adopt_outcomes[[k]]
+  ems <- c(em_rule, setdiff(c("reg", "dr"), em_rule))
+  vapply(seq_along(ems), function(j) {
+    f <- adopt_fits[[oc$var]][[ems[j]]]
+    paste0(if (j == 1L) oc$label else "", " & ", em_lab[[ems[j]]], " & ",
+           sprintf("%.4f", f$att), fmt_stars(f$att / f$se), " & (", sprintf("%.4f", f$se), ") & ",
+           sprintf("%.3f", f$p), " & ", sprintf("%.3f", f$pt$stat), " & ",
+           sprintf("%.3f", f$pt$pval), " & ", f$n_treated, " & ",
+           format(f$n_obs, big.mark = ","), " & ",
+           if (j == 1L) sprintf("%.4f", oc$main_att) else "", " \\\\")
+  }, character(1L))
+}))
+pt_leads <- f0$pt$leads
+adopt_lines <- c(
+  "\\begin{tabular}{llcccccccc}",
+  "\\toprule",
+  paste0("Outcome & Estimator & ATT & SE & $p$ & Pre-trend $\\chi^2(", f0$pt$df, ")$ & ",
+         "Pre-trend $p$ & Treated & $N$ & Main ATT \\\\"),
+  "\\midrule",
+  adopt_rows,
+  "\\bottomrule", "\\end{tabular}"
+)
+post_e <- sort(unique(as.integer(f0$egt[f0$egt >= 0])))
+write_tex_float(
+  file.path(dir_tabs_tm, "att_adopters_only.tex"),
+  "Adopters-only design: not-yet-treated comparisons among the NAP adopters",
+  "tab:att_adopters_only",
+  adopt_lines,
+  paste0("CS\\,(2021) on the ", n_adopt, " main-sample adopters only (cohorts ",
+         paste(range(panel_adopt$cohort_year), collapse = "--"), "); never-treated recipients ",
+         "dropped; not-yet-treated controls; WGI GE + log population; universal base period ",
+         "($g-1$). With no never-treated unit, \\texttt{did} uses the ",
+         paste(control_only, collapse = ", "), " cohort only as a comparison group and drops ",
+         "calendar years after ", f0$years[2L], ", so the estimated cohorts are ",
+         paste(f0$groups, collapse = ", "), " (``Treated'' units) and the post-treatment ",
+         "event times are $e=", min(post_e), ",\\dots,", max(post_e), "$. ",
+         "Estimator: the first row of each outcome uses ", tolower(em_lab[[em_rule]]),
+         ", which our rule selects (doubly robust only with at least 40 treated units); the ",
+         "second row reports ", tolower(em_lab[[setdiff(c("reg", "dr"), em_rule)]]),
+         " for comparison. ATT/SE: multiplier bootstrap (", BITERS, " reps, clustered by recipient, ",
+         "seed 1242). ", PRETREND_NOTE_AGG(min(pt_leads), max(pt_leads), f0$pt$df), ". ",
+         "Main ATT: the main specification (never-treated controls, all ",
+         n_distinct(did_panel_main$country_id), " recipients).",
+         if (any(grepl("\\*", adopt_rows))) paste0(" ", STAR_NOTE) else ""),
+  SRC_NOTE)
+
+# --- (b) Submission months by cohort -----------------------------------------
+sub_dates <- did_panel_main %>%
+  filter(cohort_year > 0) %>%
+  distinct(recipient_name, cohort_year, date_posted_2) %>%
+  mutate(date = as.Date(date_posted_2), month = as.integer(format(date, "%m")))
+stopifnot(!anyNA(sub_dates$date), !anyDuplicated(sub_dates$recipient_name),
+          all(as.integer(format(sub_dates$date, "%Y")) == sub_dates$cohort_year))
+cohorts_tm <- sort(unique(sub_dates$cohort_year))
+month_rows <- vapply(cohorts_tm, function(g) {
+  m <- as.integer(table(factor(sub_dates$month[sub_dates$cohort_year == g], levels = 1:12)))
+  paste0(g, " & ", sum(m), " & ", paste(m, collapse = " & "), " & ", sum(m[10:12]), " \\\\")
+}, character(1L))
+# COP26 window (31 Oct - 13 Nov 2021) as given in the revision plan; no other
+# conference dates are hard-coded.
+cop26 <- as.Date(c("2021-10-31", "2021-11-13"))
+c21 <- sub_dates %>% filter(cohort_year == 2021) %>% arrange(date, recipient_name)
+in_cop26 <- c21$recipient_name[c21$date >= cop26[1L] & c21$date <= cop26[2L]]
+fmt_day <- function(d) paste(as.integer(format(d, "%d")), month.abb[as.integer(format(d, "%m"))])
+message(sprintf("  2021 cohort (%d): %s", nrow(c21),
+                paste(sprintf("%s %s", c21$recipient_name, format(c21$date)), collapse = "; ")))
+message(sprintf("  2021 cohort posted Oct-Dec 2021: %d; during COP26 (31 Oct-13 Nov): %d (%s)",
+                sum(c21$month >= 10L), length(in_cop26), paste(in_cop26, collapse = ", ")))
+months_lines <- c(
+  "\\begin{tabular}{lcccccccccccccc}",
+  "\\toprule",
+  paste0("Cohort & $N$ & ", paste(month.abb, collapse = " & "), " & Oct--Dec \\\\"),
+  "\\midrule",
+  month_rows,
+  "\\bottomrule", "\\end{tabular}"
+)
+write_tex_float(
+  file.path(dir_tabs_tm, "cohort_submission_months.tex"),
+  "NAP submission months by adoption cohort",
+  "tab:cohort_submission_months",
+  months_lines,
+  paste0("Main-sample adopters (", nrow(sub_dates), " recipients) by the calendar month in ",
+         "which UNFCCC NAP Central posted their NAP; the posting date is the event date of ",
+         "the main specification (adoption year) and of the month-based re-dating. ",
+         "In the 2021 cohort, ", sum(c21$month >= 10L), " of ", nrow(c21),
+         " NAPs were posted in October--December 2021 and ", length(in_cop26),
+         " during COP26 (31 October--13 November 2021", if (length(in_cop26) > 0L)
+           paste0(": ", paste(in_cop26, collapse = ", ")) else "", "). ",
+         "2021 cohort posting dates (2021): ",
+         paste(sprintf("%s (%s)", c21$recipient_name, fmt_day(c21$date)), collapse = ", ")),
+  "UNFCCC NAP Central (posting dates)")
 
 message("\n=== 13_cohort_anticipation.R: complete ===\n")

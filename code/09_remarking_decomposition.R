@@ -30,6 +30,7 @@
 #   output/tables/remarking/remarking_flag_shares_by_group.tex  (descriptive)
 #   output/tables/remarking/id_linkage_diagnostic.csv      (diagnostic)
 #   output/tables/remarking/reconciliation_check.csv       (diagnostic)
+#   output/tables/remarking/singleton_shares.csv           (diagnostic)
 #   output/tables/remarking/remarking_results.rds          (all result objects)
 #   -- all .tex outputs above are additionally copied to paper/Tables/remarking/
 #      when a paper/ folder exists (not in the stand-alone replication package).
@@ -69,9 +70,18 @@ library(did)
 
 if (utils::packageVersion("did") < "2.5.0") {
   stop(sprintf(paste0(
-    "did %s is installed but this script's SEs / pre-trend tests require ",
-    "did >= 2.5.0 (renv.lock pins it). Run renv::restore() or update did."),
+    "did %s is installed but the paper's results require did 2.5.0.\n",
+    "  Older versions reproduce the ATTs but NOT the standard errors and\n",
+    "  pre-trend tests on unbalanced panels (South Sudan has 14/16 years).\n",
+    "  Fix: run renv::restore() from the project root (renv.lock pins did 2.5.0),\n",
+    "  or remotes::install_version(\"did\", \"2.5.0\"), then rerun this script."),
     utils::packageVersion("did")))
+} else if (utils::packageVersion("did") != "2.5.0") {
+  warning(sprintf(paste0(
+    "did %s is installed; the paper's results were produced with did 2.5.0 ",
+    "(renv.lock). Later versions may change SEs: renv::restore() or ",
+    "remotes::install_version(\"did\", \"2.5.0\")."), utils::packageVersion("did")),
+    call. = FALSE)
 }
 source(here("code", "functions", "pretrend_test.R"))      # compute_pretrend_test()
 source(here("code", "functions", "read_headline_fit.R"))  # read_headline_fit()
@@ -113,6 +123,58 @@ log_msg("=== 09_remarking_decomposition.R: START ===")
 # copied here verbatim, matching the project's own "additive-only" pattern
 # used for §3c in 01_prepare_data.R).
 # ------------------------------------------------------------------------
+
+#' log1p() on a recipient-year USD component, with the sign checked.
+#' Cancellations can make an activity's commit_sum negative, so a component's
+#' recipient-year sum can be negative. Below -1 log1p() is undefined: stop.
+#' In (-1, 0) log1p() is defined but the cell is a net cancellation: warn,
+#' naming the component and the count (the cells are listed in the log after
+#' each decomposition), and keep the value as it is -- no clamping.
+log1p_nonneg <- function(x, name = deparse(substitute(x))) {
+  n_undef <- sum(x <= -1, na.rm = TRUE)
+  if (n_undef > 0L) stop(sprintf(
+    "log1p on component '%s': %d recipient-year value(s) <= -1 (min %.6f); log1p undefined.",
+    name, n_undef, min(x, na.rm = TRUE)), call. = FALSE)
+  n_neg <- sum(x < -1e-9, na.rm = TRUE)
+  if (n_neg > 0L) warning(sprintf(
+    "log1p on component '%s': %d recipient-year value(s) < 0 (min %.6f), kept unclamped.",
+    name, n_neg, min(x, na.rm = TRUE)), call. = FALSE, immediate. = TRUE)
+  log1p(x)
+}
+
+#' Note sentence disclosing recipient-year components that are negative
+#' (net cancellations). log1p() is applied to them unchanged (all are > -1).
+#' @param df panel; @param cols component columns; @param labels table names
+#' @return "" when no cell is negative, else one sentence
+neg_cells_note <- function(df, cols, labels) {
+  n <- vapply(cols, function(v) sum(df[[v]] < 0, na.rm = TRUE), integer(1L))
+  if (all(n == 0L)) return("")
+  lo <- min(vapply(cols, function(v) min(df[[v]], na.rm = TRUE), numeric(1L)))
+  paste0("Net cancellations make ", paste(sprintf("%d recipient-year%s of %s", n[n > 0],
+         ifelse(n[n > 0] == 1L, "", "s"), labels[n > 0]), collapse = " and "),
+         " slightly negative (minimum ", sprintf("%.4f", lo),
+         " USD M); $\\log(1+\\cdot)$ is applied to them unchanged. ")
+}
+
+#' Log every recipient-year with a negative component (net cancellations).
+log_negative_cells <- function(df, cols) {
+  for (v in cols) {
+    neg <- df[!is.na(df[[v]]) & df[[v]] < -1e-9, c("recipient_name", "year", v)]
+    if (nrow(neg) > 0L)
+      log_msg("Negative component %s (net cancellation, kept): %s", v,
+              paste(sprintf("%s %d %.6f", neg$recipient_name, as.integer(neg$year), neg[[v]]),
+                    collapse = "; "))
+  }
+}
+
+#' Formats a statistic for a shipped table cell; stops on NA/NaN/Inf so no
+#' table silently prints "NA" (these cells are never intentionally blank).
+fmt_req <- function(x, what, digits = 3L) {
+  if (!(is.numeric(x) && length(x) == 1L && is.finite(x)))
+    stop(sprintf("Table cell '%s' is not a finite number: refusing to print it.", what),
+         call. = FALSE)
+  sprintf(paste0("%.", digits, "f"), x)
+}
 
 esc_header <- function(x) {
   x <- gsub("%",  "\\\\%",  x)
@@ -657,10 +719,12 @@ did_panel_126 <- did_panel_126 %>%
     commit_new          = coalesce(commit_new, 0),
     commit_cont_marked  = coalesce(commit_cont_marked, 0),
     commit_remarked     = coalesce(commit_remarked, 0),
-    log_commit_new         = log1p(commit_new),
-    log_commit_cont_marked = log1p(commit_cont_marked),
-    log_commit_remarked    = log1p(commit_remarked)
+    log_commit_new         = log1p_nonneg(commit_new),
+    log_commit_cont_marked = log1p_nonneg(commit_cont_marked),
+    log_commit_remarked    = log1p_nonneg(commit_remarked)
   )
+
+log_negative_cells(did_panel_126, c("commit_new", "commit_cont_marked", "commit_remarked"))
 
 # Internal consistency check: the three margins must sum to total marked
 # commitments (== log_commits' underlying `commitments` column).
@@ -701,9 +765,11 @@ did_panel_126 <- did_panel_126 %>%
   mutate(
     commit_new_linked     = coalesce(commit_new_linked, 0),
     commit_unlinked       = coalesce(commit_unlinked, 0),
-    log_commit_new_linked = log1p(commit_new_linked),
-    log_commit_unlinked   = log1p(commit_unlinked)
+    log_commit_new_linked = log1p_nonneg(commit_new_linked),
+    log_commit_unlinked   = log1p_nonneg(commit_unlinked)
   )
+
+log_negative_cells(did_panel_126, c("commit_new_linked", "commit_unlinked"))
 
 # Internal consistency check: new_linked + unlinked must reconstruct the
 # 3-bucket "new" from Section 7 exactly.
@@ -746,8 +812,9 @@ did_panel_126 <- did_panel_126 %>%
     mean_commit_marked  = coalesce(mean_commit_marked, 0),
     share_marked_pp     = coalesce(share_marked_pp, 0),
     log_n_marked            = log1p(n_marked),
-    log_mean_commit_marked  = log1p(mean_commit_marked)
+    log_mean_commit_marked  = log1p_nonneg(mean_commit_marked)
   )
+log_negative_cells(did_panel_126, "mean_commit_marked")
 
 # ==============================================================================
 # SECTION 9. OBJECTIVE 3 -- NAP-SUPPORT / READINESS / FUND EXCLUSION
@@ -796,15 +863,19 @@ did_panel_126 <- did_panel_126 %>%
     commit_excl_title_old   = coalesce(commit_excl_title_old, 0),
     commit_excl_purpose_old = coalesce(commit_excl_purpose_old, 0),
     commit_excl_all_old     = coalesce(commit_excl_all_old, 0),
-    log_commit_excl_title      = log1p(commit_excl_title),
-    log_commit_excl_purpose    = log1p(commit_excl_purpose),
-    log_commit_excl_fund       = log1p(commit_excl_fund),
-    log_commit_excl_all        = log1p(commit_excl_all),
-    log_commit_multi_excl_fund = log1p(commit_multi_excl_fund),
-    log_commit_excl_title_old   = log1p(commit_excl_title_old),
-    log_commit_excl_purpose_old = log1p(commit_excl_purpose_old),
-    log_commit_excl_all_old     = log1p(commit_excl_all_old)
+    log_commit_excl_title      = log1p_nonneg(commit_excl_title),
+    log_commit_excl_purpose    = log1p_nonneg(commit_excl_purpose),
+    log_commit_excl_fund       = log1p_nonneg(commit_excl_fund),
+    log_commit_excl_all        = log1p_nonneg(commit_excl_all),
+    log_commit_multi_excl_fund = log1p_nonneg(commit_multi_excl_fund),
+    log_commit_excl_title_old   = log1p_nonneg(commit_excl_title_old),
+    log_commit_excl_purpose_old = log1p_nonneg(commit_excl_purpose_old),
+    log_commit_excl_all_old     = log1p_nonneg(commit_excl_all_old)
   )
+log_negative_cells(did_panel_126, c("commit_excl_title", "commit_excl_purpose", "commit_excl_fund",
+                                    "commit_excl_all", "commit_multi_excl_fund",
+                                    "commit_excl_title_old", "commit_excl_purpose_old",
+                                    "commit_excl_all_old"))
 
 # --- Descriptive flag-coverage shares: by year ------------------------------
 flag_shares_year <- excl_ry[, .(
@@ -1199,9 +1270,9 @@ fmt_col_margin <- function(res) c(
   if (is.na(res$share_pre)) "---" else sprintf("%.1f", res$share_pre),
   format(res$n_obs, big.mark = ","),
   as.character(res$n_country),
-  sprintf("%.3f", res$pretrend_stat),
-  sprintf("%.3f", res$pretrend_pval),
-  sprintf("%.3f", res$did_wpval)
+  fmt_req(res$pretrend_stat, "pre-trend statistic"),
+  fmt_req(res$pretrend_pval, "pre-trend p-value"),
+  fmt_req(res$did_wpval, "did Wpval")
 )
 
 # tab:remarking_margins: Panel A = the four-way decomposition; Panel B = the
@@ -1255,6 +1326,7 @@ write_tex_float(
     c(ProjectNumber = "project number", CrsID = "CRS identifier")[[chosen_id]],
     ") and ``unlinked'' (no such identifier; new by construction); the other columns are ",
     "unchanged. ",
+    neg_cells_note(did_panel_126, "commit_cont_marked", "``continuing, already marked''"),
     "Category definitions and singleton shares: see Section~\\ref{sec:remarking} and ",
     "Appendix~\\ref{app:remarking}. ``New'' ATT is an upper bound on genuinely new activity. ",
     "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
@@ -1269,9 +1341,9 @@ fmt_col_counts <- function(res) c(
   if (is.na(res$mean_pre)) "---" else sprintf("%.2f", res$mean_pre),
   format(res$n_obs, big.mark = ","),
   as.character(res$n_country),
-  sprintf("%.3f", res$pretrend_stat),
-  sprintf("%.3f", res$pretrend_pval),
-  sprintf("%.3f", res$did_wpval)
+  fmt_req(res$pretrend_stat, "pre-trend statistic"),
+  fmt_req(res$pretrend_pval, "pre-trend p-value"),
+  fmt_req(res$did_wpval, "did Wpval")
 )
 row_labels_counts <- c(
   "ATT", "SE", "$t$-statistic", "Mean (pre-treat.)",
@@ -1313,9 +1385,9 @@ exclusions_tex <- build_wide_tex_table(
     if (is.na(res$mean_pre)) "---" else sprintf("%.2f", res$mean_pre),
     format(res$n_obs, big.mark = ","),
     as.character(res$n_country),
-    sprintf("%.3f", res$pretrend_stat),
-    sprintf("%.3f", res$pretrend_pval),
-    sprintf("%.3f", res$did_wpval)
+    fmt_req(res$pretrend_stat, "pre-trend statistic"),
+    fmt_req(res$pretrend_pval, "pre-trend p-value"),
+    fmt_req(res$did_wpval, "did Wpval")
   )),
   tex_label = "tab:remarking_exclusions"
 )
@@ -1331,6 +1403,7 @@ write_tex_float(
     "Table~\\ref{tab:remarking_flag_shares_by_group}. ``Multilateral cell, excl.\\ ",
     "fund-flagged'' recomputes log multilateral adaptation commitments without the ",
     "fund-flagged activities. ",
+    neg_cells_note(did_panel_126, "commit_multi_excl_fund", "the multilateral cell excl.\\ fund-flagged"),
     "Flag coverage: by year, Panel~A of Table~\\ref{tab:remarking_flag_shares_by_group}; ",
     "by treatment group, its Panel~B", ginv_note_res(exclusion_results, names(exclusion_results)),
     ". * $p<0.10$, ** $p<0.05$, *** $p<0.01$"
@@ -1360,9 +1433,9 @@ exclusions_compare_tex <- build_wide_tex_table(
     if (is.na(res$mean_pre)) "---" else sprintf("%.2f", res$mean_pre),
     format(res$n_obs, big.mark = ","),
     as.character(res$n_country),
-    sprintf("%.3f", res$pretrend_stat),
-    sprintf("%.3f", res$pretrend_pval),
-    sprintf("%.3f", res$did_wpval)
+    fmt_req(res$pretrend_stat, "pre-trend statistic"),
+    fmt_req(res$pretrend_pval, "pre-trend p-value"),
+    fmt_req(res$did_wpval, "did Wpval")
   )),
   tex_label = "tab:remarking_exclusions_regex_comparison"
 )

@@ -7,6 +7,8 @@
 # Inputs:
 #   data/processed/simple_panel_wgi.csv
 #   data/processed/mitigation_panel.csv   (raw recipient-year flows; built by 01)
+#   output/fits/headline_*_dr_bs.rds      (headline fits, written by 03)
+#   output/fits/within_share_dr_bs.rds    (within-country share fit, written by 07)
 #
 # Outputs (all under output/):
 #   figures/cohorts_retained/did_combined_cohort_wgi.png   (§19b robustness)
@@ -18,6 +20,7 @@
 #   tables/cohorts_dropped/honestdid_rm.tex                (§20 HonestDiD)
 #   tables/cohorts_dropped/honestdid_prepriods.tex         (§20 HonestDiD, 4/6/8 leads)
 #   tables/cohorts_dropped/honestdid_sd.tex                (§20 HonestDiD, smoothness)
+#   tables/cohorts_dropped/honestdid_within.tex            (§20 HonestDiD, within-country share)
 #   figures/placebo/did_placebo_es.png                     (§25)
 #   tables/placebo/att_placebo.tex                         (§25)
 #   figures/mitigation/did_mitigation_es.png               (§26)
@@ -28,6 +31,8 @@
 #   tables/outlier_india/att_combined_wide.tex             (§C excluding India)
 #   tables/balanced_panel/att_combined_wide.tex            (§D balanced panel)
 #   tables/panel_2010/att_combined_wide.tex                (§E panel from 2010)
+#   fits/placebo_m2_reg_bs.rds   (§25 -2-year placebo fit, read by 13)
+#   fits/mitigation_dr_bs.rds    (§26 mitigation fit, read by 05)
 #
 # NOTE: honestdid_combined.png is NOT written (not used in paper).
 # ==============================================================================
@@ -61,12 +66,18 @@ library(did)
 # An older install reproduces the ATTs but not the SEs / pre-trend tests.
 if (utils::packageVersion("did") < "2.5.0") {
   stop(sprintf(paste0(
-    "did %s is installed but the paper's results require did >= 2.5.0.\n",
+    "did %s is installed but the paper's results require did 2.5.0.\n",
     "  Older versions reproduce the ATTs but NOT the standard errors and\n",
     "  pre-trend tests on unbalanced panels (South Sudan has 14/16 years).\n",
     "  Fix: run renv::restore() from the project root (renv.lock pins did 2.5.0),\n",
-    "  or install.packages(\"did\") to get >= 2.5.0, then rerun this script."),
+    "  or remotes::install_version(\"did\", \"2.5.0\"), then rerun this script."),
     utils::packageVersion("did")))
+} else if (utils::packageVersion("did") != "2.5.0") {
+  warning(sprintf(paste0(
+    "did %s is installed; the paper's results were produced with did 2.5.0 ",
+    "(renv.lock). Later versions may change SEs: renv::restore() or ",
+    "remotes::install_version(\"did\", \"2.5.0\")."), utils::packageVersion("did")),
+    call. = FALSE)
 }
 library(fixest)
 library(countrycode)
@@ -110,7 +121,8 @@ BITERS <- 999L
 # §19e and §20 read the headline fits written by 03_main_results.R
 # (read_headline_fit()) instead of re-fitting, so the paper can never print two
 # different standard errors for one specification. This stage writes its own
-# placebo and mitigation fits to the same folder.
+# placebo and mitigation fits to the same folder. §20 also reads the
+# within-country share fit written by 07 (run_all.R runs 07 before 04).
 # -----------------------------------------------------------------------
 FITS_DIR <- here("output", "fits")
 
@@ -124,7 +136,8 @@ unlink(c(list.files(here("output", c("tables", "figures"),
                                "mitigation", "dcdh", "bacon"), each = 2L)),
                     pattern = "\\.(tex|png|pdf)$", full.names = TRUE),
          here("output", "tables", "cohorts_dropped",
-              c("honestdid_rm.tex", "honestdid_sd.tex", "honestdid_prepriods.tex"))))
+              c("honestdid_rm.tex", "honestdid_sd.tex", "honestdid_prepriods.tex",
+                "honestdid_within.tex"))))
 
 # canonical pre-trend wording — keep byte-identical across scripts
 PRETREND_NOTE_AGG <- function(min_e, max_e, k) sprintf(
@@ -727,7 +740,16 @@ write_tex_float(
     "WGI gov.\\ effectiveness + log population, universal base period. Each cohort row is ",
     "that cohort's average post-adoption ATT; ``Recipients'' counts its treated recipients. ",
     "Pooled rows average the cohort ATTs with weights proportional to their recipients, held ",
-    "fixed (no term for estimated weights). SEs: analytical influence-function SEs clustered by recipient; a pooled row's SE ",
+    "fixed (no term for estimated weights)",
+    local({
+      unpooled <- setdiff(cohort_sizes$cohort_year, unlist(lapply(grp_pools, `[[`, "years")))
+      if (length(unpooled) == 0L) "" else paste0(
+        "; the ", paste(unpooled, collapse = ", "), " cohort",
+        if (length(unpooled) > 1L) "s" else "", " (",
+        paste(cohort_sizes$n_treated[match(unpooled, cohort_sizes$cohort_year)], collapse = ", "),
+        " recipients) ", if (length(unpooled) > 1L) "are" else "is", " in neither pool")
+    }),
+    ". SEs: analytical influence-function SEs clustered by recipient; a pooled row's SE ",
     "combines the cohorts' influence functions with the same weights. $p$: two-sided, normal. ",
     "Analytical SEs on cohorts of ",
     paste(range(cohort_sizes$n_treated[cohort_sizes$cohort_year %in% thin_cohorts]),
@@ -1588,7 +1610,6 @@ if (!all(vapply(hd_pre, is.null, logical(1L)))) {
       if (!is.null(hd_pre[[key]])) pre_mat[i, j] <- hd_pre[[key]]$breakdown
     }
   }
-  win_row <- matrix(sprintf("$e \\in [-%d, 3]$", numPre_grid + 1L), ncol = 1)
   tab_pre <- data.frame(
     `Pre-treatment window` = paste0(rownames(pre_mat), " ($e \\in [-",
                                     numPre_grid + 1L, ", -2]$)"),
@@ -1691,6 +1712,77 @@ if (!all(vapply(hd_sd, is.null, logical(1L)))) {
     notes_text    = notes_sd,
     source_text   = "OECD CRS (Rio adaptation markers); UNFCCC NAP Central")
 }
+
+# (iv) Within-country share -- tables/cohorts_dropped/honestdid_within.tex ----
+# Same restrictions, grids, covariance construction and target weights as the
+# tables above, on the within-share fit stored by 07 (run_all.R runs 07 before
+# 04). The RNG state is preserved around this block, so nothing after it moves.
+path_within_hd <- here("output", "fits", "within_share_dr_bs.rds")
+if (!file.exists(path_within_hd))
+  stop("Stored within-share fit not found: ", path_within_hd,
+       " (written by 07_principal_and_share.R, which run_all.R runs before 04).")
+fit_w_hd <- readRDS(path_within_hd)
+if (is.null(fit_w_hd$l_vec_simple) || is.null(fit_w_hd$agg_dynamic) || is.null(fit_w_hd$gt_boot))
+  stop("Stored within-share fit lacks l_vec_simple/agg_dynamic/gt_boot: rerun 07.")
+hd_w <- withr::with_preserve_seed({
+  hin_w <- hd_inputs_from_fit(fit_w_hd, numPre_grid[1L])
+  if (is.null(hin_w)) stop("HonestDiD inputs unavailable for the within-country share")
+  rm_w <- createSensitivityResults_relativeMagnitudes(
+    betahat = hin_w$betahat, sigma = hin_w$sigma, numPrePeriods = hin_w$numPre,
+    numPostPeriods = hin_w$numPost, Mbarvec = Mbarvec_hd, l_vec = hin_w$l_vec, alpha = 0.05)
+  sd_w <- createSensitivityResults(
+    betahat = hin_w$betahat, sigma = hin_w$sigma, numPrePeriods = hin_w$numPre,
+    numPostPeriods = hin_w$numPost, Mvec = Mvec_sd, l_vec = hin_w$l_vec, alpha = 0.05)
+  orig_w <- constructOriginalCS(
+    betahat = hin_w$betahat, sigma = hin_w$sigma, numPrePeriods = hin_w$numPre,
+    numPostPeriods = hin_w$numPost, l_vec = hin_w$l_vec, alpha = 0.05)
+  list(hin = hin_w, rm = rm_w, sd = sd_w, orig = orig_w)
+})
+bd_rm_w <- breakdown_value(hd_w$rm$lb, hd_w$rm$ub, Mbarvec_hd[seq_len(nrow(hd_w$rm))])
+bd_sd_w <- breakdown_value(hd_w$sd$lb, hd_w$sd$ub, Mvec_sd[seq_len(nrow(hd_w$sd))])
+message(sprintf(paste0("  Within-country share: ATT %.4f | conventional CI [%.3f, %.3f] | ",
+                       "RM breakdown Mbar = %s | SD breakdown M = %s | vcov gap %.4f"),
+                fit_w_hd$att, hd_w$orig$lb, hd_w$orig$ub, bd_rm_w, bd_sd_w,
+                hd_w$hin$max_rel_dev))
+egt_w  <- hd_w$hin$egt
+post_w <- egt_w[egt_w >= 0]
+pre_w  <- egt_w[egt_w < 0]
+within_hd_lines <- c(
+  "\\begin{tabular}{lc}",
+  "\\toprule",
+  " & Within-country adaptation share (pp) \\\\",
+  "\\midrule",
+  sprintf("Conventional 95\\%% CI & %s \\\\", fmt_ci_hd(hd_w$orig$lb, hd_w$orig$ub)),
+  "\\midrule",
+  "\\multicolumn{2}{l}{\\textit{Panel A: relative magnitudes, $\\Delta^{RM}(\\bar{M})$}} \\\\",
+  sprintf("$\\bar{M} = %.2f$ & %s \\\\", Mbarvec_hd[seq_len(nrow(hd_w$rm))],
+          mapply(fmt_ci_hd, hd_w$rm$lb, hd_w$rm$ub)),
+  sprintf("Breakdown $\\bar{M}$ & %s \\\\", bd_rm_w),
+  "\\midrule",
+  "\\multicolumn{2}{l}{\\textit{Panel B: smoothness, $\\Delta^{SD}(M)$}} \\\\",
+  sprintf("$M = %.2f$ & %s \\\\", Mvec_sd[seq_len(nrow(hd_w$sd))],
+          mapply(fmt_ci_hd, hd_w$sd$lb, hd_w$sd$ub)),
+  sprintf("Breakdown $M$ & %s \\\\", bd_sd_w),
+  "\\bottomrule", "\\end{tabular}"
+)
+write_tex_float(
+  here("output", "tables", "cohorts_dropped", "honestdid_within.tex"),
+  caption_title = paste0("HonestDiD robust 95\\% CI for the within-country adaptation share"),
+  label         = "tab:honestdid_within",
+  tabular_lines = within_hd_lines,
+  notes_text    = paste0(
+    "Sensitivity of \\citet{rambachan_roth_2023} on the within-country share column of ",
+    "Table~\\ref{tab:within_share_wide} ($100 \\times E/S$, percentage points): CS\\,(2021) DR, ",
+    "never-treated controls, multiplier-bootstrap SE (", BITERS, " reps, seed 1242). Target: ",
+    "group-size-weighted average post-treatment effect ($e=", min(post_w), ",\\dots,",
+    max(post_w), "$), weights (", paste(sprintf("%.4f", hd_w$hin$l_vec), collapse = ", "),
+    "), reproducing the simple ATT of ", sprintf("%.4f", fit_w_hd$att), ". $\\Sigma$ rescaled ",
+    "to the reported bootstrap SEs (max gap ", sprintf("%.1f\\%%", 100 * hd_w$hin$max_rel_dev),
+    "). Pre-treatment window: ", length(pre_w), " leads ($e=", min(pre_w), ",\\dots,",
+    max(pre_w), "$). Grids, confidence-set methods and breakdown definitions as ",
+    "Tables~\\ref{tab:honestdid} and \\ref{tab:honestdid_sd}; $M$ is in percentage points ",
+    "per period. Conventional CI: the same estimate and covariance without a restriction"),
+  source_text   = "OECD CRS (Rio adaptation markers); UNFCCC NAP Central")
 
 message("\n=== Section 20 complete ===\n")
 

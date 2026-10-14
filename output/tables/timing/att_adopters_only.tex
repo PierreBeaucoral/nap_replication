@@ -1,0 +1,24 @@
+\begin{table}[H]
+\centering
+\caption{Adopters-only design: not-yet-treated comparisons among the NAP adopters}
+\label{tab:att_adopters_only}
+\adjustbox{max width=\textwidth}{%
+\begin{tabular}{llcccccccc}
+\toprule
+Outcome & Estimator & ATT & SE & $p$ & Pre-trend $\chi^2(4)$ & Pre-trend $p$ & Treated & $N$ & Main ATT \\
+\midrule
+log(Adaptation commitments) & Outcome regression & 0.1080 & (0.2179) & 0.620 & 1.828 & 0.767 & 32 & 579 & 0.3036 \\
+ & Doubly robust & 0.1406 & (0.2257) & 0.533 & 1.929 & 0.749 & 32 & 579 &  \\
+Adaptation share (\% of global) & Outcome regression & 0.1725 & (0.3145) & 0.583 & 3.127 & 0.537 & 32 & 579 & 0.3356 \\
+ & Doubly robust & 0.2361 & (0.2971) & 0.427 & 2.729 & 0.604 & 32 & 579 &  \\
+Within-country adaptation share (\%) & Outcome regression & 0.1776 & (1.2478) & 0.887 & 0.896 & 0.925 & 32 & 579 & 2.6507 \\
+ & Doubly robust & 0.3124 & (1.3224) & 0.813 & 1.050 & 0.902 & 32 & 579 &  \\
+\bottomrule
+\end{tabular}
+}
+\par\vspace{4pt}
+\begin{minipage}{\linewidth}\footnotesize
+Notes: CS\,(2021) on the 40 main-sample adopters only (cohorts 2021--2024); never-treated recipients dropped; not-yet-treated controls; WGI GE + log population; universal base period ($g-1$). With no never-treated unit, \texttt{did} uses the 2024 cohort only as a comparison group and drops calendar years after 2023, so the estimated cohorts are 2021, 2022, 2023 (``Treated'' units) and the post-treatment event times are $e=0,\dots,2$. Estimator: the first row of each outcome uses outcome regression, which our rule selects (doubly robust only with at least 40 treated units); the second row reports doubly robust for comparison. ATT/SE: multiplier bootstrap (999 reps, clustered by recipient, seed 1242). Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-5 \leq e \leq -2$; 4 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular. Main ATT: the main specification (never-treated controls, all 126 recipients)..\par
+Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+\end{minipage}
+\end{table}

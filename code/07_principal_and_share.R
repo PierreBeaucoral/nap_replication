@@ -12,6 +12,8 @@
 #   output/tables/principal_share/share_reconciliation.tex   (tab:share_reconciliation)
 #   output/figures/principal_share/fig_within_share_es.png
 #   output/figures/principal_share/fig_share_reconciliation.png
+#   output/fits/within_share_dr_bs.rds, within_logit_dr_bs.rds  (within-share
+#     fits, read by 04 HonestDiD, 08 RI and 11)
 #   (mirrored to paper/Tables/principal_share/, paper/Figures/principal_share/)
 #
 # The DiD panel is rebuilt from data/processed/simple_panel_wgi.csv exactly as
@@ -57,16 +59,23 @@ library(did)
 # (Identical guard to 03_main_results.R l.35-46.)
 if (utils::packageVersion("did") < "2.5.0") {
   stop(sprintf(paste0(
-    "did %s is installed but the paper's results require did >= 2.5.0.\n",
+    "did %s is installed but the paper's results require did 2.5.0.\n",
     "  Older versions reproduce the ATTs but NOT the standard errors and\n",
     "  pre-trend tests on unbalanced panels (South Sudan has 14/16 years).\n",
     "  Fix: run renv::restore() from the project root (renv.lock pins did 2.5.0),\n",
-    "  or install.packages(\"did\") to get >= 2.5.0, then rerun this script."),
+    "  or remotes::install_version(\"did\", \"2.5.0\"), then rerun this script."),
     utils::packageVersion("did")))
+} else if (utils::packageVersion("did") != "2.5.0") {
+  warning(sprintf(paste0(
+    "did %s is installed; the paper's results were produced with did 2.5.0 ",
+    "(renv.lock). Later versions may change SEs: renv::restore() or ",
+    "remotes::install_version(\"did\", \"2.5.0\")."), utils::packageVersion("did")),
+    call. = FALSE)
 }
 source(here("code", "functions", "pretrend_test.R"))      # compute_pretrend_test()
 source(here("code", "functions", "read_headline_fit.R"))  # read_headline_fit()
 source(here("code", "functions", "make_country_id.R"))    # make_country_id()
+source(here("code", "functions", "simple_att_event_weights.R"))  # simple_att_event_weights()
 source(here("code", "functions", "crs_positive.R"))       # crs_positive()
 source(here("code", "functions", "sup_t_crit.R"))         # sup_t_crit()
 
@@ -591,9 +600,9 @@ stats_headline  <- summarize_fit(fit_headline,  did_panel_tab_main, raw_var = "c
 stats_principal <- summarize_fit(fit_principal, did_panel_tab_main, raw_var = "commitments_principal")
 
 # --- Difference row: headline minus principal ---
-# The two outcomes are estimated on the identical panel (did_panel_tab_main)
-# with no missing yname values (checked in Section 2), so the simple-ATT
-# influence-function vectors are aligned unit-for-unit and
+# The two outcomes are estimated on the identical panel (did_panel_tab_main),
+# so when both IF vectors have one row per unit (the length check below) they
+# are aligned unit-for-unit and
 # Var(theta_head - theta_princ) = Var(IF_head - IF_princ) / n is the correct
 # (non-independence) SE. If for any reason the two IF vectors do not align
 # (different length), fall back to the independence formula sqrt(se_a^2+se_b^2)
@@ -765,11 +774,20 @@ stats_logit_within <- summarize_fit(fit_logit_within, did_panel_tab_main,
                                     raw_var = "share_within", is_share = TRUE)
 
 # Store the two within-share fits (one fit, one SE): 11_base_year_sensitivity.R
-# reads them for the main-specification row of its within-share panel.
+# reads them for the main-specification row of its within-share panel, 04 for
+# HonestDiD and 08 for randomization inference. l_vec_simple: the event-time
+# weights that reproduce the simple ATT (HonestDiD target), checked here.
 for (w in list(list(fit = fit_share_within, stats = stats_share_within, y = "share_within", i = 1L),
                list(fit = fit_logit_within, stats = stats_logit_within, y = "logit_within", i = 2L))) {
+  keep_d   <- which(!is.na(w$fit$agg_d$se.egt) & w$fit$agg_d$se.egt > 1e-10)
+  egt_post <- w$fit$agg_d$egt[keep_d][w$fit$agg_d$egt[keep_d] >= 0]
+  l_vec    <- simple_att_event_weights(w$fit$gt_main, did_panel_tab_main, egt_post)
+  l_gap    <- sum(l_vec * w$fit$agg_d$att.egt[match(egt_post, w$fit$agg_d$egt)]) -
+    w$fit$agg_s$overall.att
+  stopifnot("Event-time weights do not reproduce the within-share simple ATT" = abs(l_gap) < 1e-6)
   saveRDS(list(outcome = w$y, gt_boot = w$fit$gt_main, gt_analytical = w$fit$gt_analytical,
                agg_simple = w$fit$agg_s, agg_dynamic = w$fit$agg_d,
+               l_vec_simple = l_vec, l_vec_egt = egt_post,
                agg_dyn_analytic = w$fit$agg_d_analytical,
                att = w$fit$agg_s$overall.att, se = w$fit$agg_s$overall.se,
                pretrend = w$stats$pt, ids = sort(unique(did_panel_tab_main$country_id)),

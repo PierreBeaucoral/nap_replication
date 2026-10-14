@@ -37,15 +37,22 @@ library(did)
 # An older install reproduces the ATTs but not the SEs / pre-trend tests.
 if (utils::packageVersion("did") < "2.5.0") {
   stop(sprintf(paste0(
-    "did %s is installed but the paper's results require did >= 2.5.0.\n",
+    "did %s is installed but the paper's results require did 2.5.0.\n",
     "  Older versions reproduce the ATTs but NOT the standard errors and\n",
     "  pre-trend tests on unbalanced panels (South Sudan has 14/16 years).\n",
     "  Fix: run renv::restore() from the project root (renv.lock pins did 2.5.0),\n",
-    "  or install.packages(\"did\") to get >= 2.5.0, then rerun this script."),
+    "  or remotes::install_version(\"did\", \"2.5.0\"), then rerun this script."),
     utils::packageVersion("did")))
+} else if (utils::packageVersion("did") != "2.5.0") {
+  warning(sprintf(paste0(
+    "did %s is installed; the paper's results were produced with did 2.5.0 ",
+    "(renv.lock). Later versions may change SEs: renv::restore() or ",
+    "remotes::install_version(\"did\", \"2.5.0\")."), utils::packageVersion("did")),
+    call. = FALSE)
 }
 library(countrycode)
 source(here("code", "functions", "pretrend_test.R"))  # compute_pretrend_test()
+source(here("code", "functions", "simple_att_event_weights.R"))  # simple_att_event_weights()
 source(here("code", "functions", "two_line_head.R"))     # two_line_head()
 source(here("code", "functions", "mde.R"))            # mde()
 source(here("code", "functions", "make_country_id.R"))    # make_country_id()
@@ -341,7 +348,7 @@ if (!"share_adapt" %in% names(did_panel)) {
   did_panel <- left_join(did_panel, share_lookup, by = c("recipient_name", "year"))
 }
 
-# Preserve full panel before thin-cohort filtering (used in Section 3 below)
+# Preserve full panel before thin-cohort filtering (used in Section 10 below)
 did_panel_full <- did_panel
 
 # ==============================================================================
@@ -366,7 +373,7 @@ cohort_summary <- did_panel %>%
   count(group) %>%
   arrange(group)
 message("\nCountries by treatment group:")
-print(cohort_summary, row.names = FALSE)
+message(paste(capture.output(print(cohort_summary, row.names = FALSE)), collapse = "\n"))
 
 message(sprintf("\nRemaining NAs — ge_est: %d | log_population: %d",
                 sum(is.na(did_panel$ge_est)),
@@ -377,7 +384,7 @@ region_summary <- did_panel %>%
   count(WB_region) %>%
   arrange(desc(n))
 message("\nCountries by World Bank region:")
-print(region_summary, row.names = FALSE)
+message(paste(capture.output(print(region_summary, row.names = FALSE)), collapse = "\n"))
 message("\n=== END OF SAMPLE DESCRIPTION ===\n")
 
 # Cohort sizes (diagnostic)
@@ -387,7 +394,7 @@ cohort_sizes <- did_panel %>%
   count(cohort_year, name = "n_treated") %>%
   arrange(cohort_year)
 message("\n--- Cohort sizes (treated countries per adoption year) ---")
-print(cohort_sizes, row.names = FALSE)
+message(paste(capture.output(print(cohort_sizes, row.names = FALSE)), collapse = "\n"))
 
 thin_threshold <- 5L
 thin_cohorts   <- cohort_sizes$cohort_year[cohort_sizes$n_treated < thin_threshold]
@@ -471,45 +478,7 @@ outcomes <- list(
 # other script read the saved aggregation does.
 # ==============================================================================
 
-#' Event-time weights implied by did's `simple` aggregation.
-#'
-#' did's simple ATT is the group-size-weighted average of the post-treatment
-#' ATT(g,t) cells, so it equals sum_e w_e * att.egt(e) with
-#'   w_e proportional to the number of treated units in the cohorts that
-#'   contribute a post-treatment cell at event time e.
-#' The returned vector is the l_vec that makes a HonestDiD sensitivity analysis
-#' target exactly the ATT printed in Table 2. The reconciliation against
-#' the reported simple ATT is checked by the caller, not assumed.
-#'
-#' @param gt_obj  an `MP` object returned by did::att_gt()
-#' @param panel   the estimation data frame (needs cohort_year, country_id)
-#' @param egt_post numeric vector of post-treatment event times, in the order
-#'   used by the dynamic aggregation
-#' @return numeric vector of weights, same length as egt_post, summing to 1
-simple_att_event_weights <- function(gt_obj, panel, egt_post) {
-  n_by_cohort <- panel %>%
-    filter(cohort_year > 0) %>%
-    distinct(country_id, cohort_year) %>%
-    count(cohort_year, name = "n_units")
-
-  cells <- data.frame(
-    g   = as.numeric(gt_obj$group),
-    t   = as.numeric(gt_obj$t),
-    att = as.numeric(gt_obj$att)
-  )
-  cells <- cells[cells$t >= cells$g & !is.na(cells$att), , drop = FALSE]
-  # Event times are integer year differences; coerce to integer so that the
-  # match below is an exact integer comparison, never a float equality test.
-  cells$e <- as.integer(round(cells$t - cells$g))
-  cells <- merge(cells, n_by_cohort, by.x = "g", by.y = "cohort_year",
-                 all.x = TRUE, sort = FALSE)
-
-  egt_int <- as.integer(round(egt_post))
-  w <- vapply(egt_int, function(e) sum(cells$n_units[cells$e == e], na.rm = TRUE),
-              numeric(1L))
-  if (sum(w) <= 0) return(rep(1 / length(egt_post), length(egt_post)))
-  w / sum(w)
-}
+# simple_att_event_weights() is sourced from code/functions/ (also used by 07).
 
 #' Multiplier-bootstrap covariance of a dynamic aggregation.
 #'

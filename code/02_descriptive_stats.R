@@ -37,6 +37,7 @@ library(lubridate)
 library(ggplot2)
 library(xtable)
 library(here)
+source(here("code", "functions", "crs_positive.R"))       # crs_positive()
 
 # Single global seed
 set.seed(20240601)
@@ -143,7 +144,10 @@ adaptation_aid$NAP_Year <- suppressWarnings(as.numeric(adaptation_aid$NAP_Year))
 adaptation_dtype_nz <- fread(
   here("data", "processed", "adaptationNAP_donortype_wgi.csv")
 ) %>%
-  filter(Commitments > 0 | Disbursements > 0)
+  # Donor-type rows can carry negative disbursements (reflows); a negative
+  # amount is not positive, so pmax(x, 0) leaves the classification unchanged
+  # while crs_positive() rejects residue.
+  filter(crs_positive(pmax(Commitments, 0)) | crs_positive(pmax(Disbursements, 0)))
 
 ##############################################################################
 # §2. STATS_DES TABLE
@@ -193,7 +197,7 @@ r2009 <- adaptation_aid %>%
   summarise(commit = sum(Commitments, na.rm = TRUE), .groups = "drop") %>%
   arrange(desc(commit))
 message(sprintf("2009 row of the summary-statistics table: %d recipients, %d with positive commitments -- %s",
-                n_distinct(r2009$RecipientISO), sum(r2009$commit > 0),
+                n_distinct(r2009$RecipientISO), sum(crs_positive(r2009$commit)),
                 paste(sprintf("%s %.2f", r2009$RecipientName, r2009$commit), collapse = "; ")))
 
 summary_stats <- totals_n %>%
@@ -232,7 +236,7 @@ stats_raw <- capture.output(
 
 write_tex_float(
   out_path      = stats_des_path,
-  caption_title = "Summary Statistics of Climate Adaptation Finance by Year",
+  caption_title = "Summary statistics of climate adaptation finance by year",
   label         = "tab:summary_stats",
   tabular_lines = stats_raw,
   notes_text    = paste0(
@@ -482,7 +486,7 @@ drya <- drya[RecipientISO %in% panel_bal$recipient_iso &
 message(sprintf(paste0("Donors reporting adaptation-marked activities to the %d panel ",
                        "recipients, %d-%d: %d (%d with positive commitments)"),
                 n_distinct(panel_bal$recipient_iso), min(panel_bal$year), max(panel_bal$year),
-                uniqueN(drya$DonorCode), uniqueN(drya[adaptation_commitments > 0, DonorCode])))
+                uniqueN(drya$DonorCode), uniqueN(drya[crs_positive(pmax(adaptation_commitments, 0)), DonorCode])))
 
 ## --- PVCCI merge coverage audit ------------------------------------------
 ## The `pvcci` column read below is merged in 01_prepare_data.R §10a by ISO3

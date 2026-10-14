@@ -16,6 +16,7 @@
 #   output/tables/base_year/pretrend_cells_2021.tex      (tab:pretrend_cells_2021)
 #   output/tables/base_year/base_year_sensitivity.tex    (tab:base_year_sensitivity)
 #   output/tables/base_year/base_year_sensitivity_logit.tex (tab:base_year_logit)
+#   output/tables/base_year/att_premean_baseline.tex     (tab:premean_baseline)
 #   output/figures/base_year/fig_pretrend_cells_by_cohort.png
 #   output/figures/base_year/fig_es_full_window.png
 #   (copied to paper/Tables/base_year/ and paper/Figures/base_year/ when a
@@ -58,12 +59,18 @@ library(did)
 # Version guard: SEs on unbalanced panels changed in did 2.5.0 (renv.lock pins it).
 if (utils::packageVersion("did") < "2.5.0") {
   stop(sprintf(paste0(
-    "did %s is installed but the paper's results require did >= 2.5.0.\n",
+    "did %s is installed but the paper's results require did 2.5.0.\n",
     "  Older versions reproduce the ATTs but NOT the standard errors and\n",
     "  pre-trend tests on unbalanced panels (South Sudan has 14/16 years).\n",
     "  Fix: run renv::restore() from the project root (renv.lock pins did 2.5.0),\n",
-    "  or install.packages(\"did\") to get >= 2.5.0, then rerun this script."),
+    "  or remotes::install_version(\"did\", \"2.5.0\"), then rerun this script."),
     utils::packageVersion("did")))
+} else if (utils::packageVersion("did") != "2.5.0") {
+  warning(sprintf(paste0(
+    "did %s is installed; the paper's results were produced with did 2.5.0 ",
+    "(renv.lock). Later versions may change SEs: renv::restore() or ",
+    "remotes::install_version(\"did\", \"2.5.0\")."), utils::packageVersion("did")),
+    call. = FALSE)
 }
 source(here("code", "functions", "pretrend_test.R"))      # compute_pretrend_test()
 source(here("code", "functions", "read_headline_fit.R"))  # read_headline_fit()
@@ -636,13 +643,13 @@ ggsave(file.path(dir_figs_by, "fig_es_full_window.png"),
 message("Saved: ", file.path(dir_figs_by, "fig_es_full_window.png"))
 
 # ==============================================================================
-# SECTION 8. Table 4 (tab:base_year_sensitivity) -- log_commits and share_adapt,
+# SECTION 8. tab:base_year_sensitivity -- log_commits and share_adapt,
 # 8 specifications each: main, drop 2021/2022/2023/2024 cohort, anticipation=1,
 # anticipation=2, drop calendar year 2020. Bootstrap ATT/SE (999 reps) +
 # analytical joint Wald p-values (leads>=-5, full window). ~16 bootstrap fits.
 # ==============================================================================
 
-message("\n=== Table 4: base-year sensitivity, log_commits & share_adapt ===\n")
+message("\n=== tab:base_year_sensitivity: log_commits & share_adapt ===\n")
 t0_tab4 <- Sys.time()
 
 build_sensitivity_row <- function(label, data, yname, antic = 0L,
@@ -729,7 +736,7 @@ for (so in sens_outcomes) {
 }
 sens_all <- bind_rows(sens_rows)
 
-message(sprintf("Table 4 fits done in %.1f min.",
+message(sprintf("Base-year sensitivity fits done in %.1f min.",
                 as.numeric(difftime(Sys.time(), t0_tab4, units = "mins"))))
 
 # --- Reproduction asserts (log_commits, tolerance 1e-3) ----------------------
@@ -888,6 +895,97 @@ write_tex_float(
     "(``$=2$'') resets the base period to $g-2$ ($g-3$). The leads-$\\geq -5$ test uses the ",
     "leads left after the base period: ", antic_txt_logit[1L], "; ", antic_txt_logit[2L], ". ",
     "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"),
+  source_text   = "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
+)
+
+# ==============================================================================
+# SECTION 8b. tab:premean_baseline -- simple ATT against each cohort's
+# pre-period mean instead of its g-1 base year, from the stored bootstrap fits.
+# Each post cell ATT(g,t) becomes ATT(g,t) - mean_{s in W(g)} ATT(g,s), where
+# W(g) includes the g-1 cell (zero by construction). The map is linear in the
+# cells, so the stored influence functions carry over (inffunc %*% t(A)) and
+# aggte() aggregates with its own simple-ATT weights, weight influence function
+# and multiplier bootstrap. No re-estimation. Runs after every other draw.
+# ==============================================================================
+
+message("\n=== Section 8b: ATT against the pre-period mean (stored fits) ===\n")
+
+rebase_mp <- function(MP, window, drop_g = NULL) {
+  g <- MP$group; t <- MP$t
+  A <- diag(length(g))
+  for (k in which(t >= g)) {
+    pre <- which(g == g[k] & t %in% window(g[k]))
+    stopifnot(any(t[pre] == g[k] - 1L))  # the base cell is in the window
+    A[k, pre] <- A[k, pre] - 1 / length(pre)
+  }
+  MP$att     <- as.numeric(A %*% MP$att)
+  MP$inffunc <- MP$inffunc %*% t(A)
+  if (!is.null(drop_g)) MP$att[g %in% drop_g] <- NA  # na.rm drops the cohort
+  MP
+}
+agg_simple_bs <- function(MP) {
+  set.seed(1242)
+  aggte(MP, type = "simple", na.rm = TRUE, bstrap = TRUE, biters = 999L, cband = FALSE)
+}
+premean_windows <- list(
+  list(label = "Mean of 2010 to $g-1$",  fn = function(g) 2010L:(g - 1L)),
+  list(label = "Mean of $g-5$ to $g-1$", fn = function(g) (g - 5L):(g - 1L)))
+premean_fits <- list(
+  list(label = "log(Adaptation commitments)",       fit = read_headline_fit("adaptation")),
+  list(label = "Adaptation share (\\% of global)",  fit = read_headline_fit("share")),
+  list(label = "Within-country adaptation share (pp)",
+       fit = readRDS(here("output", "fits", "within_share_dr_bs.rds"))))
+stopifnot(identical(premean_fits[[3]]$fit$outcome, "share_within"))
+last_cohort <- max(premean_fits[[1]]$fit$gt_boot$group)
+
+premean_cell <- function(a) {
+  stopifnot(is.finite(a$overall.att), is.finite(a$overall.se))
+  paste0(fmt_num(a$overall.att, 4), stars_from_t(a$overall.att / a$overall.se),
+         " (", fmt_num(a$overall.se, 4), ")")
+}
+premean_lines <- unlist(lapply(premean_fits, function(pf) {
+  MP <- pf$fit$gt_boot
+  # Identity check: no re-baselining reproduces the stored ATT.
+  stopifnot(abs(agg_simple_bs(MP)$overall.att - pf$fit$att) < 1e-10)
+  rows <- vapply(premean_windows, function(w) {
+    a_all <- agg_simple_bs(rebase_mp(MP, w$fn))
+    a_drp <- agg_simple_bs(rebase_mp(MP, w$fn, drop_g = last_cohort))
+    message(sprintf("  %s | %s: all %.4f (%.4f); without %d %.4f (%.4f)",
+                    pf$label, w$label, a_all$overall.att, a_all$overall.se, last_cohort,
+                    a_drp$overall.att, a_drp$overall.se))
+    paste0("\\quad ", w$label, " & ", premean_cell(a_all), " & ", premean_cell(a_drp), " \\\\")
+  }, character(1L))
+  c(paste0("\\multicolumn{3}{l}{\\textit{", pf$label, "}: main estimate ",
+           fmt_num(pf$fit$att, 4), " (", fmt_num(pf$fit$se, 4), ")} \\\\"), rows)
+}))
+
+write_tex_float(
+  out_path      = file.path(dir_tabs_by, "att_premean_baseline.tex"),
+  caption_title = "Simple ATT against each cohort's pre-period mean instead of its $g-1$ base year",
+  label         = "tab:premean_baseline",
+  tabular_lines = c(
+    "\\begin{tabular}{lcc}",
+    "\\toprule",
+    paste0("Baseline & All cohorts & Without the ", last_cohort, " cohort \\\\"),
+    "\\midrule",
+    premean_lines,
+    "\\bottomrule",
+    "\\end{tabular}"),
+  notes_text    = paste0(
+    "Each post-treatment cell $ATT(g,t)$ of the main specification is re-expressed against the ",
+    "mean of cohort $g$'s cells over the stated pre-treatment window, the $g-1$ cell (zero by ",
+    "construction) included: $ATT(g,t) - \\frac{1}{|W_g|}\\sum_{s \\in W_g} ATT(g,s)$. ",
+    "This is the difference-in-differences against the cohort's average pre-treatment ",
+    "level relative to controls, rather than its level in $g-1$ alone. The cells are then ",
+    "aggregated with the simple-ATT weights of Table~\\ref{tab:combined_wide_main}. The window ",
+    "starts in 2010 because the adaptation marker is routinely reported only from 2010. ",
+    "$g-5$ to $g-1$ is the window of the four-lead test. The cells and their influence ",
+    "functions are those of the stored main-specification fits (CS(2021) DR, never-treated ",
+    "controls, WGI GE + log population, cohorts $\\geq 5$), re-aggregated without ",
+    "re-estimation; SE from the multiplier bootstrap (999 reps, seed 1242; \\texttt{did} 2.5.0). ",
+    "The main estimate is that of Table~\\ref{tab:combined_wide_main} (log commitments, global ",
+    "share) and Table~\\ref{tab:within_share_wide} (within-country share). The ", last_cohort,
+    " cohort has one post-treatment year. * $p<0.10$, ** $p<0.05$, *** $p<0.01$"),
   source_text   = "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
 )
 

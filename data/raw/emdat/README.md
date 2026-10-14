@@ -47,7 +47,9 @@ notice naming these two tables and leaves the authors' copies in
    ```
 
 5. Rerun stage 14: `NAP_START_AT=14_hazard_napa.R Rscript run_all.R`
-   (or `Rscript code/14_hazard_napa.R`).
+   (or `Rscript code/14_hazard_napa.R`). Stage 14 reads the headline fit that
+   stage 03 stores in `output/fits/`, which is not shipped: on a fresh copy, run
+   the pipeline once (`Rscript run_all.R`) before a stage-14-only run.
 
 EM-DAT is updated continuously and past events are revised, so a download made
 later than the paper's will not be identical, and the two tables can differ

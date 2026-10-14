@@ -64,9 +64,18 @@ library(did)
 # Version guard: SEs on unbalanced panels changed in did 2.5.0 (renv.lock pins it).
 if (utils::packageVersion("did") < "2.5.0") {
   stop(sprintf(paste0(
-    "did %s is installed but this script's results require did >= 2.5.0.\n",
-    "  Fix: run renv::restore() from the project root (renv.lock pins did 2.5.0)."),
+    "did %s is installed but the paper's results require did 2.5.0.\n",
+    "  Older versions reproduce the ATTs but NOT the standard errors and\n",
+    "  pre-trend tests on unbalanced panels (South Sudan has 14/16 years).\n",
+    "  Fix: run renv::restore() from the project root (renv.lock pins did 2.5.0),\n",
+    "  or remotes::install_version(\"did\", \"2.5.0\"), then rerun this script."),
     utils::packageVersion("did")))
+} else if (utils::packageVersion("did") != "2.5.0") {
+  warning(sprintf(paste0(
+    "did %s is installed; the paper's results were produced with did 2.5.0 ",
+    "(renv.lock). Later versions may change SEs: renv::restore() or ",
+    "remotes::install_version(\"did\", \"2.5.0\")."), utils::packageVersion("did")),
+    call. = FALSE)
 }
 
 Sys.setenv(RGL_USE_NULL = "TRUE")  # headless-safe; project convention, no rgl-dependent pkg used here
@@ -605,19 +614,19 @@ ginv_alpha <- c(total = isTRUE(pt_env$ginv_used), `non-adaptation` = isTRUE(pt_n
 p_twosided_nona <- if (is.na(t_nona)) NA_real_ else 2 * pnorm(-abs(t_nona))
 
 alpha_rows <- c(
-  paste0("Mean $s_i$ (", min(PRE_YEARS), "--", max(PRE_YEARS), " mean, $N=", dist_pre$n, "$) & ",
+  paste0("Mean $\\bar s_i$ (", min(PRE_YEARS), "--", max(PRE_YEARS), " mean, $N=", dist_pre$n, "$) & ",
         sprintf("%.4f", dist_pre$mean), " \\\\"),
-  paste0("Median $s_i$ & ", sprintf("%.4f", dist_pre$median), " \\\\"),
-  paste0("$p_{90}$ $s_i$ & ", sprintf("%.4f", dist_pre$p90), " \\\\"),
-  paste0("$p_{99}$ $s_i$ & ", sprintf("%.4f", dist_pre$p99), " \\\\"),
-  paste0("Max $s_i$ & ", sprintf("%.4f", dist_pre$max), " \\\\"),
-  paste0("$N$ countries with $s_i \\geq 0.5$ & ", dist_pre$n_ge_half, " \\\\"),
+  paste0("Median $\\bar s_i$ & ", sprintf("%.4f", dist_pre$median), " \\\\"),
+  paste0("$p_{90}$ $\\bar s_i$ & ", sprintf("%.4f", dist_pre$p90), " \\\\"),
+  paste0("$p_{99}$ $\\bar s_i$ & ", sprintf("%.4f", dist_pre$p99), " \\\\"),
+  paste0("Max $\\bar s_i$ & ", sprintf("%.4f", dist_pre$max), " \\\\"),
+  paste0("$N$ countries with $\\bar s_i \\geq 0.5$ & ", dist_pre$n_ge_half, " \\\\"),
   "\\midrule",
-  paste0("Mean $s_i$ at $g-1$ (adopters, $N=", dist_g1$n, "$) & ",
+  paste0("Mean $\\bar s_i$ at $g-1$ (adopters, $N=", dist_g1$n, "$) & ",
         sprintf("%.4f", dist_g1$mean), " \\\\"),
-  paste0("Median $s_i$ at $g-1$ & ", sprintf("%.4f", dist_g1$median), " \\\\"),
-  paste0("Max $s_i$ at $g-1$ & ", sprintf("%.4f", dist_g1$max), " \\\\"),
-  paste0("$N$ adopters with $s_i(g-1) \\geq 0.5$ & ", dist_g1$n_ge_half, " \\\\"),
+  paste0("Median $\\bar s_i$ at $g-1$ & ", sprintf("%.4f", dist_g1$median), " \\\\"),
+  paste0("Max $\\bar s_i$ at $g-1$ & ", sprintf("%.4f", dist_g1$max), " \\\\"),
+  paste0("$N$ adopters with $\\bar s_i(g-1) \\geq 0.5$ & ", dist_g1$n_ge_half, " \\\\"),
   "\\midrule",
   "\\multicolumn{2}{l}{\\textit{ATT: log(Total commitments) --- main spec}} \\\\",
   paste0("ATT & ", sprintf("%.4f", fit_env$att), " \\\\"),
@@ -653,14 +662,14 @@ alpha_tabular <- c(
 s_max    <- max(dist_pre$max, dist_g1$max)
 n_ge_one <- dist_pre$n_ge_half + dist_g1$n_ge_half
 notes_alpha <- paste0(
-  "$s_i = $ adaptation-marked commitments / total commitments of the recipient, proxy for $\\alpha_i$ via ",
+  "$\\bar s_i = $ adaptation-marked commitments / total commitments of the recipient, proxy for $\\alpha_i$ via ",
   "$s_i^*=q_i/(1+q_i)$ (Lemma~\\ref{lem:monotone_s}); $\\alpha_i \\geq 0.5 \\iff s_i^* \\geq 0.5$. ",
   if (n_ge_one == 0L)
-    paste0("Pre-treatment $s_i$ is below 0.5 for every recipient (max ", sprintf("%.3f", s_max),
+    paste0("Pre-treatment $\\bar s_i$ is below 0.5 for every recipient (max ", sprintf("%.3f", s_max),
            "), so under gross substitutes the model predicts ATT $\\leq 0$ (sign chain: see text, ",
            "Lemma~\\ref{lem:envelope_elast}). ")
   else
-    paste0("Pre-treatment $s_i$ reaches 0.5 for some recipients (max ", sprintf("%.3f", s_max),
+    paste0("Pre-treatment $\\bar s_i$ reaches 0.5 for some recipients (max ", sprintf("%.3f", s_max),
            "; see the counts above and the text, Lemma~\\ref{lem:envelope_elast}). "),
   "One-sided test of the null that the ATT is at most zero against the alternative ATT $>0$. ",
   "CS\\,(2021) ", if (identical(fit_env$spec$est_method, "dr")) "DR" else "OR",
