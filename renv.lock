@@ -389,6 +389,17 @@
       "Maintainer": "Brian Ripley <Brian.Ripley@R-project.org>",
       "Repository": "CRAN"
     },
+    "MVZlibrary": {
+      "Package": "MVZlibrary",
+      "Version": "0.0.0.9000",
+      "Source": "GitHub",
+      "RemoteType": "github",
+      "RemoteHost": "api.github.com",
+      "RemoteUsername": "eachambers",
+      "RemoteRepo": "MVZlibrary",
+      "RemoteRef": "6421b452c38827d1beff909e15ee35490d933892",
+      "RemoteSha": "6421b452c38827d1beff909e15ee35490d933892"
+    },
     "Matrix": {
       "Package": "Matrix",
       "Version": "1.7-5",
@@ -1794,6 +1805,12 @@
       "URL": "https://gitlab.com/luke-tierney/codetools",
       "License": "GPL",
       "NeedsCompilation": "no",
+      "Repository": "CRAN"
+    },
+    "colorblindcheck": {
+      "Package": "colorblindcheck",
+      "Version": "1.0.4",
+      "Source": "Repository",
       "Repository": "CRAN"
     },
     "colorspace": {
@@ -3974,6 +3991,12 @@
       "Maintainer": "Achim Zeileis <Achim.Zeileis@R-project.org>",
       "Repository": "CRAN"
     },
+    "logger": {
+      "Package": "logger",
+      "Version": "0.4.2",
+      "Source": "Repository",
+      "Repository": "CRAN"
+    },
     "lpSolveAPI": {
       "Package": "lpSolveAPI",
       "Version": "5.5.2.0-17.15",
@@ -6101,6 +6124,12 @@
       "Config/build/compilation-database": "true",
       "NeedsCompilation": "yes",
       "Author": "Tyler Morgan-Wall [aut, cph, cre] (<https://orcid.org/0000-0002-3131-3814>), Andrew Helmer [ctb, cph], Leonhard Grünschloß [ctb, cph], Eric Heitz [ctb, cph]",
+      "Repository": "CRAN"
+    },
+    "spacesXYZ": {
+      "Package": "spacesXYZ",
+      "Version": "1.6-0",
+      "Source": "Repository",
       "Repository": "CRAN"
     },
     "sparsevctrs": {

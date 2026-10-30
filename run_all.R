@@ -50,6 +50,8 @@
 #   11_base_year_sensitivity.R     2021-cohort base-year disclosure, full-window
 #                                  pre-trend tests
 #   12_group_figures.R             the two descriptive group figures
+#   15_model_frontier.R            Proposition 2 frontier for the model figure
+#                                  (no data; deterministic)
 #
 # ENVIRONMENT VARIABLES
 #   NAP_FROM_RAW=1                 full rebuild from raw CRS (see MODES).
@@ -96,7 +98,8 @@ scripts <- c("01_prepare_data.R",
              "09_remarking_decomposition.R",
              "10_model_tests.R",
              "11_base_year_sensitivity.R",
-             "12_group_figures.R")
+             "12_group_figures.R",
+             "15_model_frontier.R")
 
 from_raw       <- identical(Sys.getenv("NAP_FROM_RAW"), "1")
 skip_ri        <- identical(Sys.getenv("NAP_SKIP_RI"), "1")

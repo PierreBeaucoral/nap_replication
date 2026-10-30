@@ -189,7 +189,7 @@ distrib <- adaptation_dtype_nz %>%
     .groups = "drop"
   )
 
-# Text number (Appendix B): the recipients in Table B.6's 2009 row and how many
+# Text number (Appendix A): the recipients in Table A.4's 2009 row and how many
 # of them record positive commitments that year.
 r2009 <- adaptation_aid %>%
   filter(Year == 2009L) %>%

@@ -44,10 +44,10 @@
 #   output/tables/randomization/ri_pvalues.tex   (tab:ri_pvalues)
 #   output/tables/randomization/ri_draws.csv     (raw permutation draws; also
 #                                                the cache read on later runs)
-#   output/figures/randomization/fig_ri_distributions.png
 #   output/tables/randomization/ri_pvalues_within.tex   (tab:ri_pvalues_within)
 #   output/tables/randomization/ri_draws_within.csv     (within-share draws/cache)
-#   output/figures/randomization/fig_ri_distributions_within.png
+#   output/figures/randomization/fig_ri_distributions.png  (three outcomes x
+#                                                timing and assignment designs)
 #   (copied to paper/Tables/randomization/ and paper/Figures/randomization/
 #    when a paper/ folder exists)
 # ==============================================================================
@@ -73,6 +73,7 @@ Sys.setenv(RGL_USE_NULL = TRUE)
 library(data.table)
 library(dplyr)
 library(ggplot2)
+library(MVZlibrary) # colour palette for the RI figure (GitHub: eachambers/MVZlibrary)
 library(xtable)
 library(here)
 library(did)
@@ -861,8 +862,9 @@ outcome_labels <- c(log_commits = "log(Adaptation commitments)",
                     share_adapt = "Adaptation share (\\% of global)")
 # Plain-text variant for ggplot facet strips (LaTeX escapes above are only
 # valid inside the .tex table, not inside a plotted string).
-outcome_labels_fig <- c(log_commits = "log(Adaptation commitments)",
-                        share_adapt = "Adaptation share (% of global)")
+outcome_labels_fig <- c(log_commits  = "log(Adaptation commitments)",
+                        share_adapt  = "Global adaptation share (pp)",
+                        share_within = "Within-country adaptation share (pp)")
 
 fmt_row <- function(row) {
   paste0(
@@ -920,57 +922,8 @@ write_tex_float(
 )
 
 # ==============================================================================
-# SECTION 10. Figure fig_ri_distributions.png — permutation histograms
-# ==============================================================================
-
-message("\n=== Building RI distribution figure ===\n")
-
-hist_rows <- vector("list", length(all_designs) * length(outcome_vars))
-row_i <- 1L
-for (dname in names(all_designs)) {
-  d <- all_designs[[dname]]
-  for (oc in outcome_vars) {
-    valid_atts <- d$outcomes[[oc]]$att_perm
-    valid_atts <- valid_atts[!is.na(valid_atts)]
-    if (length(valid_atts) == 0L) next
-    hist_rows[[row_i]] <- data.frame(
-      att     = valid_atts,
-      design  = unname(design_labels[dname]),
-      outcome = unname(outcome_labels_fig[oc]),
-      stringsAsFactors = FALSE
-    )
-    row_i <- row_i + 1L
-  }
-}
-hist_df <- do.call(rbind, hist_rows[!vapply(hist_rows, is.null, logical(1L))])
-hist_df$design  <- factor(hist_df$design, levels = unname(design_labels))
-hist_df$outcome <- factor(hist_df$outcome, levels = unname(outcome_labels_fig))
-
-obs_df <- data.frame(
-  outcome = factor(unname(outcome_labels_fig[outcome_vars]), levels = unname(outcome_labels_fig)),
-  att_obs = as.numeric(att_obs[outcome_vars])
-)
-
-p_ri <- ggplot(hist_df, aes(x = att)) +
-  geom_histogram(bins = 40, fill = "#2E86C1", colour = "white", alpha = 0.85) +
-  geom_vline(data = obs_df, aes(xintercept = att_obs),
-             colour = "#C0392B", linewidth = 0.9, linetype = "dashed") +
-  facet_grid(design ~ outcome, scales = "free") +
-  # No title, subtitle, or caption inside the plot
-  labs(title = NULL, subtitle = NULL, caption = NULL,
-       x = "Permutation-draw pooled ATT", y = "Count") +
-  theme_minimal() +
-  theme(text = element_text(family = "serif", size = 11),
-        strip.text = element_text(face = "bold", size = 9),
-        panel.grid.minor = element_blank())
-
-ggsave(here("output", "figures", "randomization", "fig_ri_distributions.png"),
-       p_ri, width = 11, height = 9, dpi = 300)
-message("Saved: ", here("output", "figures", "randomization", "fig_ri_distributions.png"))
-
-# ==============================================================================
-# SECTION 10b. Within-country share: table tab:ri_pvalues_within and figure
-# fig_ri_distributions_within.png (the two-outcome exhibits above unchanged)
+# SECTION 10. Within-country share: table tab:ri_pvalues_within (the
+# two-outcome table above unchanged)
 # ==============================================================================
 
 message("\n=== Within-country share RI ===\n")
@@ -1007,25 +960,59 @@ write_tex_float(
   source_text   = source_txt
 )
 
-hist_w <- do.call(rbind, lapply(names(designs_w), function(dname) {
-  a <- designs_w[[dname]]$outcomes$share_within$att_perm
-  data.frame(att = a[!is.na(a)], design = unname(design_labels[dname]), stringsAsFactors = FALSE)
+# ==============================================================================
+# SECTION 10b. Figure fig_ri_distributions.png -- permutation histograms for
+# the three primary outcomes under the timing and assignment designs, with the
+# two-sided p-value in each panel. The stratified design, close to the
+# unstratified one, is reported in tab:ri_pvalues and tab:ri_pvalues_within.
+# ==============================================================================
+
+message("\n=== Building RI distribution figure ===\n")
+
+fig_designs <- c("timing", "assignment")
+fig_draws   <- list(log_commits  = all_designs,
+                    share_adapt  = all_designs,
+                    share_within = designs_w)
+hist_df <- do.call(rbind, lapply(names(fig_draws), function(oc) {
+  do.call(rbind, lapply(fig_designs, function(dname) {
+    a <- fig_draws[[oc]][[dname]]$outcomes[[oc]]$att_perm
+    data.frame(att = a[!is.na(a)], design = unname(design_labels[dname]),
+               outcome = unname(outcome_labels_fig[oc]), stringsAsFactors = FALSE)
+  }))
 }))
-hist_w$design <- factor(hist_w$design, levels = unname(design_labels))
-p_ri_w <- ggplot(hist_w, aes(x = att)) +
-  geom_histogram(bins = 40, fill = "#2E86C1", colour = "white", alpha = 0.85) +
-  geom_vline(xintercept = unname(att_obs_w), colour = "#C0392B", linewidth = 0.9,
-             linetype = "dashed") +
-  facet_wrap(~ design, ncol = 3L) +
+ann_df <- null_all[null_all$design %in% design_labels[fig_designs], ]
+ann_df$outcome <- unname(outcome_labels_fig[ann_df$outcome])
+ann_df$label   <- sprintf("p = %.3f", ann_df$p_two)
+#' Order the facets: designs as in fig_designs, outcomes as in outcome_labels_fig
+order_facets <- function(d) {
+  d$design  <- factor(d$design,  levels = unname(design_labels[fig_designs]))
+  d$outcome <- factor(d$outcome, levels = unname(outcome_labels_fig))
+  d
+}
+hist_df <- order_facets(hist_df)
+ann_df  <- order_facets(ann_df)
+
+pal_ri <- unclass(MVZ_palette("theAuk"))  # blue (draws) and crimson (observed ATT)
+p_ri <- ggplot(hist_df, aes(x = att)) +
+  geom_histogram(bins = 40, fill = pal_ri[2], colour = "white", alpha = 0.9) +
+  geom_vline(xintercept = 0, colour = "grey45", linewidth = 0.4, linetype = "dotted") +
+  geom_vline(data = ann_df, aes(xintercept = att_obs),
+             colour = pal_ri[8], linewidth = 0.9, linetype = "dashed") +
+  geom_text(data = ann_df, aes(x = Inf, y = Inf, label = label),
+            hjust = 1.1, vjust = 1.6, family = "serif", size = 3.6) +
+  facet_grid(design ~ outcome, scales = "free") +
+  # No title, subtitle, or caption inside the plot
   labs(title = NULL, subtitle = NULL, caption = NULL,
-       x = "Permutation-draw pooled ATT, within-country share (pp)", y = "Count") +
+       x = "Pooled ATT under permuted adoption", y = "Number of draws") +
   theme_minimal() +
   theme(text = element_text(family = "serif", size = 11),
-        strip.text = element_text(face = "bold", size = 9),
-        panel.grid.minor = element_blank())
-ggsave(here("output", "figures", "randomization", "fig_ri_distributions_within.png"),
-       p_ri_w, width = 11, height = 3.8, dpi = 300)
-message("Saved: ", here("output", "figures", "randomization", "fig_ri_distributions_within.png"))
+        strip.text = element_text(face = "bold", size = 9.5),
+        panel.grid.minor = element_blank(),
+        panel.spacing = unit(1, "lines"))
+
+ggsave(here("output", "figures", "randomization", "fig_ri_distributions.png"),
+       p_ri, width = 11, height = 6.2, dpi = 300)
+message("Saved: ", here("output", "figures", "randomization", "fig_ri_distributions.png"))
 
 # ==============================================================================
 # SECTION 11. Copy this script's own outputs into paper/ — self-contained

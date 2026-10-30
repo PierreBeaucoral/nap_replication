@@ -27,7 +27,7 @@
 #
 # Stage 10 of run_all.R. Reads data/processed/simple_panel_wgi.csv and the
 # headline fits that 03_main_results.R stores in output/fits/ (the main-spec
-# total and non-adaptation ATTs of Table A.2 are read from them, not re-estimated).
+# total and non-adaptation ATTs of Table B.2 are read from them, not re-estimated).
 # ==============================================================================
 
 # ============================================================
@@ -381,6 +381,35 @@ message(sprintf(
   dist_g1$n, dist_g1$mean, dist_g1$median, dist_g1$p90, dist_g1$p99,
   dist_g1$max, dist_g1$n_ge_half))
 
+# --- s_it after adoption: checks the maintained bound alpha_i^1 <= 1/2 ------
+# Pre-adoption shares plus an average effect do not bound every adopter's
+# post-adoption share, so the bound is checked on the observed shares, by
+# country-year and by country mean over the post-adoption years.
+s_i_post <- did_panel_full %>%
+  filter(cohort_year > 0, year >= cohort_year) %>%
+  mutate(s_it = commitments / commitments_all) %>%
+  filter(is.finite(s_it))
+
+main_cohorts <- sort(setdiff(unique(did_panel_main$cohort_year), 0))
+post_main    <- s_i_post %>% filter(cohort_year %in% main_cohorts)
+post_means   <- s_i_post %>%
+  group_by(recipient_name) %>%
+  summarise(s_mean = mean(s_it), .groups = "drop")
+
+dist_post <- list(
+  n_main         = n_distinct(post_main$recipient_name),
+  max_main       = max(post_main$s_it),
+  n_ge_half_main = sum(post_main$s_it >= 0.5),
+  n_all          = n_distinct(s_i_post$recipient_name),
+  n_ge_half_all  = sum(s_i_post$s_it >= 0.5),
+  max_mean_all   = max(post_means$s_mean)
+)
+message(sprintf(
+  "s_it after adoption: main cohorts %s (N=%d) max=%.4f N(>=0.5)=%d; all adopters (N=%d) N(>=0.5)=%d, max country mean=%.4f",
+  paste(main_cohorts, collapse = "/"), dist_post$n_main, dist_post$max_main,
+  dist_post$n_ge_half_main, dist_post$n_all, dist_post$n_ge_half_all, dist_post$max_mean_all))
+print(s_i_post %>% filter(s_it >= 0.5) %>% select(recipient_name, cohort_year, year, s_it))
+
 # ==============================================================================
 # SECTION 4. TEST 1 — Lemma 2: envelope response decreasing in recipient size
 # ==============================================================================
@@ -627,6 +656,15 @@ alpha_rows <- c(
   paste0("Median $\\bar s_i$ at $g-1$ & ", sprintf("%.4f", dist_g1$median), " \\\\"),
   paste0("Max $\\bar s_i$ at $g-1$ & ", sprintf("%.4f", dist_g1$max), " \\\\"),
   paste0("$N$ adopters with $\\bar s_i(g-1) \\geq 0.5$ & ", dist_g1$n_ge_half, " \\\\"),
+  "\\midrule",
+  paste0("Max $s_{it}$ after adoption, ", min(main_cohorts), "--", max(main_cohorts),
+        " cohorts ($N=", dist_post$n_main, "$) & ", sprintf("%.4f", dist_post$max_main), " \\\\"),
+  paste0("$N$ country-years with $s_{it} \\geq 0.5$ after adoption, ", min(main_cohorts), "--",
+        max(main_cohorts), " cohorts & ", dist_post$n_ge_half_main, " \\\\"),
+  paste0("$N$ country-years with $s_{it} \\geq 0.5$ after adoption, all adopters ($N=",
+        dist_post$n_all, "$) & ", dist_post$n_ge_half_all, " \\\\"),
+  paste0("Max country mean of $s_{it}$ after adoption, all adopters & ",
+        sprintf("%.4f", dist_post$max_mean_all), " \\\\"),
   "\\midrule",
   "\\multicolumn{2}{l}{\\textit{ATT: log(Total commitments) --- main spec}} \\\\",
   paste0("ATT & ", sprintf("%.4f", fit_env$att), " \\\\"),
