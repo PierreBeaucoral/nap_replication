@@ -81,6 +81,7 @@ if (utils::packageVersion("did") < "2.5.0") {
 Sys.setenv(RGL_USE_NULL = "TRUE")  # headless-safe; project convention, no rgl-dependent pkg used here
 source(here("code", "functions", "read_headline_fit.R"))  # read_headline_fit()
 source(here("code", "functions", "make_country_id.R"))    # make_country_id()
+source(here("code", "functions", "table_notes.R"))       # shared table-note wording, wpval_reconciliation()
 
 set.seed(20240601)  # global seed — local set.seed(1242) calls follow each bootstrap fit
 
@@ -108,12 +109,6 @@ if (has_paper) {
 # ==============================================================================
 
 
-# canonical pre-trend wording — keep byte-identical across scripts
-PRETREND_NOTE_AGG <- function(min_e, max_e, k) sprintf(
-  "Pre-trend $\\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($%d \\leq e \\leq %d$; %d restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular",
-  min_e, max_e, k)
-PRETREND_NOTE_DID <- "\\texttt{did} pre-test $p$: \\texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year"
-PRETREND_NOTE <- function(min_e, max_e, k) paste0(PRETREND_NOTE_AGG(min_e, max_e, k), ". ", PRETREND_NOTE_DID)
 
 # --- write_tex_float(): identical to 03/05's helper -------------------------
 write_tex_float <- function(out_path, caption_title, label,
@@ -573,7 +568,7 @@ notes_lemma2 <- paste0(
   "log(total commitments) only. Multiplier-bootstrap SE (", BITERS,
   " reps, clustered by recipient, seed 1242)"
 )
-source_lemma2 <- "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
+source_lemma2 <- SOURCE_MAIN
 
 write_tex_float(
   out_path      = file.path(dir_tabs, "lemma2_size.tex"),
@@ -699,6 +694,14 @@ alpha_tabular <- c(
 # The note's claims are derived from the numbers behind the table.
 s_max    <- max(dist_pre$max, dist_g1$max)
 n_ge_one <- dist_pre$n_ge_half + dist_g1$n_ge_half
+# The note refers to Table 2 for estimator, covariates, control group and
+# inference, so the total-commitments fit must share the headline spec.
+spec_keys <- c("est_method", "control_group", "xformla", "bstrap", "biters", "seed")
+if (!identical(fit_env$spec[spec_keys], read_headline_fit("adaptation")$spec[spec_keys]))
+  stop("tab:alpha_half note refers to Table 2's spec, but the total-commitments fit ",
+       "differs from the headline adaptation fit in: ",
+       paste(spec_keys[!mapply(identical, fit_env$spec[spec_keys],
+                               read_headline_fit("adaptation")$spec[spec_keys])], collapse = ", "))
 notes_alpha <- paste0(
   "$\\bar s_i = $ adaptation-marked commitments / total commitments of the recipient, proxy for $\\alpha_i$ via ",
   "$s_i^*=q_i/(1+q_i)$ (Lemma~\\ref{lem:monotone_s}); $\\alpha_i \\geq 0.5 \\iff s_i^* \\geq 0.5$. ",
@@ -710,17 +713,14 @@ notes_alpha <- paste0(
     paste0("Pre-treatment $\\bar s_i$ reaches 0.5 for some recipients (max ", sprintf("%.3f", s_max),
            "; see the counts above and the text, Lemma~\\ref{lem:envelope_elast}). "),
   "One-sided test of the null that the ATT is at most zero against the alternative ATT $>0$. ",
-  "CS\\,(2021) ", if (identical(fit_env$spec$est_method, "dr")) "DR" else "OR",
-  ", never-treated controls, headline specification; SE: multiplier-bootstrap ",
-  "(", fit_env$spec$biters, " reps, seed ", fit_env$spec$seed, "; \\texttt{did} ",
-  as.character(utils::packageVersion("did")), "; CRS Apr.\\ 2026) for the ATT, analytical fit for ",
-  "the pre-trend Wald. ",
-  PRETREND_NOTE_AGG(min(pt_env$leads), max(pt_env$leads), pt_env$df),
-  if (any(ginv_alpha)) paste0("; the block was singular for ",
+  as_in_main(c("estimator", "covariates", "control group", "inference", "pre-trend test")), ". ",
+  pretrend_window_note(min(pt_env$leads), max(pt_env$leads), pt_env$df),
+  if (any(ginv_alpha)) paste0("Pre-trend test: the block was singular for ",
                               paste(names(ginv_alpha)[ginv_alpha], collapse = " and "),
                               " commitments and a generalized inverse was used") else ""
 )
-source_alpha <- "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
+notes_alpha <- sub("[. ]+$", "", notes_alpha)  # write_tex_float() adds the final period
+source_alpha <- SOURCE_MAIN
 
 write_tex_float(
   out_path      = file.path(dir_tabs, "alpha_half.tex"),

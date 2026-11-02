@@ -78,6 +78,7 @@ source(here("code", "functions", "make_country_id.R"))    # make_country_id()
 source(here("code", "functions", "simple_att_event_weights.R"))  # simple_att_event_weights()
 source(here("code", "functions", "crs_positive.R"))       # crs_positive()
 source(here("code", "functions", "sup_t_crit.R"))         # sup_t_crit()
+source(here("code", "functions", "table_notes.R"))       # shared table-note wording, wpval_reconciliation()
 
 set.seed(20240601)  # global seed — local set.seed(1242) calls follow each estimator
 
@@ -331,12 +332,6 @@ message(sprintf("  Share of pre-treatment cells with share_within < 50%%: %.1f%%
 # own att_gt()$Wpval is reported beside it.
 # ==============================================================================
 
-# canonical pre-trend wording — keep byte-identical across scripts
-PRETREND_NOTE_AGG <- function(min_e, max_e, k) sprintf(
-  "Pre-trend $\\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($%d \\leq e \\leq %d$; %d restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular",
-  min_e, max_e, k)
-PRETREND_NOTE_DID <- "\\texttt{did} pre-test $p$: \\texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year"
-PRETREND_NOTE <- function(min_e, max_e, k) paste0(PRETREND_NOTE_AGG(min_e, max_e, k), ". ", PRETREND_NOTE_DID)
 
 
 # ==============================================================================
@@ -462,13 +457,13 @@ summarize_fit <- function(fit, did_panel_in, raw_var, is_share = FALSE,
 
 #' Pre-trend note for a set of table columns, derived from their tests
 #'
-#' The lead window and the restriction count come from the tests themselves
-#' (compute_pretrend_test()$leads and $df); columns whose block was singular
-#' are named.
+#' The tests are defined in Table 2's note; this states only what differs from
+#' it: the lead window and restriction count (compute_pretrend_test()$leads and
+#' $df) when not Table 2's, and the columns whose block was singular.
 #'
 #' @param stats_list list of summarize_fit() outputs, one per column
 #' @param labels column labels, same length
-#' @return a character string (no trailing period)
+#' @return a character string ending in ". ", or "" when nothing differs
 pretrend_note_cols <- function(stats_list, labels) {
   pts   <- lapply(stats_list, `[[`, "pt")
   leads <- unique(lapply(pts, function(p) sort(as.integer(p$leads))))
@@ -476,12 +471,11 @@ pretrend_note_cols <- function(stats_list, labels) {
   if (length(leads) != 1L || length(leads[[1L]]) == 0L)
     stop("pretrend_note_cols(): the columns do not share one pre-trend lead window")
   ginv <- vapply(pts, function(p) isTRUE(p$ginv_used), logical(1L))
-  paste0(PRETREND_NOTE_AGG(min(leads[[1L]]), max(leads[[1L]]),
-                           if (length(dfs) == 1L) dfs else length(leads[[1L]])),
-         if (any(ginv)) paste0("; the block was singular for ",
+  paste0(pretrend_window_note(min(leads[[1L]]), max(leads[[1L]]),
+                              if (length(dfs) == 1L) dfs else length(leads[[1L]])),
+         if (any(ginv)) paste0("Pre-trend test: the block was singular for ",
                                paste(labels[ginv], collapse = ", "),
-                               " and a generalized inverse was used") else "",
-         ". ", PRETREND_NOTE_DID)
+                               " and a generalized inverse was used. ") else "")
 }
 
 #' Why did returned no pre-test for these columns, derived from the fits
@@ -680,16 +674,17 @@ tab_lines_r2 <- build_wide_table(
   extra_row_lines = extra_lines_r2
 )
 
-notes_r2 <- paste0(
- "CS\\,(2021) DR, never-treated controls; multiplier-bootstrap SE (999 reps, seed 1242). ",
-  "``Headline'' = $\\log(1+\\text{adaptation-marked commitments})$, Rio marker $\\in\\{1,2\\}$; ",
-  "``Principal only'' = $\\log(1+\\text{principal-marked commitments})$, Rio marker $=2$ only. ",
-  pretrend_note_cols(list(stats_headline, stats_principal),
-                     c("Principal + significant (headline)", "Principal only")), ". ",
-  "Implied effects: back-transform on pre-treatment mean; suppressed if insig.\\ at 5\\%. ",
-  "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
-)
-source_r2 <- "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
+# write_tex_float() adds the final period.
+notes_r2 <- sub("[. ]+$", "", paste0(
+    as_in_main(c("estimator", "covariates", "control group",
+                 "inference", "pre-trend tests", "implied effects",
+                 "significance stars")), ". ",
+    "``Headline'' = $\\log(1+\\text{adaptation-marked commitments})$, Rio marker $\\in\\{1,2\\}$; ",
+    "``Principal only'' = $\\log(1+\\text{principal-marked commitments})$, Rio marker $=2$ only. ",
+    pretrend_note_cols(list(stats_headline, stats_principal),
+                       c("Principal + significant (headline)", "Principal only"))
+))
+source_r2 <- SOURCE_MAIN
 
 out_path_r2 <- here("output", "tables", "principal_share", "principal_wide.tex")
 write_tex_float(
@@ -732,15 +727,17 @@ tab_lines_r2b <- build_wide_table(
   col_labels = c("Headline (retained cohorts)", "Principal only (retained cohorts)")
 )
 
-notes_r2b <- paste0(
- "CS\\,(2021) OR, never-treated controls; analytical (IF) SE; all cohorts retained ",
-  "(2015--2024, incl.\\ $<$ ", thin_threshold, " treated units). Pre-trend statistics: see ",
-  "notes to Table~\\ref{tab:principal_wide}. ",
-  did_pretest_reason(list(stats_headline_retained, stats_principal_retained),
-                     c("headline", "principal only")),
-  "Implied effects: back-transform on pre-treatment mean; suppressed if insig.\\ at 5\\%. ",
-  "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
-)
+# write_tex_float() adds the final period.
+notes_r2b <- sub("[. ]+$", "", paste0(
+    "CS\\,(2021) OR; analytical (IF) SE; all cohorts retained ",
+    "(2015--2024, incl.\\ $<$ ", thin_threshold, " treated units). ",
+    as_in_main(c("covariates", "control group",
+                 "pre-trend tests", "implied effects", "significance stars")), ". ",
+    pretrend_note_cols(list(stats_headline_retained, stats_principal_retained),
+                       c("Headline (retained cohorts)", "Principal only (retained cohorts)")),
+    did_pretest_reason(list(stats_headline_retained, stats_principal_retained),
+                       c("headline", "principal only"))
+))
 out_path_r2b <- here("output", "tables", "principal_share", "principal_retained.tex")
 write_tex_float(
   out_path_r2b,
@@ -804,15 +801,16 @@ tab_lines_r4 <- build_wide_table(
   drop_rows  = "Implied effect (USD M, exp(ATT)$-$1 $\\times$ pre-treat.\\ mean)"
 )
 
-notes_r4 <- paste0(
-  "CS\\,(2021) DR, never-treated controls; multiplier-bootstrap SE (999 reps, seed 1242). ",
-  "Level: $100 \\times E/S$, with $E$ the recipient's adaptation-marked commitments and ",
-  "$S$ its total commitments; logit: $\\log[(E+0.5)/(S-E+0.5)]$; both undefined when $S=0$. ",
-  "Mean and zero-share rows use the level share (pp). ",
-  "Pre-trend statistics: see Table~\\ref{tab:principal_wide} notes. ",
-  "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
-)
-source_r4 <- "OECD CRS (Rio adaptation markers)"
+# write_tex_float() adds the final period.
+notes_r4 <- sub("[. ]+$", "", paste0(
+    as_in_main(c("estimator", "covariates", "control group",
+                 "inference", "pre-trend tests", "significance stars")),
+    ". Level: $100 \\times E/S$, with $E$ the recipient's adaptation-marked commitments and ",
+    "$S$ its total commitments; logit: $\\log[(E+0.5)/(S-E+0.5)]$; both undefined when $S=0$. ",
+    "Mean and zero-share rows use the level share (pp). ",
+    pretrend_note_cols(list(stats_share_within, stats_logit_within), c("level", "logit"))
+))
+source_r4 <- SOURCE_MAIN
 
 out_path_r4 <- here("output", "tables", "principal_share", "within_share_wide.tex")
 write_tex_float(
@@ -1040,7 +1038,7 @@ notes_r7 <- paste0(
   " treated country-years (cumulative, not bounded by 100 pp). Last column: single-year ",
   "sum of the ATT adjustments"
 )
-source_r7 <- "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
+source_r7 <- SOURCE_MAIN
 
 out_path_r7 <- here("output", "tables", "principal_share", "share_reconciliation.tex")
 write_tex_float(

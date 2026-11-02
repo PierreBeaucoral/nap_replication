@@ -3,7 +3,7 @@
 \caption{Falsification test: effect of NAP adoption on log(mitigation commitments)}
 \label{tab:mitigation}
 % latex table generated in R 4.6.1 by xtable 1.8-8 package
-% Thu Oct  1 14:51:34 2026
+% Mon Nov  2 11:26:43 2026
 \begingroup\small
 \adjustbox{max width=\textwidth}{%
 \begin{tabular}{lc}
@@ -29,7 +29,7 @@ ATT & 0.1558 \\
 \endgroup
 \par\vspace{4pt}
 \begin{minipage}{\linewidth}\footnotesize
-Notes: CS\,(2021) DR; multiplier-bootstrap SE (999 reps, seed 1242; \texttt{did} 2.5.0; CRS Apr.\ 2026); never-treated control; cohorts $\geq 5$ units; controls: WGI gov.\ effectiveness + log population. Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-5 \leq e \leq -2$; 4 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular. \texttt{did} pre-test $p$: \texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year (50 restrictions, 126 recipients): aggregate $p = 0.184$, \texttt{did} $p = 0.000$. Implied effect: naive back-transform on the pre-treatment mean; suppressed if insignificant at 5\%. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
-Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
+Notes: Cohorts $\geq 5$ units. Estimator, covariates, control group, inference, pre-trend tests, implied effect and significance stars as in Table~\ref{tab:combined_wide_main}. \texttt{did} pre-test $p$ (50 restrictions, 126 recipients): aggregate $p = 0.184$, \texttt{did} $p = 0.000$.\par
+Source: OECD CRS (Rio mitigation markers); UNFCCC NAP Central.
 \end{minipage}
 \end{table}

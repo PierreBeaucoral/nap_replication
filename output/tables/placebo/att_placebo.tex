@@ -3,7 +3,7 @@
 \caption{Placebo test: treatment date assigned 2 years before actual NAP adoption}
 \label{tab:placebo}
 % latex table generated in R 4.6.1 by xtable 1.8-8 package
-% Thu Oct  1 14:51:33 2026
+% Mon Nov  2 11:26:42 2026
 \begingroup\small
 \adjustbox{max width=\textwidth}{%
 \begin{tabular}{lc}
@@ -29,7 +29,7 @@ ATT & -0.0201 \\
 \endgroup
 \par\vspace{4pt}
 \begin{minipage}{\linewidth}\footnotesize
-Notes: CS\,(2021) regression adjustment; multiplier-bootstrap SE (999 reps), seed 1242; never-treated control; WGI GE + log population. Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-4 \leq e \leq -2$; 3 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular. \texttt{did} pre-test $p$: \texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year (42 restrictions, 126 recipients): aggregate $p = 0.826$, \texttt{did} $p = 0.000$. Implied effect: back-transform on pre-treatment mean; suppressed if insignificant at 5\%. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Notes: Covariates, control group, inference, pre-trend tests, implied effect and significance stars as in Table~\ref{tab:combined_wide_main}. Estimator: CS\,(2021) regression adjustment. Pre-trend window: $-4 \leq e \leq -2$ (3 restrictions). \texttt{did} pre-test $p$ (42 restrictions, 126 recipients): aggregate $p = 0.826$, \texttt{did} $p = 0.000$.\par
 Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
 \end{minipage}
 \end{table}

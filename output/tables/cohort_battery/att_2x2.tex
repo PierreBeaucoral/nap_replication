@@ -3,7 +3,7 @@
 \caption{Cohort rule and estimator, varied one at a time}
 \label{tab:att_2x2}
 % latex table generated in R 4.6.1 by xtable 1.8-8 package
-% Wed Oct 14 11:56:55 2026
+% Mon Nov  2 11:26:59 2026
 \begingroup\small
 \adjustbox{max width=\textwidth}{%
 \begin{tabular}{llllllll}
@@ -28,7 +28,7 @@ Adaptation: Cohorts $\geq 5$, doubly robust & 0.3036** & (0.1256) & 2.418 & 0.77
 \endgroup
 \par\vspace{4pt}
 \begin{minipage}{\linewidth}\footnotesize
-Notes: Outcomes: log adaptation, total and non-adaptation commitments. This grid varies the cohort rule and estimator separately, with common multiplier-bootstrap inference in all cells. ``All cohorts retained'' adds the 2015--2020 cohorts of 2--4 recipients each. In the doubly-robust cells with all cohorts retained, the 2015 cohort (2 recipients) and 2017 cohort (2 recipients) have no estimable post-treatment cell and drop out of the aggregate; regression adjustment estimates them. ``Treated'' counts the recipients in the estimation panel.  Unless noted: headline specification (CS\,(2021) DR, never-treated controls, WGI GE + log population, cohorts $\geq$ 5), multiplier-bootstrap SE (999 reps, seed 1242). Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-5 \leq e \leq -2$; 4 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Notes: Outcomes: log adaptation, total and non-adaptation commitments. This grid varies the cohort rule and estimator separately, with common multiplier-bootstrap inference in all cells. ``All cohorts retained'' adds the 2015--2020 cohorts of 2--4 recipients each. In the doubly-robust cells with all cohorts retained, the 2015 cohort (2 recipients) and 2017 cohort (2 recipients) have no estimable post-treatment cell and drop out of the aggregate; regression adjustment estimates them. ``Treated'' counts the recipients in the estimation panel.  Unless noted: cohorts $\geq$ 5; estimator, covariates, control group, inference, pre-trend test and significance stars as in Table~\ref{tab:combined_wide_main}.\par
 Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
 \end{minipage}
 \end{table}

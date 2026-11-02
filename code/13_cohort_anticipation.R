@@ -88,6 +88,7 @@ source(here("code", "functions", "read_headline_fit.R"))  # read_headline_fit()
 source(here("code", "functions", "mde.R"))                # mde()
 source(here("code", "functions", "make_country_id.R"))    # make_country_id()
 source(here("code", "functions", "crs_positive.R"))       # crs_positive()
+source(here("code", "functions", "table_notes.R"))       # shared table-note wording, wpval_reconciliation()
 
 set.seed(20240601)  # global seed — local set.seed(1242) calls follow each estimator
 
@@ -173,12 +174,6 @@ write_tex_float <- function(out_path, caption_title, label,
   invisible(out_path)
 }
 
-# canonical pre-trend wording — keep byte-identical across scripts
-PRETREND_NOTE_AGG <- function(min_e, max_e, k) sprintf(
-  "Pre-trend $\\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($%d \\leq e \\leq %d$; %d restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular",
-  min_e, max_e, k)
-PRETREND_NOTE_DID <- "\\texttt{did} pre-test $p$: \\texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year"
-PRETREND_NOTE <- function(min_e, max_e, k) paste0(PRETREND_NOTE_AGG(min_e, max_e, k), ". ", PRETREND_NOTE_DID)
 
 fmt_stars <- function(t_v) {
   if (is.na(t_v)) return("")
@@ -503,22 +498,42 @@ tabular_of <- function(df, label, align_str = NULL) {
                        floating = FALSE))
 }
 
-# Common preamble shared by every cohort-battery table note; kept as its own
-# constant so SPEC_NOTE and SPEC_NOTE_NOPT cannot drift apart.
-SPEC_NOTE_PREAMBLE <- paste0(
-  "Unless noted: headline specification (CS\\,(2021) DR, never-treated controls, WGI GE + log ",
-  "population, cohorts $\\geq$ ", THIN_THRESHOLD, "), multiplier-bootstrap SE (", BITERS,
-  " reps, seed 1242)."
-)
-SRC_NOTE <- "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
-STAR_NOTE <- "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
-# Lead window and restriction count of the headline test, not typed in.
-SPEC_NOTE <- paste0(SPEC_NOTE_PREAMBLE, " ",
-                    PRETREND_NOTE_AGG(min(fit_head$pretrend$leads), max(fit_head$pretrend$leads),
-                                      fit_head$pretrend$df),
-                    ". ", STAR_NOTE)
-# Tables without a "Pre-trend p" column must not define one.
-SPEC_NOTE_NOPT <- SPEC_NOTE_PREAMBLE
+# Common preamble shared by every cohort-battery table note: the headline
+# specification, referred to Table 2 (functions/table_notes.R).
+spec_note_unless <- function(parts) paste0(
+  "Unless noted: cohorts $\\geq$ ", THIN_THRESHOLD, "; ",
+  as_in_main(parts, capitalize = FALSE))
+# Tables without a "Pre-trend p" column use the preamble, which defines none.
+SPEC_NOTE_PREAMBLE <- paste0(spec_note_unless(c("estimator", "covariates", "control group",
+                                                "inference")), ".")
+SRC_NOTE <- SOURCE_MAIN
+# The headline test is Table 2's (same window and restriction count).
+stopifnot(identical(as.integer(c(min(fit_head$pretrend$leads), max(fit_head$pretrend$leads),
+                                 fit_head$pretrend$df)), unname(MAIN_PRETREND_WINDOW)))
+SPEC_NOTE <- spec_note_unless(c("estimator", "covariates", "control group", "inference",
+                                "pre-trend test", "significance stars"))
+
+#' Stop unless every row's pre-trend test has Table 2's window
+#'
+#' SPEC_NOTE says the pre-trend test is "as in Table 2"; a table that uses it
+#' must have that window (leads, restriction count) in every estimated row.
+#'
+#' @param rows list of list(label, res); rows with res = NULL are skipped
+#' @param table table label, for the error message
+assert_main_window <- function(rows, table) {
+  for (r in rows) {
+    pt <- r$res$pretrend
+    if (is.null(pt)) next
+    w <- as.integer(c(if (length(pt$leads) > 0L) range(pt$leads) else c(NA, NA), pt$df))
+    if (!identical(w, unname(MAIN_PRETREND_WINDOW)))
+      stop(table, ", row '", r$label, "': pre-trend window (min_e, max_e, df) = (",
+           paste(w, collapse = ", "), ") differs from Table 2's (",
+           paste(MAIN_PRETREND_WINDOW, collapse = ", "), "), but the note (SPEC_NOTE) ",
+           "says the pre-trend test is as in Table 2; state the window with ",
+           "pretrend_window_note().")
+  }
+  invisible(TRUE)
+}
 
 # Pre-sized accumulator: 4 LOCO + 1 drop-2024 + 3 balanced + 4 grid
 # cells + 2 anticipation + 3 event-date + 3 placebo rungs + 1 conditioning = 21.
@@ -648,6 +663,7 @@ grid_panels <- list(
   list(key = "retained", label = "All cohorts retained", panel = did_panel_full)
 )
 grid_rows <- vector("list", 12L)   # 3 outcomes x 2 cohort rules x 2 estimators, filled in order
+grid_res  <- vector("list", 12L)   # list(label, res) per row, for assert_main_window()
 i_grid    <- 0L
 # The envelope outcomes are included because the retained-cohort specification
 # (regression adjustment) is the only one in which they move; the grid shows
@@ -689,6 +705,7 @@ for (oc in grid_outcomes) {
       }
       i_grid <- i_grid + 1L
       grid_rows[[i_grid]] <- spec_row(lbl, res, allow_null = risky)
+      grid_res[[i_grid]]  <- list(label = lbl, res = res)
       if (identical(oc$var, "log_commits"))
         battery_summary <- add_to_battery(battery_summary, "Cohort rule $\\times$ estimator",
                                           sub("^Adaptation: ", "", lbl), res)
@@ -712,6 +729,7 @@ dr_dropped_txt <- if (length(dr_dropped) == 0L) "" else {
          "adjustment estimates them. ``Treated'' counts the recipients in the estimation panel.")
 }
 
+assert_main_window(grid_res, "tab:att_2x2")
 write_tex_float(
   file.path(dir_tabs_cb, "att_2x2.tex"),
   "Cohort rule and estimator, varied one at a time",
@@ -1210,6 +1228,10 @@ if (cohort_month_ok) {
     "\\makecell[l]{(b) Full adopter sample, \\\\ $\\geq 5$ rule re-applied}", res_month_b)
 }
 
+assert_main_window(list(list(label = "baseline", res = res_head),
+                        list(label = "(a1)", res = res_month_a1),
+                        list(label = "(a2)", res = res_month_a2),
+                        list(label = "(b)",  res = res_month_b)), "tab:att_eventdate")
 eventdate_note <- paste0(
   "Outcome: log(adaptation commitments). Rows re-date treatment by posting month (post-June ",
   "$\\to$ next year); see Table~\\ref{tab:cohort_redating}. (a1)/(a2): main treated set, ",
@@ -1370,7 +1392,7 @@ write_tex_float(
          "cohorts from 2015; cohorts under ", THIN_THRESHOLD, " treated dropped. Estimator: ",
          "CS\\,(2021) OR (DR unstable on these panels), never-treated controls, multiplier-",
          "bootstrap SE (", BITERS, " reps, seed 1242). MDE $= ", sprintf("%.4f", mde(1)), " \\times$ SE (80\\% power, ",
-         "two-sided 5\\%). The $-2$ row is the estimate of Table~\\ref{tab:placebo}"),
+         "two-sided 5\\%). The $-2$ row is the estimate of Table~\\ref{tab:placebo}. ", STAR_NOTE),
   SRC_NOTE)
 
 # ==============================================================================
@@ -1581,7 +1603,7 @@ write_tex_float(
          "; descriptive, not a test; not shown for the placebo rows, which estimate a ",
          "fictitious effect. ",
          if (length(bat_extra) == 0L) "" else paste0(paste(bat_extra, collapse = " "), " "),
-         SPEC_NOTE_NOPT, " ", STAR_NOTE, " (normal approximation)"),
+         SPEC_NOTE_PREAMBLE, " ", STAR_NOTE, " (normal approximation)"),
   SRC_NOTE)
 
 # ==============================================================================
@@ -1710,10 +1732,11 @@ write_tex_float(
          ", which our rule selects (doubly robust only with at least 40 treated units); the ",
          "second row reports ", tolower(em_lab[[setdiff(c("reg", "dr"), em_rule)]]),
          " for comparison. ATT/SE: multiplier bootstrap (", BITERS, " reps, clustered by recipient, ",
-         "seed 1242). ", PRETREND_NOTE_AGG(min(pt_leads), max(pt_leads), f0$pt$df), ". ",
+         "seed 1242). ", as_in_main("pre-trend test"), ". ",
+         pretrend_window_note(min(pt_leads), max(pt_leads), f0$pt$df),
          "Main ATT: the main specification (never-treated controls, all ",
-         n_distinct(did_panel_main$country_id), " recipients).",
-         if (any(grepl("\\*", adopt_rows))) paste0(" ", STAR_NOTE) else ""),
+         n_distinct(did_panel_main$country_id), " recipients)",
+         if (any(grepl("\\*", adopt_rows))) paste0(". ", STAR_NOTE) else ""),
   SRC_NOTE)
 
 # --- (b) Submission months by cohort -----------------------------------------

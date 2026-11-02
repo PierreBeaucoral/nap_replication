@@ -77,6 +77,7 @@ source(here("code", "functions", "read_headline_fit.R"))  # read_headline_fit()
 source(here("code", "functions", "make_country_id.R"))    # make_country_id()
 source(here("code", "functions", "crs_positive.R"))       # crs_positive()
 source(here("code", "functions", "sup_t_crit.R"))         # sup_t_crit()
+source(here("code", "functions", "table_notes.R"))       # shared table-note wording, wpval_reconciliation()
 
 set.seed(20240601)  # global seed -- local set.seed(1242) calls precede each att_gt() fit
 
@@ -156,18 +157,6 @@ write_tex_float <- function(out_path, caption_title, label,
 # compute_pretrend_test() (sourced at the top) works for ANY dynamic
 # aggregation (min_e = -5 or min_e = -Inf): it filters on agg_d$egt < -k.
 
-# canonical pre-trend wording — keep byte-identical across scripts.
-# This table reports TWO aggregated-Wald windows side by side (leads >= -5 and
-# the full available pre-period), each with its own restriction count in the
-# table's own df column, so PRETREND_NOTE_AGG()'s per-call k is not reused
-# verbatim here; the shared description is adapted minimally to name both
-# windows rather than repeating the function
-# call twice with the same k.
-PRETREND_NOTE_AGG <- function(min_e, max_e, k) sprintf(
-  "Pre-trend $\\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($%d \\leq e \\leq %d$; %d restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular",
-  min_e, max_e, k)
-PRETREND_NOTE_DID <- "\\texttt{did} pre-test $p$: \\texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year"
-PRETREND_NOTE <- function(min_e, max_e, k) paste0(PRETREND_NOTE_AGG(min_e, max_e, k), ". ", PRETREND_NOTE_DID)
 
 # ==============================================================================
 # SECTION 1. Load and prepare the DiD panel (identical construction to
@@ -440,18 +429,16 @@ write_tex_float(
   label         = "tab:pretrend_tests_full",
   tabular_lines = tabular_lines_1,
   notes_text    = paste0(
-    "Headline specification (CS 2021, DR, never-treated controls, WGI GE + log population, ",
-    "universal base period, cohorts $\\geq 5$); analytical (non-bootstrap) fit throughout. ",
-    "``Leads $\\geq -5$'' and ``full window'' report the joint Wald $\\chi^2$/$p$ test on the ",
-    "aggregated pre-treatment event-time coefficients, using the influence-function covariance ",
-    "of the dynamic aggregation from the analytical fit (Table~\\ref{tab:combined_wide_main}'s ",
-    "window vs.\\ every available pre-period respectively; restriction counts are the df ",
-    "columns); a generalized inverse is used if a block is singular. ", PRETREND_NOTE_DID,
-    ", pooling each cohort's pre-treatment $ATT(g,t)$ cells against its own base year and ",
-    "excluding the zero-variance base-year cell. Panel~B repeats the three tests on the panel ",
+    as_in_main(c("estimator", "covariates", "control group",
+                 "pre-trend tests")), " (universal base period, ",
+    "cohorts $\\geq 5$); analytical (non-bootstrap) fit throughout. ",
+    "``Leads $\\geq -5$'' uses Table~\\ref{tab:combined_wide_main}'s window, ``full window'' ",
+    "every available pre-period; restriction counts are the df columns. \\texttt{did} pre-test ",
+    "$p$ pools each cohort's pre-treatment $ATT(g,t)$ cells against its own base year and ",
+    "excludes the zero-variance base-year cell. Panel~B repeats the three tests on the panel ",
     "starting in ", min(panel_2010$year), ", ",
     "which has no ", min(main_panel$year), " cells"),
-  source_text   = "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
+  source_text   = SOURCE_MAIN
 )
 
 # ==============================================================================
@@ -512,8 +499,8 @@ write_tex_float(
     "universal base period. Entries are $ATT(g,t)$ for cohort $g$'s pre-treatment period ",
     "$t < g$; ``0 (base)'' marks the base year $t = g-1$ (zero by construction); cells with ",
     "$t \\geq g$ are outside the pre-trend window and suppressed (---). SE in parentheses. ",
-    "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"),
-  source_text   = "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
+    STAR_NOTE),
+  source_text   = SOURCE_MAIN
 )
 
 # ==============================================================================
@@ -854,8 +841,8 @@ write_tex_float(
   label         = "tab:base_year_sensitivity",
   tabular_lines = tabular_lines_4,
   notes_text    = paste0(
-    "CS(2021) DR, never-treated controls, WGI GE + log population, cohorts $\\geq 5$. ATT/SE ",
-    "from the multiplier-bootstrap fit (999 reps, seed 1242; \\texttt{did} 2.5.0); Wald $p$ from ",
+    "Cohorts $\\geq 5$. ", as_in_main(c("estimator", "covariates", "control group", "inference",
+                                          "significance stars")), "; Wald $p$ from ",
     "the analytical fit's dynamic aggregation (as in the pre-trend table). ``Anticipation $=1$'' ",
     "(``$=2$'') resets the base period to $g-2$ ($g-3$): one year of anticipation moves the ",
     "2021 cohort's base year to 2019. The leads-$\\geq -5$ test uses the leads left after the ",
@@ -863,9 +850,8 @@ write_tex_float(
     "that table's. Panel C: within-country adaptation share of ",
     "Table~\\ref{tab:within_share_wide}, $100 \\times E/S$ in pp, with $E$ the recipient's ",
     "adaptation-marked and $S$ its total commitments; its main-spec row is the estimate of that ",
-    "table; the logit of the same share is in Table~\\ref{tab:base_year_logit}. ",
-    "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"),
-  source_text   = "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
+    "table; the logit of the same share is in Table~\\ref{tab:base_year_logit}"),
+  source_text   = SOURCE_MAIN
 )
 
 # --- tab:base_year_logit: the logit within-share rows, same specifications ----
@@ -889,13 +875,12 @@ write_tex_float(
     "Table~\\ref{tab:within_share_wide}, $\\log[(E+0.5)/(S-E+0.5)]$, with $E$ the recipient's ",
     "adaptation-marked and $S$ its total commitments; the main-spec row is the estimate of that ",
     "table. Specifications and columns as in Table~\\ref{tab:base_year_sensitivity}. ",
-    "CS(2021) DR, never-treated controls, WGI GE + log population, cohorts $\\geq 5$. ATT/SE ",
-    "from the multiplier-bootstrap fit (999 reps, seed 1242; \\texttt{did} 2.5.0); Wald $p$ from ",
+    "Cohorts $\\geq 5$. ", as_in_main(c("estimator", "covariates", "control group", "inference",
+                                          "significance stars")), "; Wald $p$ from ",
     "the analytical fit's dynamic aggregation (as in the pre-trend table). ``Anticipation $=1$'' ",
     "(``$=2$'') resets the base period to $g-2$ ($g-3$). The leads-$\\geq -5$ test uses the ",
-    "leads left after the base period: ", antic_txt_logit[1L], "; ", antic_txt_logit[2L], ". ",
-    "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"),
-  source_text   = "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
+    "leads left after the base period: ", antic_txt_logit[1L], "; ", antic_txt_logit[2L]),
+  source_text   = SOURCE_MAIN
 )
 
 # ==============================================================================
@@ -980,13 +965,13 @@ write_tex_float(
     "aggregated with the simple-ATT weights of Table~\\ref{tab:combined_wide_main}. The window ",
     "starts in 2010 because the adaptation marker is routinely reported only from 2010. ",
     "$g-5$ to $g-1$ is the window of the four-lead test. The cells and their influence ",
-    "functions are those of the stored main-specification fits (CS(2021) DR, never-treated ",
-    "controls, WGI GE + log population, cohorts $\\geq 5$), re-aggregated without ",
-    "re-estimation; SE from the multiplier bootstrap (999 reps, seed 1242; \\texttt{did} 2.5.0). ",
+    "functions are those of the stored main-specification fits (",
+    as_in_main(c("estimator", "covariates", "control group", "inference"), capitalize = FALSE),
+    "), re-aggregated without re-estimation. ",
     "The main estimate is that of Table~\\ref{tab:combined_wide_main} (log commitments, global ",
     "share) and Table~\\ref{tab:within_share_wide} (within-country share). The ", last_cohort,
-    " cohort has one post-treatment year. * $p<0.10$, ** $p<0.05$, *** $p<0.01$"),
-  source_text   = "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
+    " cohort has one post-treatment year. ", STAR_NOTE),
+  source_text   = SOURCE_MAIN
 )
 
 # ==============================================================================

@@ -3,7 +3,7 @@
 \caption{Effect of NAP adoption on climate finance: simple ATT across outcomes (all cohorts retained, asymptotic SE)}
 \label{tab:combined_wide_robust}
 % latex table generated in R 4.6.1 by xtable 1.8-8 package
-% Thu Oct  1 14:44:14 2026
+% Mon Nov  2 11:19:49 2026
 \begingroup\small
 \adjustbox{max width=\textwidth}{%
 \begin{tabular}{lccccc}
@@ -24,7 +24,7 @@ ATT & 0.2480 & 0.2391** & 0.1889*** & 0.1751** & 0.0804 \\
 \endgroup
 \par\vspace{4pt}
 \begin{minipage}{\linewidth}\footnotesize
-Notes: CS\,(2021) OR; WGI gov.\ effectiveness + log population; never-treated control group; analytical (IF) SE; \texttt{did} 2.5.0; CRS Apr.\ 2026. Pre-trend $\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($-5 \leq e \leq -2$; 4 restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular. \texttt{did} pre-test $p$: \texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year (95 restrictions, 145 recipients) not computed: pre-treatment covariance singular (95 cells, numerical rank 91). Pre-treatment mean: mean of the outcome in levels over treated recipient-years before adoption, USD M (pp for the share). Implied effect: $(\exp(\mathrm{ATT})-1) \times$ pre-treatment mean, a naive back-transform, not additive across outcomes; suppressed if the ATT is insignificant at 5\%. Every column: 2,227 observations (recipient-years), 145 countries. * $p<0.10$, ** $p<0.05$, *** $p<0.01$.\par
+Notes: Covariates, control group, pre-trend tests, pre-treatment mean, implied effect and significance stars as in Table~\ref{tab:combined_wide_main}. CS\,(2021) OR; analytical (IF) SE; \texttt{did} 2.5.0; CRS Apr.\ 2026. \texttt{did} pre-test $p$ (95 restrictions, 145 recipients) not computed: pre-treatment covariance singular (95 cells, numerical rank 91). Every column: 2,227 observations (recipient-years), 145 countries.\par
 Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
 \end{minipage}
 \end{table}

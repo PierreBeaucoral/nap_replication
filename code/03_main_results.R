@@ -59,6 +59,7 @@ source(here("code", "functions", "make_country_id.R"))    # make_country_id()
 source(here("code", "functions", "crs_positive.R"))       # crs_positive()
 source(here("code", "functions", "make_wide_table.R"))    # make_wide_table()
 source(here("code", "functions", "sup_t_crit.R"))         # sup_t_crit()
+source(here("code", "functions", "table_notes.R"))       # shared table-note wording, wpval_reconciliation()
 
 set.seed(20240601)  # global seed — local set.seed(1242) calls follow each estimator
 
@@ -95,148 +96,6 @@ esc_header <- function(x) {
   x
 }
 
-# canonical pre-trend wording — keep byte-identical across scripts
-PRETREND_NOTE_AGG <- function(min_e, max_e, k) sprintf(
-  "Pre-trend $\\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($%d \\leq e \\leq %d$; %d restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular",
-  min_e, max_e, k)
-PRETREND_NOTE_DID <- "\\texttt{did} pre-test $p$: \\texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year"
-PRETREND_NOTE <- function(min_e, max_e, k) paste0(PRETREND_NOTE_AGG(min_e, max_e, k), ". ", PRETREND_NOTE_DID)
-
-#' Render the two pre-trend columns honestly, from the fit that produced them.
-#'
-#' The tables report two pre-trend statistics that often disagree. They are
-#' different tests of different objects, and the note must say so WITH the
-#' numbers of the specification it sits under -- nothing here is hardcoded.
-#'
-#' The lead window is taken from the window actually used, "rejects" is
-#' stated only when did returns a statistic, and no mechanism is asserted.
-#'
-#' @param pre_egt integer vector of pre-treatment event times that entered the
-#'   aggregated Wald test (from compute_pretrend_test()$leads)
-#' @param df_did restrictions in did's built-in pre-test, i.e. the number of
-#'   estimable pre-treatment group-time cells
-#' @param n_clusters recipients the influence function is clustered on
-#' @param wpval_did did's pre-test p-value(s); NA where it returned none
-#' @param pval_wald aggregated Wald p-value(s), same length as wpval_did
-#' @param labels optional column labels, same length, for per-column disclosure
-#' @param wpval_reason machine-derived reason did returned no statistic
-#' @param ginv_used TRUE if the aggregated test used a generalized inverse
-#' @param df degrees of freedom of the aggregated test(s) (compute_pretrend_test()$df),
-#'   one per column; below full rank they are fewer than the leads
-#' @return a character string for the table note
-wpval_reconciliation <- function(pre_egt, df_did, n_clusters,
-                                 wpval_did = NA_real_, pval_wald = NA_real_,
-                                 labels = NULL, wpval_reason = NA_character_,
-                                 ginv_used = FALSE, df = length(pre_egt)) {
-  # Compact pre-trend disclosure for table notes (byte-identical
-  # in 03/04/05). The averaging mechanism and the interpretation of each
-  # result are stated once in the main text; the note keeps the restriction
-  # counts and the per-column verdicts, which the text does not repeat table
-  # by table.
-
-  # Column labels are interpolated into LaTeX prose, so they must be escaped
-  # here: "Adaptation share (% of global)" would otherwise comment out the rest
-  # of the note.
-  esc_lab <- function(x) {
-    x <- gsub("\\\\", "", x)
-    x <- gsub("([%#&_])", "\\\\\\1", x)
-    x
-  }
-  if (!is.null(labels)) labels <- esc_lab(labels)
-
-  # --- lead window, rendered from the vector actually used -----------------
-  n_lead <- length(pre_egt)
-  lead_list <- if (n_lead == 0L) "none" else
-    paste0("$e = ", paste(sprintf("%d", as.integer(sort(pre_egt))),
-                          collapse = ", "), "$")
-
-  head_txt <- if (n_lead == 0L) {
-    "No aggregated pre-trend test: no pre-treatment event time has a usable SE. "
-  } else {
-    # canonical wording: the lead window itself is disclosed via
-    # min/max of pre_egt, not re-derived from the (possibly non-contiguous)
-    # lead_list string built above.
-    # Restrictions = the test's df (the rank actually inverted), not the lead
-    # count; if the df differ across columns the lead count is quoted and the
-    # singular columns are flagged just below.
-    df_u <- unique(as.integer(df[!is.na(df)]))
-    paste0(PRETREND_NOTE_AGG(min(as.integer(pre_egt)), max(as.integer(pre_egt)),
-                             if (length(df_u) == 1L) df_u else n_lead),
-           if (isTRUE(any(ginv_used)))
-             paste0("; the block was singular",
-                    if (!is.null(labels) && length(labels) == length(ginv_used))
-                      paste0(" for ", paste(labels[ginv_used], collapse = ", ")) else "",
-                    " and a generalized inverse was used")
-           else "",
-           ". ")
-  }
-
-  wp <- suppressWarnings(as.numeric(wpval_did))
-  pw <- suppressWarnings(as.numeric(pval_wald))
-  if (length(wp) == 0L) wp <- NA_real_
-  if (length(pw) == 0L) pw <- NA_real_
-
-  # Counts may differ across columns (subgroup tables); render one number when
-  # they agree and the range when they do not, never a single column's value
-  # presented as if it were the table's.
-  fmt_count <- function(x) {
-    x <- x[!is.na(x)]
-    if (length(x) == 0L) return(NA_character_)
-    if (length(unique(x)) == 1L) as.character(x[[1L]]) else
-      paste0(min(x), "--", max(x))
-  }
-  df_did_txt <- fmt_count(df_did)
-  clust_txt  <- fmt_count(n_clusters)
-  # canonical wording: PRETREND_NOTE_DID states what the test IS;
-  # the parenthetical keeps the per-column restriction/recipient counts, which
-  # are data, not wording, and must not be lost.
-  did_head <- paste0(
-    PRETREND_NOTE_DID, " (",
-    if (is.na(df_did_txt)) "one restriction per pre-treatment cell" else
-      paste0(df_did_txt, " restrictions"),
-    if (is.na(clust_txt)) "" else paste0(", ", clust_txt, " recipients"),
-    ")")
-
-  if (all(is.na(wp))) {
-    rr <- wpval_reason[!is.na(wpval_reason)]
-    sing_re <- "^not computed: pre-treatment covariance singular \\((\\d+) cells, numerical rank (\\d+)\\)$"
-    reason_txt <- if (length(rr) == 0L) "no statistic returned"
-      else if (length(unique(rr)) == 1L) sub("^not computed: ", "", unique(rr)[[1L]])
-      else if (!is.null(labels) && length(wpval_reason) == length(labels) &&
-               all(grepl(sing_re, wpval_reason)))
-        paste0("pre-treatment covariance singular (",
-               sub(sing_re, "\\1", wpval_reason[[1L]]), " cells; rank ",
-               paste(sprintf("%s %s", labels, sub(sing_re, "\\2", wpval_reason)),
-                     collapse = ", "), ")")
-      else if (!is.null(labels) && length(wpval_reason) == length(labels))
-        paste(sprintf("%s, %s", labels,
-                      ifelse(is.na(wpval_reason), "no reason recorded",
-                             sub("^not computed: ", "", wpval_reason))),
-              collapse = "; ")
-      else "reason varies by column (see text)"
-    did_txt <- paste0(did_head, " not computed: ", reason_txt,
-                      ". ")
-  } else {
-    both <- !is.na(wp) & !is.na(pw)
-    rej_wald <- both & pw < 0.05
-    rej_did  <- both & wp < 0.05
-    per_col <- ""
-    if (length(pw) == 1L && both[[1L]]) {
-      per_col <- sprintf(": aggregate $p = %.3f$, \\texttt{did} $p = %.3f$", pw[[1L]], wp[[1L]])
-    } else if (!is.null(labels) && length(labels) == length(pw) && length(pw) > 1L) {
-      nm_rej <- labels[which(rej_wald)]
-      wald_clause <- if (length(nm_rej) == 0L) "aggregate rejects (5\\%) in no column"
-        else if (all(rej_wald[both])) "aggregate rejects (5\\%) in every column"
-        else paste0("aggregate rejects (5\\%) for ", paste(nm_rej, collapse = ", "), " only")
-      did_clause <- if (all(rej_did[both])) "\\texttt{did} rejects in every column"
-        else if (!any(rej_did[both])) "\\texttt{did} rejects in none"
-        else paste0("\\texttt{did} rejects for ", paste(labels[which(rej_did)], collapse = ", "))
-      per_col <- paste0(": ", wald_clause, "; ", did_clause)
-    }
-    did_txt <- paste0(did_head, per_col, ". ")
-  }
-  paste0(head_txt, did_txt)
-}
 
 # ==============================================================================
 # Helper: write_tex_float()
@@ -885,18 +744,19 @@ if (is.null(gt_ext) || is.null(gt_ext_analytical)) {
   )
 
   notes_ext <- paste0(
-    "Outcome: $1\\{$adaptation commitments $>0\\}$. CS\\,(2021) DR; WGI GE + log ",
-    "population; headline specification; boot SE (", BITERS,
-    " reps, seed 1242). Panel B: dynamic aggregation, $e \\in [",
+    "Outcome: $1\\{$adaptation commitments $>0\\}$, $=1$ for any positive marked amount, ",
+    "however small. ", as_in_main(c("estimator", "covariates", "control group",
+                                    "inference", "pre-trend tests",
+                                    "significance stars")), ". ",
+    "Panel B: dynamic aggregation, $e \\in [",
     paste(range(as.integer(agg_d_ext$egt[keep_ext])), collapse = ", "),
     "]$ ($e=-1$ omitted, base period). ",
-    wpval_reconciliation(pre_egt = pt_ext$leads, df_did = pt_ext$df_did,
-                         n_clusters = n_cty_ext, wpval_did = pt_ext$Wpval_did,
-                         pval_wald = pt_ext$pval,
-                         wpval_reason = pt_ext$wpval_reason,
-                         ginv_used = pt_ext$ginv_used, df = pt_ext$df),
-    "Outcome $=1$ for any positive marked amount, however small. ",
-    "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
+    sub("\\. $", "",
+        wpval_reconciliation(pre_egt = pt_ext$leads, df_did = pt_ext$df_did,
+                             n_clusters = n_cty_ext, wpval_did = pt_ext$Wpval_did,
+                             pval_wald = pt_ext$pval,
+                             wpval_reason = pt_ext$wpval_reason,
+                             ginv_used = pt_ext$ginv_used, df = pt_ext$df))
   )
 
   write_tex_float(
@@ -906,7 +766,7 @@ if (is.null(gt_ext) || is.null(gt_ext_analytical)) {
     label         = "tab:extensive_margin",
     tabular_lines = ext_tabular,
     notes_text    = notes_ext,
-    source_text   = "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
+    source_text   = SOURCE_MAIN
   )
 
   saveRDS(list(gt_boot = gt_ext, gt_analytical = gt_ext_analytical,

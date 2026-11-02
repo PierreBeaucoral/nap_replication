@@ -6,8 +6,12 @@
 #
 # Uses objects every calling stage defines at its top: BITERS,
 # compute_pretrend_test() (functions/pretrend_test.R), two_line_head()
-# (functions/two_line_head.R), esc_header(), wpval_reconciliation(),
-# write_tex_float(), and the did, dplyr and xtable packages.
+# (functions/two_line_head.R), wpval_reconciliation() and the shared note
+# wording (functions/table_notes.R), esc_header(), write_tex_float(), and the
+# did, dplyr and xtable packages.
+#
+# Notes: Table 2 (tab:combined_wide_main) carries the full note; every other
+# wide table refers to it for the elements it shares and states the others.
 # ==============================================================================
 
 #' Estimate one CS (2021) specification for several outcomes and write the wide
@@ -284,28 +288,66 @@ make_wide_table <- function(did_panel_in, retain_thin, outcomes,
     if (is.null(s$pt_reason)) NA_character_ else s$pt_reason, character(1L))
 
   est_method_label <- if (use_dr == "dr") "DR" else "OR"
+  did_ver  <- as.character(utils::packageVersion("did"))
   se_label <- if (!retain_thin)
     paste0("multiplier-bootstrap SE (", BITERS,
-           " reps, seed 1242; \\texttt{did} 2.5.0; CRS Apr.\\ 2026)") else
-    "analytical (IF) SE; \\texttt{did} 2.5.0; CRS Apr.\\ 2026"
-
-  notes_txt <- paste0(
-    "CS\\,(2021) ", est_method_label,
-    "; WGI gov.\\ effectiveness + log population; ",
-    control_grp_note, "; ", se_label, ". ",
-    wpval_reconciliation(pre_egt = first_pt_leads, df_did = first_pt_df_did,
-                         n_clusters = first_n_country, wpval_did = col_wpval,
-                         pval_wald = col_pwald, labels = col_labels_pt,
-                         wpval_reason = col_reason, ginv_used = col_ginv,
-                         df = col_df),
+           " reps, seed 1242; \\texttt{did} ", did_ver, "; CRS ", CRS_VINTAGE_ABBR, ")") else
+    paste0("analytical (IF) SE; \\texttt{did} ", did_ver, "; CRS ", CRS_VINTAGE_ABBR)
+  has_share   <- "share_adapt" %in% vapply(outcomes, `[[`, character(1L), "var")
+  premean_txt <- paste0(
     "Pre-treatment mean: mean of the outcome in levels over treated recipient-years before ",
-    "adoption, USD M", if ("share_adapt" %in% vapply(outcomes, `[[`, character(1L), "var"))
-      " (pp for the share)" else "", ". Implied effect: $(\\exp(\\mathrm{ATT})-1) \\times$ ",
-    "pre-treatment mean, a naive back-transform, not additive across outcomes; suppressed ",
-    "if the ATT is insignificant at 5\\%. ", const_note,
-    "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
-  )
-  source_txt <- "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
+    "adoption, USD M", if (has_share) " (pp for the share)" else "", ". ")
+
+  is_main  <- identical(tex_label, MAIN_TAB_LABEL)
+  pt_note  <- wpval_reconciliation(pre_egt = first_pt_leads, df_did = first_pt_df_did,
+                                   n_clusters = first_n_country, wpval_did = col_wpval,
+                                   pval_wald = col_pwald, labels = col_labels_pt,
+                                   wpval_reason = col_reason, ginv_used = col_ginv,
+                                   df = col_df, full = is_main)
+  if (is_main) {
+    # The other tables' references to Table 2 assume this window.
+    main_window <- as.integer(c(min(first_pt_leads), max(first_pt_leads), unique(col_df)))
+    if (!identical(main_window, unname(MAIN_PRETREND_WINDOW)))
+      stop("Table 2 pre-trend window (min_e, max_e, df) = (",
+           paste(main_window, collapse = ", "), ") differs from MAIN_PRETREND_WINDOW (",
+           paste(MAIN_PRETREND_WINDOW, collapse = ", "),
+           "); update MAIN_PRETREND_WINDOW in table_notes.R, which the other notes rely on.")
+    if (!has_share)
+      stop("Table 2 must include the adaptation share: its note defines the pre-treatment ",
+           "mean in pp for the share, which the other tables refer to.")
+    notes_txt <- paste0(
+      "CS\\,(2021) ", est_method_label,
+      "; WGI gov.\\ effectiveness + log population; ",
+      control_grp_note, "; ", se_label, ". ", pt_note, premean_txt,
+      "Implied effect: $(\\exp(\\mathrm{ATT})-1) \\times$ ",
+      "pre-treatment mean, a naive back-transform, not additive across outcomes; suppressed ",
+      "if the ATT is insignificant at 5\\%. ", const_note, STAR_NOTE
+    )
+    source_txt <- SOURCE_MAIN
+  } else {
+    # Elements identical to Table 2's note are referred to; the others are
+    # written out (estimator and SE of the retained-cohorts table, control
+    # group of the not-yet-treated table, mean definition without the share).
+    same_est <- use_dr == "dr"
+    same_cg  <- control_grp == "nevertreated"
+    shared <- c(if (same_est) "estimator",
+                "covariates", if (same_cg) "control group",
+                if (!retain_thin) "inference",
+                "pre-trend tests", if (has_share) "pre-treatment mean",
+                "implied effect", "significance stars")
+    own <- c(if (!same_est) paste0("CS\\,(2021) ", est_method_label),
+             if (!same_cg) control_grp_note,
+             if (retain_thin) se_label)
+    own_txt <- paste(own, collapse = "; ")
+    # write_tex_float() adds the final period.
+    notes_txt <- sub("[. ]+$", "", paste0(
+      as_in_main(shared), ". ",
+      if (nzchar(own_txt))
+        paste0(toupper(substr(own_txt, 1L, 1L)), substring(own_txt, 2L), ". ") else "",
+      pt_note, if (!has_share) premean_txt else "", const_note
+    ))
+    source_txt <- SOURCE_MAIN
+  }
 
   cap_title <- paste0(
     "Effect of NAP adoption on climate finance: simple ATT across outcomes (",

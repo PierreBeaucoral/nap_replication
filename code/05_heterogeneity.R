@@ -72,6 +72,7 @@ source(here("code", "functions", "make_country_id.R"))    # make_country_id()
 source(here("code", "functions", "make_wide_table.R"))    # make_wide_table()
 source(here("code", "functions", "sup_t_crit.R"))         # sup_t_crit()
 source(here("code", "functions", "crs_positive.R"))       # crs_positive()
+source(here("code", "functions", "table_notes.R"))       # shared table-note wording, wpval_reconciliation()
 
 set.seed(20240601)  # global seed — local set.seed(1242) calls follow each estimator
 
@@ -97,149 +98,6 @@ FITS_DIR <- here("output", "fits")
 # exhibit this stage owns is deleted before anything is re-estimated.
 unlink(list.files(here("output", c("tables", "figures"), "heterogeneity"),
                   pattern = "\\.(tex|png|pdf)$", recursive = TRUE, full.names = TRUE))
-
-# canonical pre-trend wording — keep byte-identical across scripts
-PRETREND_NOTE_AGG <- function(min_e, max_e, k) sprintf(
-  "Pre-trend $\\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($%d \\leq e \\leq %d$; %d restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular",
-  min_e, max_e, k)
-PRETREND_NOTE_DID <- "\\texttt{did} pre-test $p$: \\texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year"
-PRETREND_NOTE <- function(min_e, max_e, k) paste0(PRETREND_NOTE_AGG(min_e, max_e, k), ". ", PRETREND_NOTE_DID)
-
-#' Render the two pre-trend columns honestly, from the fit that produced them.
-#'
-#' The tables report two pre-trend statistics that often disagree. They are
-#' different tests of different objects, and the note must say so WITH the
-#' numbers of the specification it sits under -- nothing here is hardcoded.
-#'
-#' The lead window is taken from the window actually used, "rejects" is
-#' stated only when did returns a statistic, and no mechanism is asserted.
-#'
-#' @param pre_egt integer vector of pre-treatment event times that entered the
-#'   aggregated Wald test (from compute_pretrend_test()$leads)
-#' @param df_did restrictions in did's built-in pre-test, i.e. the number of
-#'   estimable pre-treatment group-time cells
-#' @param n_clusters recipients the influence function is clustered on
-#' @param wpval_did did's pre-test p-value(s); NA where it returned none
-#' @param pval_wald aggregated Wald p-value(s), same length as wpval_did
-#' @param labels optional column labels, same length, for per-column disclosure
-#' @param wpval_reason machine-derived reason did returned no statistic
-#' @param ginv_used TRUE if the aggregated test used a generalized inverse
-#' @param df degrees of freedom of the aggregated test(s) (compute_pretrend_test()$df),
-#'   one per column; below full rank they are fewer than the leads
-#' @return a character string for the table note
-wpval_reconciliation <- function(pre_egt, df_did, n_clusters,
-                                 wpval_did = NA_real_, pval_wald = NA_real_,
-                                 labels = NULL, wpval_reason = NA_character_,
-                                 ginv_used = FALSE, df = length(pre_egt)) {
-  # Compact pre-trend disclosure for table notes (byte-identical
-  # in 03/04/05). The averaging mechanism and the interpretation of each
-  # result are stated once in the main text; the note keeps the restriction
-  # counts and the per-column verdicts, which the text does not repeat table
-  # by table.
-
-  # Column labels are interpolated into LaTeX prose, so they must be escaped
-  # here: "Adaptation share (% of global)" would otherwise comment out the rest
-  # of the note.
-  esc_lab <- function(x) {
-    x <- gsub("\\\\", "", x)
-    x <- gsub("([%#&_])", "\\\\\\1", x)
-    x
-  }
-  if (!is.null(labels)) labels <- esc_lab(labels)
-
-  # --- lead window, rendered from the vector actually used -----------------
-  n_lead <- length(pre_egt)
-  lead_list <- if (n_lead == 0L) "none" else
-    paste0("$e = ", paste(sprintf("%d", as.integer(sort(pre_egt))),
-                          collapse = ", "), "$")
-
-  head_txt <- if (n_lead == 0L) {
-    "No aggregated pre-trend test: no pre-treatment event time has a usable SE. "
-  } else {
-    # canonical wording: the lead window itself is disclosed via
-    # min/max of pre_egt, not re-derived from the (possibly non-contiguous)
-    # lead_list string built above.
-    # Restrictions = the test's df (the rank actually inverted), not the lead
-    # count; if the df differ across columns the lead count is quoted and the
-    # singular columns are flagged just below.
-    df_u <- unique(as.integer(df[!is.na(df)]))
-    paste0(PRETREND_NOTE_AGG(min(as.integer(pre_egt)), max(as.integer(pre_egt)),
-                             if (length(df_u) == 1L) df_u else n_lead),
-           if (isTRUE(any(ginv_used)))
-             paste0("; the block was singular",
-                    if (!is.null(labels) && length(labels) == length(ginv_used))
-                      paste0(" for ", paste(labels[ginv_used], collapse = ", ")) else "",
-                    " and a generalized inverse was used")
-           else "",
-           ". ")
-  }
-
-  wp <- suppressWarnings(as.numeric(wpval_did))
-  pw <- suppressWarnings(as.numeric(pval_wald))
-  if (length(wp) == 0L) wp <- NA_real_
-  if (length(pw) == 0L) pw <- NA_real_
-
-  # Counts may differ across columns (subgroup tables); render one number when
-  # they agree and the range when they do not, never a single column's value
-  # presented as if it were the table's.
-  fmt_count <- function(x) {
-    x <- x[!is.na(x)]
-    if (length(x) == 0L) return(NA_character_)
-    if (length(unique(x)) == 1L) as.character(x[[1L]]) else
-      paste0(min(x), "--", max(x))
-  }
-  df_did_txt <- fmt_count(df_did)
-  clust_txt  <- fmt_count(n_clusters)
-  # canonical wording: PRETREND_NOTE_DID states what the test IS;
-  # the parenthetical keeps the per-column restriction/recipient counts, which
-  # are data, not wording, and must not be lost.
-  did_head <- paste0(
-    PRETREND_NOTE_DID, " (",
-    if (is.na(df_did_txt)) "one restriction per pre-treatment cell" else
-      paste0(df_did_txt, " restrictions"),
-    if (is.na(clust_txt)) "" else paste0(", ", clust_txt, " recipients"),
-    ")")
-
-  if (all(is.na(wp))) {
-    rr <- wpval_reason[!is.na(wpval_reason)]
-    sing_re <- "^not computed: pre-treatment covariance singular \\((\\d+) cells, numerical rank (\\d+)\\)$"
-    reason_txt <- if (length(rr) == 0L) "no statistic returned"
-      else if (length(unique(rr)) == 1L) sub("^not computed: ", "", unique(rr)[[1L]])
-      else if (!is.null(labels) && length(wpval_reason) == length(labels) &&
-               all(grepl(sing_re, wpval_reason)))
-        paste0("pre-treatment covariance singular (",
-               sub(sing_re, "\\1", wpval_reason[[1L]]), " cells; rank ",
-               paste(sprintf("%s %s", labels, sub(sing_re, "\\2", wpval_reason)),
-                     collapse = ", "), ")")
-      else if (!is.null(labels) && length(wpval_reason) == length(labels))
-        paste(sprintf("%s, %s", labels,
-                      ifelse(is.na(wpval_reason), "no reason recorded",
-                             sub("^not computed: ", "", wpval_reason))),
-              collapse = "; ")
-      else "reason varies by column (see text)"
-    did_txt <- paste0(did_head, " not computed: ", reason_txt,
-                      ". ")
-  } else {
-    both <- !is.na(wp) & !is.na(pw)
-    rej_wald <- both & pw < 0.05
-    rej_did  <- both & wp < 0.05
-    per_col <- ""
-    if (length(pw) == 1L && both[[1L]]) {
-      per_col <- sprintf(": aggregate $p = %.3f$, \\texttt{did} $p = %.3f$", pw[[1L]], wp[[1L]])
-    } else if (!is.null(labels) && length(labels) == length(pw) && length(pw) > 1L) {
-      nm_rej <- labels[which(rej_wald)]
-      wald_clause <- if (length(nm_rej) == 0L) "aggregate rejects (5\\%) in no column"
-        else if (all(rej_wald[both])) "aggregate rejects (5\\%) in every column"
-        else paste0("aggregate rejects (5\\%) for ", paste(nm_rej, collapse = ", "), " only")
-      did_clause <- if (all(rej_did[both])) "\\texttt{did} rejects in every column"
-        else if (!any(rej_did[both])) "\\texttt{did} rejects in none"
-        else paste0("\\texttt{did} rejects for ", paste(labels[which(rej_did)], collapse = ", "))
-      per_col <- paste0(": ", wald_clause, "; ", did_clause)
-    }
-    did_txt <- paste0(did_head, per_col, ". ")
-  }
-  paste0(head_txt, did_txt)
-}
 
 # -----------------------------------------------------------------------
 # Null-coalescing operator
@@ -784,6 +642,13 @@ make_het_wide_table <- function(groups, outcome_var, raw_var,
   het_cells <- Filter(Negate(is.null), col_stats)
   het_labels   <- names(het_cells)
   het_leads    <- if (length(het_cells) == 0L) integer(0) else het_cells[[1L]]$pt_leads
+  # The note states one lead window for the table, so every subgroup must share it.
+  same_leads <- vapply(het_cells, function(s)
+    identical(sort(as.integer(s$pt_leads)), sort(as.integer(het_leads))), logical(1L))
+  if (!all(same_leads))
+    stop(tex_label, ": the pre-trend lead window differs across subgroups (",
+         paste(het_labels[!same_leads], collapse = ", "), " vs ", het_labels[[1L]],
+         "); the note states one window, so state it per subgroup.")
   het_df_did   <- vapply(het_cells, function(s)
     if (is.null(s$pt_df_did)) NA_integer_ else as.integer(s$pt_df_did), integer(1L))
   het_nclust   <- vapply(het_cells, function(s) as.integer(s$n_country), integer(1L))
@@ -798,18 +663,17 @@ make_het_wide_table <- function(groups, outcome_var, raw_var,
 
   # Star definitions end the note.
   notes_txt <- paste0(
-    caption_txt,
-    " ATT/SE: multiplier-bootstrap (", BITERS,
-    " reps, seed 1242); pre-trend: separate analytical fit. ",
-    wpval_reconciliation(pre_egt = het_leads, df_did = het_df_did,
-                         n_clusters = het_nclust, wpval_did = het_wpval,
-                         pval_wald = het_pwald, labels = het_labels,
-                         wpval_reason = het_reason, ginv_used = het_ginv,
-                         df = het_df),
-    "Implied effects: back-transform on pre-treatment mean; suppressed if insig.\\ at 5\\%. ",
-    "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
+    caption_txt, " ",
+    as_in_main(c("covariates", "inference", "pre-trend tests", "implied effect",
+                 "significance stars")), ". ",
+    sub("\\. $", "",
+        wpval_reconciliation(pre_egt = het_leads, df_did = het_df_did,
+                             n_clusters = het_nclust, wpval_did = het_wpval,
+                             pval_wald = het_pwald, labels = het_labels,
+                             wpval_reason = het_reason, ginv_used = het_ginv,
+                             df = het_df))
   )
-  source_txt <- "OECD CRS (Rio adaptation markers); UNFCCC NAP Central"
+  source_txt <- SOURCE_MAIN
 
   dir.create(dir_tabs, recursive = TRUE, showWarnings = FALSE)
   # Strip "tab:" prefix from tex_label for the filename — the LaTeX
@@ -1532,12 +1396,11 @@ cap_notes <- paste0(
   "ATT on log(adaptation commitments), estimated separately on each subgroup; full columns in ",
   "Tables~\\ref{tab:het_gov_wide}, \\ref{tab:het_ldc_wide} and \\ref{tab:het_income_wide}. ",
   cap_est_txt, ", not-yet-treated controls, WGI GE + log population. ",
-  "ATT/SE: multiplier-bootstrap (", BITERS, " reps, clustered by recipient, seed 1242); ",
-  "pre-trend: separate analytical fit. ",
-  PRETREND_NOTE_AGG(min(cap_leads[[1L]]), max(cap_leads[[1L]]), cap_df), ". ",
+  "ATT/SE: multiplier-bootstrap (", BITERS, " reps, clustered by recipient, seed 1242). ",
+  as_in_main(c("pre-trend test", "significance stars")), ". ",
+  pretrend_window_note(min(cap_leads[[1L]]), max(cap_leads[[1L]]), cap_df),
   "Panel A: median split of ", ge_window_txt, ". Panel B: pre-treatment vintage of the UN LDC ",
-  "list. Panel C: ", income_vintage, "; high-income and unclassified recipients excluded. ",
-  "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
+  "list. Panel C: ", income_vintage, "; high-income and unclassified recipients excluded"
 )
 write_tex_float(
   file.path(here("output", "tables", "heterogeneity"), "het_capacity.tex"),
@@ -2036,7 +1899,7 @@ if (length(missing_zero_vars) > 0L) {
     out_path_zero,
     "Share of recipient-years with zero adaptation-marked commitments, by donor type",
     "tab:zero_shares_donor", raw_zero, notes_zero,
-    "OECD CRS (Rio adaptation markers); UNFCCC NAP Central")
+    SOURCE_MAIN)
 }
 
 # ==============================================================================

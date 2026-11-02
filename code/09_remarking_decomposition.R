@@ -86,6 +86,7 @@ if (utils::packageVersion("did") < "2.5.0") {
 source(here("code", "functions", "pretrend_test.R"))      # compute_pretrend_test()
 source(here("code", "functions", "read_headline_fit.R"))  # read_headline_fit()
 source(here("code", "functions", "make_country_id.R"))    # make_country_id()
+source(here("code", "functions", "table_notes.R"))       # shared table-note wording, wpval_reconciliation()
 
 set.seed(20240601)  # global seed; local set.seed(1242) immediately before each att_gt()
 
@@ -985,12 +986,6 @@ write_tex_float(
 
 log_msg("Section 10: CS estimation helpers")
 
-# canonical pre-trend wording — keep byte-identical across scripts
-PRETREND_NOTE_AGG <- function(min_e, max_e, k) sprintf(
-  "Pre-trend $\\chi^2$ / $p$: joint Wald test on the aggregated pre-treatment event-time coefficients ($%d \\leq e \\leq %d$; %d restrictions), using the influence-function covariance of the dynamic aggregation from the analytical (non-bootstrap) fit; a generalized inverse is used if the block is singular",
-  min_e, max_e, k)
-PRETREND_NOTE_DID <- "\\texttt{did} pre-test $p$: \\texttt{did}'s built-in Wald test over all pre-period $ATT(g,t)$ cells against each cohort's $g-1$ base year"
-PRETREND_NOTE <- function(min_e, max_e, k) paste0(PRETREND_NOTE_AGG(min_e, max_e, k), ". ", PRETREND_NOTE_DID)
 
 #' Estimate one outcome with the main-spec CS(2021) settings (matches
 #' make_wide_table() (code/functions/make_wide_table.R): analytical fit (bstrap = FALSE) feeds
@@ -1080,15 +1075,19 @@ ginv_note_res <- function(res_list, labels) {
          " and a generalized inverse was used (df = numerical rank)")
 }
 
-#' Pre-trend note derived from the columns' own tests (window, df, singular blocks)
+#' Pre-trend note: what differs from Table 2's tests (window, df, singular blocks)
+#'
+#' @return a character string ending in ". ", or "" when nothing differs
 pretrend_note_res <- function(res_list, labels) {
   leads <- unique(lapply(res_list, function(r) sort(as.integer(r$pretrend_leads))))
   dfs   <- unique(vapply(res_list, function(r) as.integer(r$pretrend_df), integer(1L)))
   if (length(leads) != 1L || length(leads[[1L]]) == 0L)
     stop("pretrend_note_res(): the columns do not share one pre-trend lead window")
-  paste0(PRETREND_NOTE_AGG(min(leads[[1L]]), max(leads[[1L]]),
-                           if (length(dfs) == 1L) dfs else length(leads[[1L]])),
-         ginv_note_res(res_list, labels), ". ", PRETREND_NOTE_DID)
+  g <- ginv_note_res(res_list, labels)
+  paste0(pretrend_window_note(min(leads[[1L]]), max(leads[[1L]]),
+                              if (length(dfs) == 1L) dfs else length(leads[[1L]])),
+         if (nzchar(g)) paste0("Pre-trend test: ", sub("^; the pre-trend block", "the block", g),
+                               ". ") else "")
 }
 
 fmt_stars <- function(t_v) {
@@ -1315,12 +1314,14 @@ write_tex_float(
   caption_title = "Margin decomposition of adaptation-marked commitments: new vs.\\ continuing vs.\\ re-marked activities",
   label         = "tab:remarking_margins",
   tabular_lines = margins_tex,
-  notes_text    = paste0(
-    "CS\\,(2021) DR, never-treated controls, headline specification; cohorts $<5$ treated ",
-    "dropped (", n_countries_est, "-country sample). SE: multiplier-bootstrap (999 reps, ",
-    "seed 1242; \\texttt{did} 2.5.0; CRS Apr.\\ 2026). ",
+  # write_tex_float() adds the final period.
+  notes_text    = sub("[. ]+$", "", paste0(
+    "Cohorts $<5$ treated dropped (", n_countries_est, "-country sample). ",
+    as_in_main(c("estimator", "covariates", "control group",
+                 "inference", "pre-trend tests", "significance stars")),
+    ". ",
     pretrend_note_res(c(margin_results, margin_b_results),
-                      c(names(margin_results), margin_b_labels)), ". ",
+                      c(names(margin_results), margin_b_labels)),
     "Panel B splits Panel A's ``new'' column into ``new (linked)'' (activity identifiable ",
     "across years by its CRS ",
     c(ProjectNumber = "project number", CrsID = "CRS identifier")[[chosen_id]],
@@ -1328,9 +1329,8 @@ write_tex_float(
     "unchanged. ",
     neg_cells_note(did_panel_126, "commit_cont_marked", "``continuing, already marked''"),
     "Category definitions and singleton shares: see Section~\\ref{sec:remarking} and ",
-    "Appendix~\\ref{app:remarking}. ``New'' ATT is an upper bound on genuinely new activity. ",
-    "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
-  ),
+    "Appendix~\\ref{app:remarking}. ``New'' ATT is an upper bound on genuinely new activity"
+  )),
   source_text = "OECD CRS activity-level microdata (Rio adaptation marker 1 or 2); UNFCCC NAP Central"
 )
 
@@ -1364,13 +1364,12 @@ write_tex_float(
   label         = "tab:remarking_counts",
   tabular_lines = counts_tex,
   notes_text    = paste0(
-    "CS\\,(2021) DR, same specification as Table~\\ref{tab:remarking_margins}. SE: ",
-    "multiplier-bootstrap (999 reps, seed 1242; \\texttt{did} 2.5.0; CRS Apr.\\ 2026). ",
+    as_in_main(c("estimator", "covariates", "control group", "inference", "significance stars")),
+    "; sample as in Table~\\ref{tab:remarking_margins}. ",
     "``N marked activities'' and ``mean commitment/marked activity'' are log(1+$x$); ",
     "``share of activities marked'' is the \\% of the recipient's CRS activities (all ",
     "purposes) carrying an adaptation marker, untransformed (pp)",
-    ginv_note_res(counts_results, names(counts_results)), ". ",
-    "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
+    ginv_note_res(counts_results, names(counts_results))
   ),
   source_text = "OECD CRS activity-level microdata (all purposes for the denominator; Rio adaptation marker 1 or 2 for the numerator)"
 )
@@ -1397,16 +1396,15 @@ write_tex_float(
   label         = "tab:remarking_exclusions",
   tabular_lines = exclusions_tex,
   notes_text    = paste0(
-    "CS\\,(2021) DR, same specification as Table~\\ref{tab:remarking_margins}. SE: ",
-    "multiplier-bootstrap (999 reps, seed 1242; \\texttt{did} 2.5.0; CRS Apr.\\ 2026). ",
+    as_in_main(c("estimator", "covariates", "control group", "inference", "significance stars")),
+    "; sample as in Table~\\ref{tab:remarking_margins}. ",
     "Title/purpose/fund-flag definitions: see notes to ",
     "Table~\\ref{tab:remarking_flag_shares_by_group}. ``Multilateral cell, excl.\\ ",
     "fund-flagged'' recomputes log multilateral adaptation commitments without the ",
     "fund-flagged activities. ",
     neg_cells_note(did_panel_126, "commit_multi_excl_fund", "the multilateral cell excl.\\ fund-flagged"),
     "Flag coverage: by year, Panel~A of Table~\\ref{tab:remarking_flag_shares_by_group}; ",
-    "by treatment group, its Panel~B", ginv_note_res(exclusion_results, names(exclusion_results)),
-    ". * $p<0.10$, ** $p<0.05$, *** $p<0.01$"
+    "by treatment group, its Panel~B", ginv_note_res(exclusion_results, names(exclusion_results))
   ),
   source_text = "OECD CRS activity-level microdata (Rio adaptation marker 1 or 2); UNFCCC NAP Central"
 )
@@ -1445,15 +1443,14 @@ write_tex_float(
   label         = "tab:remarking_exclusions_regex_comparison",
   tabular_lines = exclusions_compare_tex,
   notes_text    = paste0(
-    "CS\\,(2021) DR, same specification/sample as Table~\\ref{tab:remarking_exclusions}. ",
-    "SE: multiplier-bootstrap (999 reps, seed 1242; \\texttt{did} 2.5.0; CRS Apr.\\ 2026). ",
+    as_in_main(c("estimator", "covariates", "control group", "inference", "significance stars")),
+    "; sample as in Table~\\ref{tab:remarking_exclusions}. ",
     "``[broad]'' = broad flag definitions: title matches ``national adaptation plan''/``NAP''/",
     "``readiness''/``NAP-''/``adaptation plan''/``planning'' (bare); purpose ",
     "$\\in\\{41010,15110,43010\\}$. ``[narrow]'' = the definitions of ",
     "Table~\\ref{tab:remarking_exclusions}, whose estimates it reproduces. ",
     "Fund-flagged cells omitted (the fund flag is the same under both definitions)",
-    ginv_note_res(exclusions_compare_results, exclusions_compare_labels), ". ",
-    "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
+    ginv_note_res(exclusions_compare_results, exclusions_compare_labels)
   ),
   source_text = "OECD CRS activity-level microdata (Rio adaptation marker 1 or 2); UNFCCC NAP Central"
 )

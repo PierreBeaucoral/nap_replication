@@ -54,6 +54,7 @@ library(stringr)
 source(here("code", "functions", "read_headline_fit.R"))  # read_headline_fit()
 source(here("code", "functions", "mde.R"))                # mde()
 source(here("code", "functions", "make_country_id.R"))    # make_country_id()
+source(here("code", "functions", "table_notes.R"))       # shared table-note wording, wpval_reconciliation()
 
 # Version guard identical to 03_main_results.R: SEs on unbalanced panels
 # changed in did 2.5.0 (renv.lock pins it).
@@ -78,8 +79,6 @@ if (utils::packageVersion("did") < "2.5.0") {
 # in 03/05 ("global seed -- local set.seed(1242) calls follow each estimator").
 set.seed(20240601)
 
-# Kept short (no embedded parenthetical) so paste0("... (", CRS_VINTAGE, ")") call sites never produce nested parens.
-CRS_VINTAGE  <- "April 2026 vintage"
 DID_VERSION  <- as.character(utils::packageVersion("did"))
 EMDAT_VINTAGE <- "EM-DAT v2026-09-11 (CRED/UCLouvain public custom request, downloaded 2026-09-15)"
 
@@ -922,8 +921,9 @@ if (!emdat_available) {
     label         = "tab:hazard_controls",
     tabular_lines = hazard_lines,
     notes_text    = paste0(
-      "CS\\,(2021) DR, never-treated controls, WGI GE + log population, cohorts $\\geq 5$, ",
-      "multiplier-bootstrap SE (999 reps, seed 1242), \\texttt{did} ", DID_VERSION,
+      "Cohorts $\\geq 5$; ",
+      as_in_main(c("estimator", "baseline covariates", "control group", "inference",
+                   "significance stars"), capitalize = FALSE),
       if (fit_a_damage$est_method == "reg") paste0(
         "; the damage row (reg) uses outcome regression: the doubly robust fit on that sample ",
         "leaves post-treatment cells for only ", fit_a_damage_dr$n_treated,
@@ -939,8 +939,7 @@ if (!emdat_available) {
       "outcome on it via never-treated FE, re-estimates on the residual; (c) uses a 3-yr ",
       "moving average. $N_{treated}$: recipients in cohorts with an estimable post-treatment ",
       "cell. $p(\\Delta)$: aligned influence functions for (a) affected and (b); independence ",
-      "approximation (an upper bound) for the rows estimated on a different sample. ",
-      "* $p<0.10$, ** $p<0.05$, *** $p<0.01$"
+      "approximation (an upper bound) for the rows estimated on a different sample"
     ),
     source_text = paste0("OECD CRS (", CRS_VINTAGE, "); UNFCCC NAP Central; World Bank ",
                          "WGI/WDI; ", EMDAT_VINTAGE, ", EM-DAT, CRED / UCLouvain, Brussels, ",
@@ -1113,7 +1112,7 @@ run_orthogonality_battery <- function(lag1_var, lag2_var, out_path, caption_titl
                if (grepl("singleton", cloglog_error_msg)) "fixed-effects singleton" else
                  "estimation error", ") and is not reported") else "",
       if (nzchar(extra_note)) paste0(". ", extra_note) else "",
-      ". * $p<0.10$, ** $p<0.05$, *** $p<0.01$"
+      ". ", STAR_NOTE
     ),
     source_text = source_text
   )
@@ -1400,7 +1399,7 @@ write_tex_float(
     ". ``Prior NAPA'': submitted a NAPA ",
     "to the UNFCCC before the NAP; NAPA list: ", napa_source_note,
     ". Difference row: ", diff_napa$method, ".",
-    " Sample: ", first_year, "--", last_year, ". * $p<0.10$, ** $p<0.05$, *** $p<0.01$"
+    " Sample: ", first_year, "--", last_year, ". ", STAR_NOTE
   ),
   source_text = paste0("OECD CRS (", CRS_VINTAGE, "); UNFCCC NAP Central; ", napa_source_short)
 )
