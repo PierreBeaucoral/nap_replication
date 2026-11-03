@@ -1,31 +1,31 @@
 \begin{table}[H]
 \centering
-\caption{Re-estimating the headline effect excluding NAP-support, readiness, and climate-fund activity}
+\caption{Re-estimating the main-specification effect excluding NAP-support, readiness, and climate-fund activity}
 \label{tab:remarking_exclusions}
 % latex table generated in R 4.6.1 by xtable 1.8-8 package
-% Mon Nov  2 11:29:17 2026
+% Tue Nov  3 18:40:58 2026
 \begingroup\small
 \adjustbox{max width=\textwidth}{%
-\begin{tabular}{lcccccc}
+\begin{tabular}{lccccccccc}
   \toprule
-  & Headline (all marked) & Excl. title-flagged & Excl. purpose-flagged & Excl. fund-flagged & Excl. all three & Multilateral cell, excl. fund-flagged \\ 
+  & Main specification (all marked) & Excl. title-flagged & Excl. title-flagged (broad) & Excl. purpose-flagged & Excl. purpose-flagged (broad) & Excl. fund-flagged & Excl. all three & Excl. all three (broad) & Multilateral cell, excl. fund-flagged \\ 
   \midrule
-ATT & 0.3036** & 0.2986** & 0.3222** & 0.3928*** & 0.3802** & 0.3140* \\ 
-  SE & (0.1256) & (0.1275) & (0.1440) & (0.1497) & (0.1639) & (0.1641) \\ 
-  $t$-statistic & 2.418 & 2.343 & 2.237 & 2.624 & 2.320 & 1.914 \\ 
-  Mean (pre-treat., USD M) & 104.18 & 103.98 & 97.60 & 101.12 & 95.39 & 7.54 \\ 
-  Observations & 1,930 & 1,930 & 1,930 & 1,930 & 1,930 & 1,930 \\ 
-  Countries & 126 & 126 & 126 & 126 & 126 & 126 \\ 
-  Pre-trend $\chi^2$ & 1.803 & 1.817 & 1.318 & 2.565 & 2.276 & 7.903 \\ 
-  Pre-trend $p$ & 0.772 & 0.769 & 0.858 & 0.633 & 0.685 & 0.095 \\ 
-  \texttt{did} pre-test $p$ & 0.000 & 0.000 & 0.000 & 0.000 & 0.000 & 0.000 \\ 
+ATT & 0.3036** & 0.2986** & 0.2967** & 0.3222** & 0.3482** & 0.3928*** & 0.3802** & 0.4073** & 0.3140* \\ 
+  SE & (0.1256) & (0.1275) & (0.1272) & (0.1440) & (0.1471) & (0.1497) & (0.1639) & (0.1581) & (0.1641) \\ 
+  $t$-statistic & 2.418 & 2.343 & 2.333 & 2.237 & 2.367 & 2.624 & 2.320 & 2.576 & 1.914 \\ 
+  Mean (pre-treat., USD M) & 104.18 & 103.98 & 103.65 & 97.60 & 94.41 & 101.12 & 95.39 & 91.92 & 7.54 \\ 
+  Observations & 1,930 & 1,930 & 1,930 & 1,930 & 1,930 & 1,930 & 1,930 & 1,930 & 1,930 \\ 
+  Countries & 126 & 126 & 126 & 126 & 126 & 126 & 126 & 126 & 126 \\ 
+  Pre-trend $\chi^2$ & 1.803 & 1.817 & 1.821 & 1.318 & 1.417 & 2.565 & 2.276 & 2.391 & 7.903 \\ 
+  Pre-trend $p$ & 0.772 & 0.769 & 0.769 & 0.858 & 0.841 & 0.633 & 0.685 & 0.664 & 0.095 \\ 
+  \texttt{did} pre-test $p$ & 0.000 & 0.000 & 0.000 & 0.000 & 0.000 & 0.000 & 0.000 & 0.000 & 0.000 \\ 
    \bottomrule
 \end{tabular}
 }
 \endgroup
 \par\vspace{4pt}
 \begin{minipage}{\linewidth}\footnotesize
-Notes: Estimator, covariates, control group, inference and significance stars as in Table~\ref{tab:combined_wide_main}; sample as in Table~\ref{tab:remarking_margins}. Title/purpose/fund-flag definitions: see notes to Table~\ref{tab:remarking_flag_shares_by_group}. ``Multilateral cell, excl.\ fund-flagged'' recomputes log multilateral adaptation commitments without the fund-flagged activities. Net cancellations make 2 recipient-years of the multilateral cell excl.\ fund-flagged slightly negative (minimum -0.0046 USD M); $\log(1+\cdot)$ is applied to them unchanged. Flag coverage: by year, Panel~A of Table~\ref{tab:remarking_flag_shares_by_group}; by treatment group, its Panel~B.\par
+Notes: Estimator, covariates, control group, inference and significance stars as in Table~\ref{tab:combined_wide_main}; sample as in Table~\ref{tab:remarking_margins}. Title/purpose/fund-flag definitions: see notes to Table~\ref{tab:remarking_flag_shares_by_group}. ``(broad)'' columns use broader title and purpose flags: title matches ``national adaptation plan''/``NAP''/``readiness''/``NAP-''/``adaptation plan''/``planning'' (bare); purpose $\in\{41010,15110,43010\}$. ``Multilateral cell, excl.\ fund-flagged'' recomputes log multilateral adaptation commitments without the fund-flagged activities. Net cancellations make 2 recipient-years of the multilateral cell excl.\ fund-flagged slightly negative (minimum -0.0046 USD M); $\log(1+\cdot)$ is applied to them unchanged. Flag coverage: by year, Panel~A of Table~\ref{tab:remarking_flag_shares_by_group}; by treatment group, its Panel~B.\par
 Source: OECD CRS activity-level microdata (Rio adaptation marker 1 or 2); UNFCCC NAP Central.
 \end{minipage}
 \end{table}

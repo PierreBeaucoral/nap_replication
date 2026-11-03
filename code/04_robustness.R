@@ -14,25 +14,23 @@
 #   figures/cohorts_retained/did_combined_cohort_wgi.png   (§19b robustness)
 #   tables/cohorts_retained/att_combined_wide.tex          (§19c robustness)
 #   figures/notyettreated/did_notyettreated_es.png         (§19d event study)
-#   tables/notyettreated/att_notyettreated_wide.tex        (§19d not-yet-treated)
 #   tables/units_zeros/diagnostic_units_zeros.tex          (§19e units/zeros sensitivity)
 #   tables/cohorts_retained/att_group_retained.tex         (§19 cohort ATTs, retained spec)
-#   tables/cohorts_dropped/honestdid_rm.tex                (§20 HonestDiD)
+#   tables/cohorts_dropped/honestdid_rm.tex                (§20 HonestDiD, incl. within-country share)
 #   tables/cohorts_dropped/honestdid_prepriods.tex         (§20 HonestDiD, 4/6/8 leads)
-#   tables/cohorts_dropped/honestdid_sd.tex                (§20 HonestDiD, smoothness)
-#   tables/cohorts_dropped/honestdid_within.tex            (§20 HonestDiD, within-country share)
+#   tables/cohorts_dropped/honestdid_sd.tex                (§20 HonestDiD, smoothness, incl. within share)
 #   figures/placebo/did_placebo_es.png                     (§25)
-#   tables/placebo/att_placebo.tex                         (§25)
 #   figures/mitigation/did_mitigation_es.png               (§26)
 #   tables/mitigation/att_mitigation.tex                   (§26)
 #   tables/dcdh/att_dcdh.tex                                (§A dCDH estimator)
 #   figures/dcdh/did_dcdh_es.png                            (§A dCDH event study)
 #   tables/bacon/bacon_decomp.tex                           (§B Goodman-Bacon)
-#   tables/outlier_india/att_combined_wide.tex             (§C excluding India)
-#   tables/balanced_panel/att_combined_wide.tex            (§D balanced panel)
-#   tables/panel_2010/att_combined_wide.tex                (§E panel from 2010)
 #   fits/placebo_m2_reg_bs.rds   (§25 -2-year placebo fit, read by 13)
 #   fits/mitigation_dr_bs.rds    (§26 mitigation fit, read by 05)
+#   fits/robust_rows_04.rds      (rows of tab:robust_summary estimated here:
+#                                 not-yet-treated, raw-USD log1p, PPML, dCDH,
+#                                 excluding India, balanced panel, panel from
+#                                 2010; the table is written by 13)
 #
 # NOTE: honestdid_combined.png is NOT written (not used in paper).
 # ==============================================================================
@@ -89,6 +87,8 @@ source(here("code", "functions", "crs_positive.R"))       # crs_positive()
 source(here("code", "functions", "make_wide_table.R"))    # make_wide_table()
 source(here("code", "functions", "sup_t_crit.R"))         # sup_t_crit()
 source(here("code", "functions", "table_notes.R"))       # shared table-note wording, wpval_reconciliation()
+source(here("code", "functions", "within_share.R"))      # within_share()
+source(here("code", "functions", "es_plot_fig2.R"))      # es_plot_fig2()
 # §A/§B appendix estimators (de Chaisemartin & D'Haultfoeuille; Goodman-Bacon).
 # polars MUST be loaded before DIDmultiplegtDYN, else did_multiplegt_dyn() errors
 # with "objet 'pl' introuvable" (the package references the loaded `pl` object).
@@ -130,15 +130,14 @@ FITS_DIR <- here("output", "fits")
 # A failed run must not leave the previous run's results in place: the fits
 # and exhibits this stage owns are deleted before anything is re-estimated, and
 # an estimator failure below stops the stage.
-unlink(file.path(FITS_DIR, c("mitigation_dr_bs.rds", "placebo_m2_reg_bs.rds")))
+unlink(file.path(FITS_DIR, c("mitigation_dr_bs.rds", "placebo_m2_reg_bs.rds",
+                             "robust_rows_04.rds")))
 unlink(c(list.files(here("output", c("tables", "figures"),
                          rep(c("cohorts_retained", "notyettreated", "units_zeros",
-                               "outlier_india", "balanced_panel", "panel_2010", "placebo",
-                               "mitigation", "dcdh", "bacon"), each = 2L)),
+                               "placebo", "mitigation", "dcdh", "bacon"), each = 2L)),
                     pattern = "\\.(tex|png|pdf)$", full.names = TRUE),
          here("output", "tables", "cohorts_dropped",
-              c("honestdid_rm.tex", "honestdid_sd.tex", "honestdid_prepriods.tex",
-                "honestdid_within.tex"))))
+              c("honestdid_rm.tex", "honestdid_sd.tex", "honestdid_prepriods.tex"))))
 
 
 # Outcome -> saved-fit stem (kept in sync with 03_main_results.R fit_stem_map).
@@ -285,7 +284,8 @@ if (!"share_adapt" %in% names(did_panel)) {
   did_panel <- left_join(did_panel, share_lookup, by = c("recipient_name", "year"))
 }
 
-did_panel_full <- did_panel
+did_panel_full <- did_panel %>%
+  mutate(share_within = within_share(commitments, commitments_all))
 
 # Cohort sizes and thin-cohort threshold
 cohort_sizes <- did_panel_full %>%
@@ -326,6 +326,26 @@ outcomes <- list(
        file  = "adapt_disburse",
        color = "#C0392B")
 )
+
+# Within-country share column of tab:robust_summary: the outcome and the
+# specification of tab:within_share_wide (07), estimated here on the perturbed
+# panels with the same builder as the other columns.
+oc_within <- list(var = "share_within", label = "Within-country share (pp)")
+
+# Rows of tab:robust_summary estimated in this stage, saved for 13. Each cell:
+# formatted ATT (with stars), SE and four-lead pre-trend p, plus the numbers.
+robust_rows <- list()
+#' One table cell from a make_wide_table() column
+robust_cell_wide <- function(st) list(att_fmt = st$att_fmt, se_fmt = st$se_fmt,
+                                      p_fmt = st$pt_pval, att = st$att_num, se = st$se_num)
+#' One table cell from an estimate and SE (stars as in make_wide_table())
+robust_cell <- function(att, se, p_fmt = "---") {
+  t_v <- att / se
+  stars <- if (abs(t_v) > 2.576) "***" else if (abs(t_v) > 1.960) "**" else
+    if (abs(t_v) > 1.645) "*" else ""
+  list(att_fmt = paste0(sprintf("%.4f", att), stars), se_fmt = sprintf("(%.4f)", se),
+       p_fmt = p_fmt, att = att, se = se)
+}
 
 # ==============================================================================
 # SECTION 3. Shared helpers
@@ -592,7 +612,7 @@ write_tex_float(
   label         = "tab:att_group_retained",
   tabular_lines = grp_tabular,
   notes_text    = paste0(
-    "Specification of Table~\\ref{tab:combined_wide_robust}: CS\\,(2021) outcome regression, ",
+    "Specification of Table~\\ref{tab:combined_wide_robust}: CS\\,(2021) OR, ",
     "all adoption cohorts retained (", format(nrow(did_panel_full), big.mark = ","),
     " recipient-years, ",
     n_distinct(did_panel_full$recipient_name), " recipients), never-treated control group, ",
@@ -639,7 +659,6 @@ message("\n=== Section 19d: not-yet-treated control-group robustness ===\n")
 dir_figs_nyt <- file.path(here("output", "figures"), "notyettreated")
 dir_tabs_nyt <- file.path(here("output", "tables"),  "notyettreated")
 dir.create(dir_figs_nyt, recursive = TRUE, showWarnings = FALSE)
-dir.create(dir_tabs_nyt, recursive = TRUE, showWarnings = FALSE)
 
 # Hold the estimation panel fixed at the MAIN-spec definition (cohorts_dropped):
 # thin cohorts (< thin_threshold treated units) are removed, exactly as in
@@ -715,35 +734,36 @@ for (oc in outcomes) {
 # No in-figure title/subtitle/caption — those live in LaTeX \caption{}.
 es_nyt <- results_dynamic_nyt[["log_commits"]]
 if (!is.null(es_nyt)) {
-  p_es_nyt <- ggplot(es_nyt, aes(x = event_time, y = ATT)) +
-    geom_hline(yintercept = 0,    colour = "grey50", linetype = "dashed") +
-    geom_vline(xintercept = -0.5, colour = "grey30", linetype = "dotted") +
-    geom_ribbon(aes(ymin = Lower, ymax = Upper), alpha = 0.15, fill = "#2E86C1") +
-    geom_line(colour = "#2E86C1", linewidth = 0.8) +
-    geom_point(colour = "#2E86C1", size = 2) +
-    scale_x_continuous(breaks = sort(unique(es_nyt$event_time))) +
-    labs(title = NULL, subtitle = NULL, caption = NULL,
-         x = "Years relative to NAP adoption",
-         y = "ATT on log(adaptation commitments)") +
-    theme_minimal() +
-    theme(text = element_text(family = "serif", size = 12),
-          panel.grid.minor = element_blank())
+  p_es_nyt <- es_plot_fig2(es_nyt)
   es_path <- file.path(dir_figs_nyt, "did_notyettreated_es.png")
   ggsave(es_path, p_es_nyt, width = 9, height = 5.5, dpi = 300)
   message("Saved: ", es_path)
 }
 
-# --- §19d-ii wide ATT table (all outcomes), mirroring main spec ---
-make_wide_table(
+# --- §19d-ii simple ATTs (row of tab:robust_summary), mirroring main spec ---
+robust_rows$notyettreated <- lapply(make_wide_table(
   did_panel_in  = did_panel_nyt,
   retain_thin   = FALSE,
-  outcomes      = outcomes,
+  outcomes      = c(outcomes, list(oc_within)),
   dir_tabs      = dir_tabs_nyt,
-  tex_label     = "tab:combined_wide_notyettreated",
-  caption_spec  = "not-yet-treated controls, multiplier-bootstrap SE",
+  tex_label     = "tab:robust_summary",
+  caption_spec  = "not-yet-treated controls",
   control_grp   = "notyettreated",
-  out_filename  = "att_notyettreated_wide.tex"
-)
+  write         = FALSE
+), robust_cell_wide)
+
+# Check that make_wide_table() reproduces the within-share specification of
+# tab:within_share_wide: on the main panel it must return 07's stored estimate.
+within_main_check <- make_wide_table(
+  did_panel_in = did_panel_nyt, retain_thin = FALSE, outcomes = list(oc_within),
+  dir_tabs = dir_tabs_nyt, tex_label = "tab:robust_summary",
+  caption_spec = "within-share check", write = FALSE)$share_within
+fit_within_07 <- readRDS(here("output", "fits", "within_share_dr_bs.rds"))
+stopifnot("make_wide_table() does not reproduce the 07 within-share estimate" =
+            abs(within_main_check$att_num - fit_within_07$att) < 1e-10 &&
+            abs(within_main_check$se_num - fit_within_07$se) < 1e-10)
+message(sprintf("  Within-share check OK: %.4f (SE %.4f) = tab:within_share_wide",
+                within_main_check$att_num, within_main_check$se_num))
 
 # ==============================================================================
 # SECTION 5c. §19e Outcome-units and zeros sensitivity
@@ -1054,6 +1074,12 @@ uz_stats[["ppml_levels"]] <- list(
   n_obs        = if (is.na(n_obs_ppml)) "---" else format(n_obs_ppml, big.mark = ",")
 )
 
+# Raw-USD log1p and PPML rows of tab:robust_summary (log adaptation only; a
+# share has no raw-USD or levels counterpart). Cells copied from this table.
+uz_cell <- function(st) list(att_fmt = st$att_fmt, se_fmt = st$se_fmt, p_fmt = st$pt_pval)
+robust_rows$rawusd <- list(log_commits = uz_cell(uz_stats[["log1p_rawusd"]]))
+robust_rows$ppml   <- list(log_commits = uz_cell(uz_stats[["ppml_levels"]]))
+
 message(sprintf("    ATT = %s  SE = %s  t = %s  p = %s  |  Pre-trend chi2 = %s  p = %s  did Wpval = %s  |  N = %s",
                 uz_stats[["ppml_levels"]]$att_fmt, uz_stats[["ppml_levels"]]$se_fmt,
                 uz_stats[["ppml_levels"]]$t_fmt,
@@ -1107,7 +1133,7 @@ notes_uz <- paste0(
   as_in_main(c("covariates", "control group",
                "inference", "pre-trend tests", "significance stars")),
   "; estimator as there in specs 1--4, OR on the positive subsample in spec 5. Row 1: the ",
-  "headline estimate (Table~\\ref{tab:combined_wide_main}). Row 6: Sun--Abraham ",
+  "main specification (Table~\\ref{tab:combined_wide_main}). Row 6: Sun--Abraham ",
   "(2021) PPML, levels, country+year FE, clustered SE; retains zeros; no ",
   "comparable pre-trend statistic. Commitments in USD millions (raw USD $= \\times 10^6$). ",
   sub("\\. $", "",
@@ -1120,7 +1146,7 @@ source_uz <- SOURCE_MAIN
 
 write_tex_float(
   out_path      = file.path(dir_tabs_uz, "diagnostic_units_zeros.tex"),
-  caption_title = "Sensitivity of the headline ATT to outcome units and the treatment of zeros",
+  caption_title = "Sensitivity of the main-specification ATT to outcome units and the treatment of zeros",
   label         = "tab:units_zeros",
   tabular_lines = raw_uz,
   notes_text    = notes_uz,
@@ -1291,7 +1317,8 @@ hd_inputs_from_fit <- function(fit, numPre) {
        reaggregated = reagg)
 }
 
-short_labels_hd <- c("log(Adapt.)", "Share (pp)", "log(Total)",
+LABEL_WITHIN_HD <- "Within share (pp)"
+short_labels_hd <- c("log(Adapt.)", "Global share (pp)", "log(Total)",
                      "log(Non-adapt.)", "log(Disb.)")
 
 # One slot per outcome (and per outcome x lead count for hd_pre).
@@ -1372,6 +1399,37 @@ for (oc in outcomes) {
 
 message("\n=== Section 20 estimation complete ===\n")
 
+# Within-country share: same restrictions, grids, covariance construction and
+# target weights as the outcomes above, on the within-share fit stored by 07
+# (run_all.R runs 07 before 04); it is the last column of the RM and SD tables.
+# The RNG state is preserved around this block, so nothing after it moves.
+path_within_hd <- here("output", "fits", "within_share_dr_bs.rds")
+if (!file.exists(path_within_hd))
+  stop("Stored within-share fit not found: ", path_within_hd,
+       " (written by 07_principal_and_share.R, which run_all.R runs before 04).")
+fit_w_hd <- readRDS(path_within_hd)
+if (is.null(fit_w_hd$l_vec_simple) || is.null(fit_w_hd$agg_dynamic) || is.null(fit_w_hd$gt_boot))
+  stop("Stored within-share fit lacks l_vec_simple/agg_dynamic/gt_boot: rerun 07.")
+hd_w <- withr::with_preserve_seed({
+  hin_w <- hd_inputs_from_fit(fit_w_hd, numPre_grid[1L])
+  if (is.null(hin_w)) stop("HonestDiD inputs unavailable for the within-country share")
+  rm_w <- createSensitivityResults_relativeMagnitudes(
+    betahat = hin_w$betahat, sigma = hin_w$sigma, numPrePeriods = hin_w$numPre,
+    numPostPeriods = hin_w$numPost, Mbarvec = Mbarvec_hd, l_vec = hin_w$l_vec, alpha = 0.05)
+  sd_w <- createSensitivityResults(
+    betahat = hin_w$betahat, sigma = hin_w$sigma, numPrePeriods = hin_w$numPre,
+    numPostPeriods = hin_w$numPost, Mvec = Mvec_sd, l_vec = hin_w$l_vec, alpha = 0.05)
+  orig_w <- constructOriginalCS(
+    betahat = hin_w$betahat, sigma = hin_w$sigma, numPrePeriods = hin_w$numPre,
+    numPostPeriods = hin_w$numPost, l_vec = hin_w$l_vec, alpha = 0.05)
+  list(hin = hin_w, rm = rm_w, sd = sd_w, orig = orig_w)
+})
+bd_rm_w <- breakdown_value(hd_w$rm$lb, hd_w$rm$ub, Mbarvec_hd[seq_len(nrow(hd_w$rm))])
+bd_sd_w <- breakdown_value(hd_w$sd$lb, hd_w$sd$ub, Mvec_sd[seq_len(nrow(hd_w$sd))])
+message(sprintf(paste0("  Within-country share: ATT %.4f | conventional CI [%.3f, %.3f] | ",
+                       "RM breakdown Mbar = %s | SD breakdown M = %s | vcov gap %.4f"),
+                fit_w_hd$att, hd_w$orig$lb, hd_w$orig$ub, bd_rm_w, bd_sd_w,
+                hd_w$hin$max_rel_dev))
 # --- §20b HonestDiD LaTeX tables ---------------------------------------------
 
 fmt_ci_hd <- function(lb, ub) {
@@ -1380,8 +1438,9 @@ fmt_ci_hd <- function(lb, ub) {
 }
 
 # (i) Relative magnitudes — tables/cohorts_dropped/honestdid_rm.tex
-#     Layout: Mbar rows + breakdown row, one column per outcome.
-make_honestdid_table <- function(hd_all, Mbarvec, outcomes, dir_tabs) {
+#     Layout: Mbar rows + breakdown row, one column per outcome, plus the
+#     within-country share (`within`: list(rm, breakdown, max_rel_dev, l_vec)).
+make_honestdid_table <- function(hd_all, Mbarvec, outcomes, dir_tabs, within) {
 
   n_mbar   <- length(Mbarvec)
   body_mat <- matrix("---", nrow = n_mbar, ncol = length(outcomes))
@@ -1406,6 +1465,10 @@ make_honestdid_table <- function(hd_all, Mbarvec, outcomes, dir_tabs) {
   tab_df   <- as.data.frame(full_mat, stringsAsFactors = FALSE)
   tab_df   <- cbind(`$\\bar{M}$` = rownames(full_mat), tab_df, stringsAsFactors = FALSE)
   rownames(tab_df) <- NULL
+  stopifnot(nrow(within$rm) == n_mbar,
+            isTRUE(all.equal(within$l_vec, hd_all[[outcomes[[1L]]$var]]$l_vec)))
+  tab_df[[LABEL_WITHIN_HD]] <- c(mapply(fmt_ci_hd, within$rm$lb, within$rm$ub),
+                                 within$breakdown)
 
   xt <- xtable(tab_df, label = "tab:honestdid")
   dir.create(dir_tabs, showWarnings = FALSE, recursive = TRUE)
@@ -1420,29 +1483,32 @@ make_honestdid_table <- function(hd_all, Mbarvec, outcomes, dir_tabs) {
   }
   # Largest covariance-vs-reported standard-error gap across outcomes, printed
   # in the note so the rescaling is quantified rather than merely asserted.
-  mrd_vals <- vapply(outcomes, function(oc) {
+  mrd_vals <- c(vapply(outcomes, function(oc) {
     r <- hd_all[[oc$var]]
     if (is.null(r$max_rel_dev)) NA_real_ else r$max_rel_dev
-  }, numeric(1L))
+  }, numeric(1L)), within$max_rel_dev)
+  mrd_labs <- c(short_labels_hd, LABEL_WITHIN_HD)
   mrd_txt <- if (all(is.na(mrd_vals))) "not available" else
     sprintf("%.1f\\%% (%s)", 100 * max(mrd_vals, na.rm = TRUE),
-            short_labels_hd[which.max(replace(mrd_vals, is.na(mrd_vals), -Inf))])
+            mrd_labs[which.max(replace(mrd_vals, is.na(mrd_vals), -Inf))])
 
   # Event-time windows of the fit behind the table (first outcome), not typed.
   egt_hd  <- hd_all[[outcomes[[1L]]$var]]$egt
   post_hd <- egt_hd[egt_hd >= 0]
   pre_hd  <- egt_hd[egt_hd < 0]
   notes_txt <- paste0(
-    "Sensitivity of \\citet{rambachan_roth_2023} on the headline estimate: ",
+    "Sensitivity of \\citet{rambachan_roth_2023} on the main specification: ",
     as_in_main(c("estimator", "covariates", "control group",
                  "inference"), capitalize = FALSE), "; event-study ",
-    "estimates and covariance of that headline estimate. Target: group-size-weighted ",
+    "estimates and covariance of that specification. Target: group-size-weighted ",
     "average post-treatment effect ($e=", min(post_hd), ",\\dots,", max(post_hd),
     "$), weights ", l_vec_txt,
     ", reproducing the simple ATT. $\\Sigma$ rescaled to reported bootstrap SEs ",
     "(max gap ", mrd_txt, "). Pre-treatment window: ", length(pre_hd), " leads ($e=",
     min(pre_hd), ",\\dots,", max(pre_hd), "$). ",
-    "``Breakdown $\\bar{M}$'' = smallest grid value where the robust CI contains zero"
+    "``Breakdown $\\bar{M}$'' = smallest grid value where the robust CI contains zero. ",
+    LABEL_WITHIN_HD, ": the within-country share of Table~\\ref{tab:within_share_wide}, ",
+    "$100 \\times E/S$; same target weights"
   )
   source_txt <- SOURCE_MAIN
 
@@ -1457,7 +1523,9 @@ make_honestdid_table <- function(hd_all, Mbarvec, outcomes, dir_tabs) {
 }
 
 make_honestdid_table(hd_all, Mbarvec_hd, outcomes,
-                     here("output", "tables", "cohorts_dropped"))
+                     here("output", "tables", "cohorts_dropped"),
+                     within = list(rm = hd_w$rm, breakdown = bd_rm_w,
+                                   max_rel_dev = hd_w$hin$max_rel_dev, l_vec = hd_w$hin$l_vec))
 
 # (ii) Breakdown Mbar by number of pre-treatment periods -----------------------
 if (!all(vapply(hd_pre, is.null, logical(1L)))) {
@@ -1503,7 +1571,7 @@ if (!all(vapply(hd_pre, is.null, logical(1L)))) {
     "Table~\\ref{tab:combined_wide_main}. ",
     paste(numPre_grid[-1L], collapse = "-/"), "-lead rows: the same estimates aggregated ",
     "over a longer pre-treatment window (seed 1242), for ", lab_of(PRIMARY_OUTCOMES),
-    " only; point estimates unchanged, SEs a new bootstrap draw. ",
+    " only; point estimates unchanged. ",
     if (all(np_break0))
       paste0(lab_of(np_vars), " already break at $\\bar{M} = 0$ with ", numPre_grid[1L],
              " leads, so their longer-window cells are left blank")
@@ -1545,13 +1613,16 @@ if (!all(vapply(hd_sd, is.null, logical(1L)))) {
                    as.data.frame(full_sd, stringsAsFactors = FALSE),
                    stringsAsFactors = FALSE)
   rownames(tab_sd) <- NULL
+  stopifnot(nrow(hd_w$sd) == length(Mvec_sd))
+  tab_sd[[LABEL_WITHIN_HD]] <- c(mapply(fmt_ci_hd, hd_w$sd$lb, hd_w$sd$ub), bd_sd_w)
 
   xt_sd  <- xtable(tab_sd, label = "tab:honestdid_sd")
   raw_sd <- capture.output(
     print(xt_sd, include.rownames = FALSE, booktabs = TRUE,
           sanitize.text.function = identity, size = "\\small", floating = FALSE))
 
-  sd_methods <- unique(unlist(lapply(hd_sd, `[[`, "method")))
+  sd_methods <- unique(c(unlist(lapply(hd_sd, `[[`, "method")),
+                         as.character(hd_w$sd$method)))
   notes_sd <- paste0(
     "Smoothness restriction $\\Delta^{SD}(M)$ of \\citet{rambachan_roth_2023}: the ",
     "differential trend's slope changes by at most $M$ between periods; $M = 0$ still ",
@@ -1559,8 +1630,8 @@ if (!all(vapply(hd_sd, is.null, logical(1L)))) {
     paste(sd_methods, collapse = "/"), " method, 5\\% level. Estimator, estimates, ",
     "covariance and target weights as Table~\\ref{tab:honestdid}; four pre-treatment ",
     "leads ($e = -5,\\dots,-2$). ``Breakdown $M$'' = smallest grid value at which the ",
-    "robust CI contains zero. $M$ is in outcome units per period, not comparable ",
-    "across the log and share columns"
+    "robust CI contains zero. $M$ is in outcome units per period (percentage points for ",
+    "the two share columns), not comparable across the log and share columns"
   )
 
   write_tex_float(
@@ -1573,78 +1644,6 @@ if (!all(vapply(hd_sd, is.null, logical(1L)))) {
     source_text   = SOURCE_MAIN)
 }
 
-# (iv) Within-country share -- tables/cohorts_dropped/honestdid_within.tex ----
-# Same restrictions, grids, covariance construction and target weights as the
-# tables above, on the within-share fit stored by 07 (run_all.R runs 07 before
-# 04). The RNG state is preserved around this block, so nothing after it moves.
-path_within_hd <- here("output", "fits", "within_share_dr_bs.rds")
-if (!file.exists(path_within_hd))
-  stop("Stored within-share fit not found: ", path_within_hd,
-       " (written by 07_principal_and_share.R, which run_all.R runs before 04).")
-fit_w_hd <- readRDS(path_within_hd)
-if (is.null(fit_w_hd$l_vec_simple) || is.null(fit_w_hd$agg_dynamic) || is.null(fit_w_hd$gt_boot))
-  stop("Stored within-share fit lacks l_vec_simple/agg_dynamic/gt_boot: rerun 07.")
-hd_w <- withr::with_preserve_seed({
-  hin_w <- hd_inputs_from_fit(fit_w_hd, numPre_grid[1L])
-  if (is.null(hin_w)) stop("HonestDiD inputs unavailable for the within-country share")
-  rm_w <- createSensitivityResults_relativeMagnitudes(
-    betahat = hin_w$betahat, sigma = hin_w$sigma, numPrePeriods = hin_w$numPre,
-    numPostPeriods = hin_w$numPost, Mbarvec = Mbarvec_hd, l_vec = hin_w$l_vec, alpha = 0.05)
-  sd_w <- createSensitivityResults(
-    betahat = hin_w$betahat, sigma = hin_w$sigma, numPrePeriods = hin_w$numPre,
-    numPostPeriods = hin_w$numPost, Mvec = Mvec_sd, l_vec = hin_w$l_vec, alpha = 0.05)
-  orig_w <- constructOriginalCS(
-    betahat = hin_w$betahat, sigma = hin_w$sigma, numPrePeriods = hin_w$numPre,
-    numPostPeriods = hin_w$numPost, l_vec = hin_w$l_vec, alpha = 0.05)
-  list(hin = hin_w, rm = rm_w, sd = sd_w, orig = orig_w)
-})
-bd_rm_w <- breakdown_value(hd_w$rm$lb, hd_w$rm$ub, Mbarvec_hd[seq_len(nrow(hd_w$rm))])
-bd_sd_w <- breakdown_value(hd_w$sd$lb, hd_w$sd$ub, Mvec_sd[seq_len(nrow(hd_w$sd))])
-message(sprintf(paste0("  Within-country share: ATT %.4f | conventional CI [%.3f, %.3f] | ",
-                       "RM breakdown Mbar = %s | SD breakdown M = %s | vcov gap %.4f"),
-                fit_w_hd$att, hd_w$orig$lb, hd_w$orig$ub, bd_rm_w, bd_sd_w,
-                hd_w$hin$max_rel_dev))
-egt_w  <- hd_w$hin$egt
-post_w <- egt_w[egt_w >= 0]
-pre_w  <- egt_w[egt_w < 0]
-within_hd_lines <- c(
-  "\\begin{tabular}{lc}",
-  "\\toprule",
-  " & Within-country adaptation share (pp) \\\\",
-  "\\midrule",
-  sprintf("Conventional 95\\%% CI & %s \\\\", fmt_ci_hd(hd_w$orig$lb, hd_w$orig$ub)),
-  "\\midrule",
-  "\\multicolumn{2}{l}{\\textit{Panel A: relative magnitudes, $\\Delta^{RM}(\\bar{M})$}} \\\\",
-  sprintf("$\\bar{M} = %.2f$ & %s \\\\", Mbarvec_hd[seq_len(nrow(hd_w$rm))],
-          mapply(fmt_ci_hd, hd_w$rm$lb, hd_w$rm$ub)),
-  sprintf("Breakdown $\\bar{M}$ & %s \\\\", bd_rm_w),
-  "\\midrule",
-  "\\multicolumn{2}{l}{\\textit{Panel B: smoothness, $\\Delta^{SD}(M)$}} \\\\",
-  sprintf("$M = %.2f$ & %s \\\\", Mvec_sd[seq_len(nrow(hd_w$sd))],
-          mapply(fmt_ci_hd, hd_w$sd$lb, hd_w$sd$ub)),
-  sprintf("Breakdown $M$ & %s \\\\", bd_sd_w),
-  "\\bottomrule", "\\end{tabular}"
-)
-write_tex_float(
-  here("output", "tables", "cohorts_dropped", "honestdid_within.tex"),
-  caption_title = paste0("HonestDiD robust 95\\% CI for the within-country adaptation share"),
-  label         = "tab:honestdid_within",
-  tabular_lines = within_hd_lines,
-  notes_text    = paste0(
-    "Sensitivity of \\citet{rambachan_roth_2023} on the within-country share column of ",
-    "Table~\\ref{tab:within_share_wide} ($100 \\times E/S$, percentage points); ",
-    as_in_main(c("estimator", "covariates", "control group",
-                 "inference"), capitalize = FALSE), ". Target: ",
-    "group-size-weighted average post-treatment effect ($e=", min(post_w), ",\\dots,",
-    max(post_w), "$), weights (", paste(sprintf("%.4f", hd_w$hin$l_vec), collapse = ", "),
-    "), reproducing the simple ATT of ", sprintf("%.4f", fit_w_hd$att), ". $\\Sigma$ rescaled ",
-    "to the reported bootstrap SEs (max gap ", sprintf("%.1f\\%%", 100 * hd_w$hin$max_rel_dev),
-    "). Pre-treatment window: ", length(pre_w), " leads ($e=", min(pre_w), ",\\dots,",
-    max(pre_w), "$). Grids, confidence-set methods and breakdown definitions as ",
-    "Tables~\\ref{tab:honestdid} and \\ref{tab:honestdid_sd}; $M$ is in percentage points ",
-    "per period. Conventional CI: the same estimate and covariance without a restriction"),
-  source_text   = SOURCE_MAIN)
-
 message("\n=== Section 20 complete ===\n")
 
 
@@ -1656,9 +1655,7 @@ message("\n=== Section 20 complete ===\n")
 message("\n=== Section 25: Placebo test (treatment shifted -2 years) ===\n")
 
 dir_figs_placebo <- here("output", "figures", "placebo")
-dir_tabs_placebo <- here("output", "tables",  "placebo")
 dir.create(dir_figs_placebo, recursive = TRUE, showWarnings = FALSE)
-dir.create(dir_tabs_placebo, recursive = TRUE, showWarnings = FALSE)
 
 did_panel_placebo <- bind_rows(
   did_panel_full %>%
@@ -1795,24 +1792,9 @@ if (!is.null(gt_placebo)) {
       Lower      = agg_d_plac$att.egt - cv_p * agg_d_plac$se.egt,
       Upper      = agg_d_plac$att.egt + cv_p * agg_d_plac$se.egt,
       stringsAsFactors = FALSE
-    ) %>% filter(!is.na(SE), SE > 1e-10)
+    )
 
-    p_placebo <- ggplot(es_plac, aes(x = event_time, y = ATT)) +
-      geom_hline(yintercept = 0, colour = "grey40", linetype = "dashed", linewidth = 0.4) +
-      geom_vline(xintercept = -0.5, colour = "grey60", linetype = "dotted", linewidth = 0.4) +
-      geom_linerange(aes(ymin = Lower, ymax = Upper),
-                     linewidth = 0.6, alpha = 0.8, colour = "#2166ac") +
-      geom_point(size = 2.5, colour = "#2166ac") +
-      labs(
-        title    = NULL, subtitle = NULL,  # titles go in the LaTeX caption
-        x        = "Event time (years relative to placebo date)",
-        y        = "ATT — log(adaptation commitments)"
-      ) +
-      theme_minimal() +
-      theme(
-        text             = element_text(family = "serif", size = 11),
-        panel.grid.minor = element_blank()
-      )
+    p_placebo <- es_plot_fig2(es_plac, x_lab = "Years relative to the placebo date")
     ggsave(file.path(dir_figs_placebo, "did_placebo_es.png"),
            p_placebo, width = 10, height = 5, dpi = 300)
     message("Saved: ", file.path(dir_figs_placebo, "did_placebo_es.png"))
@@ -1826,80 +1808,8 @@ if (!is.null(gt_placebo)) {
     n_obs_p    <- nrow(rows_p)
     n_cty_p    <- length(unique(rows_p$country_id))
 
-    pre_rows_p <- did_panel_placebo %>%
-      filter(cohort_year > 0, year < cohort_year, !is.na(commitments))
-    mean_pre_p <- mean(pre_rows_p$commitments, na.rm = TRUE)
-    # Suppress the naive back-transform unless the ATT is significant
-    # at 5% (|t| > 1.960) -- see make_wide_table() for the full rationale.
-    is_sig5_p <- !is.na(t_p) && abs(t_p) > 1.960
-    implied_p <- if (is_sig5_p) (exp(att_p) - 1) * mean_pre_p else NA_real_
-    implied_fmt_p <- if (is.na(implied_p)) "---" else sprintf("%.1f", implied_p)
-
-    row_labels_p <- c(
-      "ATT", "SE", "$t$-statistic",
-      "Mean (pre-treat., USD M)",
-      "Implied effect (USD M, exp(ATT)$-$1 $\\times$ pre-treat.\\ mean)",
-      "Observations", "Countries",
-      "Pre-trend $\\chi^2$", "Pre-trend $p$", "\\texttt{did} pre-test $p$",
-      "\\midrule Estimator", "Control group", "Bootstrap SE"
-    )
-    col_vals_p <- c(
-      paste0(sprintf("%.4f", att_p), stars_p),
-      sprintf("(%.4f)", se_p),
-      sprintf("%.3f", t_p),
-      sprintf("%.1f", mean_pre_p),
-      implied_fmt_p,
-      format(n_obs_p, big.mark = ","),
-      as.character(n_cty_p),
-      sprintf("%.3f", pt_plac$stat),
-      sprintf("%.3f", pt_plac$pval),
-      if (is.na(pt_plac$Wpval_did)) "---" else sprintf("%.3f", pt_plac$Wpval_did),
-      "CS (2021)", "Never-treated",
-      if (bs_plac) "Yes" else paste0("No (", em_plac, ")")
-    )
-
-    tab_plac <- data.frame(
-      ` ` = row_labels_p,
-      `Placebo (treatment shifted $-2$ years)` = col_vals_p,
-      check.names = FALSE, stringsAsFactors = FALSE
-    )
-
-    xtab_plac <- xtable(tab_plac, label = "tab:placebo")
-    align(xtab_plac) <- "llc"
-
-    raw_plac <- capture.output(
-      print(xtab_plac, include.rownames = FALSE, booktabs = TRUE,
-            sanitize.text.function = identity, size = "\\small",
-            floating = FALSE)
-    )
-
-    # Estimator and SE are written out when they differ from Table 2's.
-    notes_plac <- paste0(
-      as_in_main(c(if (em_plac == "dr") "estimator", "covariates", "control group",
-                   if (bs_plac) "inference",
-                   "pre-trend tests", "implied effect", "significance stars")), ". ",
-      if (em_plac != "dr") "Estimator: CS\\,(2021) regression adjustment. " else "",
-      if (!bs_plac) "Analytical SE. " else "",
-      sub("\\. $", "",
-          wpval_reconciliation(pre_egt = pt_plac$leads, df_did = pt_plac$df_did,
-                               n_clusters = n_cty_p, wpval_did = pt_plac$Wpval_did,
-                               pval_wald = pt_plac$pval,
-                               wpval_reason = pt_plac$wpval_reason,
-                               ginv_used = pt_plac$ginv_used, df = pt_plac$df))
-    )
-    source_plac <- SOURCE_MAIN
-
-    out_path_plac <- file.path(dir_tabs_placebo, "att_placebo.tex")
-    write_tex_float(
-      out_path_plac,
-      "Placebo test: treatment date assigned 2 years before actual NAP adoption",
-      "tab:placebo",
-      raw_plac,
-      notes_plac,
-      source_plac
-    )
     # Persist this fit so that 13_cohort_anticipation.R can place the
-    # published -2-year placebo at the foot of its -3/-4/-5 ladder without
+    # -2-year placebo at the foot of its -3/-4/-5 ladder without
     # re-estimating it (which would print a second SE for one specification).
     saveRDS(list(
       shift_years = 2L,
@@ -2093,26 +2003,9 @@ if (!file.exists(mit_panel_path)) {
           Lower      = agg_d_mit$att.egt - cv_m * agg_d_mit$se.egt,
           Upper      = agg_d_mit$att.egt + cv_m * agg_d_mit$se.egt,
           stringsAsFactors = FALSE
-        ) %>% filter(!is.na(SE), SE > 1e-10)
+        )
 
-        p_mit <- ggplot(es_mit, aes(x = event_time, y = ATT)) +
-          geom_hline(yintercept = 0, colour = "grey40", linetype = "dashed",
-                     linewidth = 0.4) +
-          geom_vline(xintercept = -0.5, colour = "grey60", linetype = "dotted",
-                     linewidth = 0.4) +
-          geom_linerange(aes(ymin = Lower, ymax = Upper),
-                         linewidth = 0.6, alpha = 0.8, colour = "#8E44AD") +
-          geom_point(size = 2.5, colour = "#8E44AD") +
-          labs(
-            title    = NULL, subtitle = NULL,  # titles go in the LaTeX caption
-            x        = "Event time (years relative to NAP adoption)",
-            y        = "ATT — log(mitigation commitments)"
-          ) +
-          theme_minimal() +
-          theme(
-            text             = element_text(family = "serif", size = 11),
-            panel.grid.minor = element_blank()
-          )
+        p_mit <- es_plot_fig2(es_mit, colour = "#8E44AD")
         ggsave(file.path(dir_figs_mit, "did_mitigation_es.png"),
                p_mit, width = 10, height = 5, dpi = 300)
         message("Saved: ", file.path(dir_figs_mit, "did_mitigation_es.png"))
@@ -2182,7 +2075,7 @@ if (!file.exists(mit_panel_path)) {
           as_in_main(c(if (em_mit == "dr") "estimator", "covariates", "control group",
                        if (bs_mit) "inference",
                        "pre-trend tests", "implied effect", "significance stars")), ". ",
-          if (em_mit != "dr") "Estimator: CS\\,(2021) regression adjustment. " else "",
+          if (em_mit != "dr") "Estimator: CS\\,(2021) OR. " else "",
           if (!bs_mit) "Analytical (IF) SE. " else "",
           sub("\\. $", "",
               wpval_reconciliation(pre_egt = pt_mit$leads, df_did = pt_mit$df_did,
@@ -2350,6 +2243,31 @@ if (is.null(res_dcdh)) {
                   ifelse(is.na(f_joint_plac), "not returned", sprintf("%.4f", f_joint_plac)),
                   ifelse(is.na(p_joint_plac), "not returned", sprintf("%.4f", p_joint_plac))))
 
+  # The two share outcomes, same specification: their average total effects
+  # close the table and feed tab:robust_summary.
+  res_dcdh_shares <- list()
+  for (y_dcdh in c("share_adapt", "share_within")) {
+    set.seed(1242)  # Seed rule: seed immediately before the estimator
+    res_dcdh_shares[[y_dcdh]] <- did_multiplegt_dyn(
+      df = did_panel_dcdh, outcome = y_dcdh, group = "country_id", time = "year",
+      treatment = "treated_post", effects = 4, placebo = 3,
+      controls = c("ge_est", "log_population"), graph_off = TRUE)
+  }
+  share_rows_dcdh <- do.call(rbind, lapply(names(res_dcdh_shares), function(y) {
+    ate <- res_dcdh_shares[[y]]$results$ATE
+    message(sprintf("  dCDH Av. total effect, %s = %.4f (SE %.4f)", y,
+                    pull_col(ate, 1L, "Estimate"), pull_col(ate, 1L, "SE")))
+    data.frame(
+      ` `        = paste0(if (y == "share_adapt") "\\midrule " else "", "Av. total effect, ",
+                          c(share_adapt = "global share (pp)",
+                            share_within = "within-country share (pp)")[[y]]),
+      Estimate   = sprintf("%.3f", pull_col(ate, 1L, "Estimate")),
+      SE         = sprintf("(%.3f)", pull_col(ate, 1L, "SE")),
+      `95\\% CI` = fmt_ci(pull_col(ate, 1L, "LB CI"), pull_col(ate, 1L, "UB CI")),
+      N          = format(round(pull_col(ate, 1L, "N")), big.mark = ","),
+      check.names = FALSE, stringsAsFactors = FALSE)
+  }))
+
   dcdh_tab <- rbind(dcdh_tab, data.frame(
     ` `        = paste0("\\midrule Joint placebo test ($", n_plac, "$ placebos)"),
     Estimate   = if (is.na(f_joint_plac)) "---" else sprintf("%.3f", f_joint_plac),
@@ -2357,7 +2275,7 @@ if (is.null(res_dcdh)) {
     `95\\% CI` = if (is.na(p_joint_plac)) "$p$ = ---" else sprintf("$p$ = %.3f", p_joint_plac),
     N          = "---",
     check.names = FALSE, stringsAsFactors = FALSE
-  ))
+  ), share_rows_dcdh)
 
   xtab_dcdh <- xtable(dcdh_tab, label = "tab:dcdh")
   align(xtab_dcdh) <- "llcccc"   # dropped row-name col + 5 body cols
@@ -2373,7 +2291,10 @@ if (is.null(res_dcdh)) {
     "never- and not-yet-treated controls; same controls as the CS main specification. ",
     "Effect $+\\ell$ is event time $e = \\ell - 1$ of the Callaway--Sant'Anna event studies ",
     "($\\ell = 1$ is the adoption year, $e = 0$), and Placebo $-\\ell$ is $e = -1 - \\ell$. ",
-    "Last row: package's own joint test that all ", n_plac, " placebo estimates are ",
+    "Outcome: log(adaptation commitments), except the last two rows, which apply the same ",
+    "specification to the global share and to the within-country share ($100 \\times E/S$, ",
+    "Table~\\ref{tab:within_share_wide}), both in pp. ",
+    "Joint placebo test: package's own joint test that all ", n_plac, " placebo estimates are ",
     "zero ($p$-value in the CI column), accounting for the ",
     "covariance across placebo horizons. The package (DIDmultiplegtDYN ",
     as.character(utils::packageVersion("DIDmultiplegtDYN")),
@@ -2437,6 +2358,14 @@ if (is.null(res_dcdh)) {
          p_dcdh, width = 9, height = 5.5, dpi = 300)
   message("Saved: ", file.path(dir_figs_dcdh, "did_dcdh_es.png"))
 }
+
+# dCDH row of tab:robust_summary: the three average total effects of tab:dcdh.
+dcdh_ate <- function(res) {
+  ate <- res$results$ATE
+  list(att = as.numeric(ate[1L, "Estimate"]), se = as.numeric(ate[1L, "SE"]))
+}
+robust_rows$dcdh <- lapply(c(list(log_commits = res_dcdh), res_dcdh_shares),
+                           function(r) do.call(robust_cell, dcdh_ate(r)))
 
 message("\n=== Section A complete ===\n")
 
@@ -2591,14 +2520,15 @@ stopifnot(n_distinct(did_panel_noindia$recipient_name) ==
             n_distinct(did_panel_full$recipient_name[
               !(did_panel_full$cohort_year %in% thin_cohorts)]) - 1L)
 
-make_wide_table(
+robust_rows$noindia <- lapply(make_wide_table(
   did_panel_in  = did_panel_noindia,
   retain_thin   = FALSE,
-  outcomes      = outcomes,
+  outcomes      = c(outcomes, list(oc_within)),
   dir_tabs      = file.path(here("output", "tables"), "outlier_india"),
-  tex_label     = "tab:combined_wide_noindia",
-  caption_spec  = "main specification excluding India (largest recipient)"
-)
+  tex_label     = "tab:robust_summary",
+  caption_spec  = "main specification excluding India",
+  write         = FALSE
+), robust_cell_wide)
 
 message("\n=== Section C complete ===\n")
 
@@ -2624,14 +2554,16 @@ message("Recipients dropped (not observed every year): ",
                       unique(did_panel_balanced$recipient_name)), collapse = ", "))
 stopifnot(nrow(did_panel_balanced) == n_distinct(did_panel_balanced$recipient_name) * n_years_panel)
 
-make_wide_table(
+robust_rows$balanced <- lapply(make_wide_table(
   did_panel_in  = did_panel_balanced,
   retain_thin   = FALSE,
-  outcomes      = outcomes,
+  outcomes      = c(outcomes, list(oc_within)),
   dir_tabs      = file.path(here("output", "tables"), "balanced_panel"),
-  tex_label     = "tab:combined_wide_balanced",
-  caption_spec  = "main specification, balanced panel, covariates at $g-1$"
-)
+  tex_label     = "tab:robust_summary",
+  caption_spec  = "main specification, balanced panel, covariates at $g-1$",
+  write         = FALSE
+), robust_cell_wide)
+robust_rows$balanced_n <- c(recipients = n_distinct(did_panel_balanced$country_id))
 
 # ==============================================================================
 # SECTION E. Panel starting in 2010
@@ -2651,12 +2583,21 @@ message(sprintf("2009: %d of %d panel recipients record any adaptation-marked co
                 sum(crs_positive(panel_2009$commitments), na.rm = TRUE),
                 n_distinct(panel_2009$recipient_name)))
 
-make_wide_table(
+robust_rows$panel2010 <- lapply(make_wide_table(
   did_panel_in  = did_panel_2010,
   retain_thin   = FALSE,
-  outcomes      = outcomes,
+  outcomes      = c(outcomes, list(oc_within)),
   dir_tabs      = file.path(here("output", "tables"), "panel_2010"),
-  tex_label     = "tab:combined_wide_2010",
-  caption_spec  = "main specification, panel 2010--2024"
-)
+  tex_label     = "tab:robust_summary",
+  caption_spec  = "main specification, panel 2010--2024",
+  write         = FALSE
+), robust_cell_wide)
+
+for (nm in names(robust_rows)) if (is.list(robust_rows[[nm]]))
+  message(sprintf("  tab:robust_summary row %-13s %s", nm, paste(vapply(names(robust_rows[[nm]]),
+    function(v) sprintf("%s %s %s p=%s", v, robust_rows[[nm]][[v]]$att_fmt,
+                        robust_rows[[nm]][[v]]$se_fmt, robust_rows[[nm]][[v]]$p_fmt),
+    character(1L)), collapse = " | ")))
+saveRDS(robust_rows, file.path(FITS_DIR, "robust_rows_04.rds"))
+message("  [fit] Saved: ", file.path(FITS_DIR, "robust_rows_04.rds"))
 message("\n=== 04_robustness.R: complete ===\n")

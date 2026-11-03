@@ -971,7 +971,7 @@ write_tex_float(
     "CRS 41010 only. Fund-flag: GCF, Adaptation Fund, or GEF (LDC Fund under GEF). ",
     "``Of which'' columns are diagnostic: ``planning-only title'' = matched only via the ",
     "generic co-occurrence; ``purpose 15110/43010 alone'' = shares under the narrowed rule's ",
-    "excluded codes (Table~\\ref{tab:remarking_exclusions_regex_comparison} has the ATT ",
+    "excluded codes (Table~\\ref{tab:remarking_exclusions} has the ATT ",
     "sensitivity). Categories not mutually exclusive. Panel B groups follow the main ",
     "estimation sample: treated = ", sum(group_lookup$cohort_year >= 2021),
     " adopters with adoption year $\\geq$ 2021, never-treated = ", sum(group_lookup$cohort_year == 0),
@@ -1113,7 +1113,7 @@ t_est_start <- Sys.time()
 log_msg("Section 11a: margin decomposition estimation")
 
 margin_specs <- list(
-  list(var = "log_commits",            raw = "commitments",         label = "Headline (all marked)"),
+  list(var = "log_commits",            raw = "commitments",         label = "Main specification (all marked)"),
   list(var = "log_commit_new",         raw = "commit_new",          label = "New activities"),
   list(var = "log_commit_cont_marked", raw = "commit_cont_marked",  label = "Continuing, already marked"),
   list(var = "log_commit_remarked",    raw = "commit_remarked",     label = "Re-marked (previously unmarked)")
@@ -1189,7 +1189,7 @@ names(counts_results) <- vapply(counts_specs, `[[`, character(1L), "label")
 log_msg("Section 11c: NAP-support/readiness/fund exclusion estimation")
 
 exclusion_specs <- list(
-  list(var = "log_commits",                  raw = "commitments",            label = "Headline (all marked)"),
+  list(var = "log_commits",                  raw = "commitments",            label = "Main specification (all marked)"),
   list(var = "log_commit_excl_title",        raw = "commit_excl_title",      label = "Excl. title-flagged"),
   list(var = "log_commit_excl_purpose",      raw = "commit_excl_purpose",    label = "Excl. purpose-flagged"),
   list(var = "log_commit_excl_fund",         raw = "commit_excl_fund",       label = "Excl. fund-flagged"),
@@ -1374,10 +1374,19 @@ write_tex_float(
   source_text = "OECD CRS activity-level microdata (all purposes for the denominator; Rio adaptation marker 1 or 2 for the numerator)"
 )
 
+# Narrow-flag columns (exclusion_specs) with the broad-flag variant of the
+# title, purpose and all-three exclusions placed next to each narrow column;
+# the fund flag is the same under both definitions.
+excl_cols <- list()
+for (lbl in names(exclusion_results)) {
+  excl_cols[[lbl]] <- exclusion_results[[lbl]]
+  if (lbl %in% names(exclusion_old_results))
+    excl_cols[[paste0(lbl, " (broad)")]] <- exclusion_old_results[[lbl]]
+}
 exclusions_tex <- build_wide_tex_table(
   row_labels = row_labels_est[row_labels_est != "Share of pre-treat.\\ marked commitments (\\%)"],
-  col_labels = vapply(exclusion_specs, `[[`, character(1L), "label"),
-  col_data   = lapply(exclusion_results, function(res) c(
+  col_labels = names(excl_cols),
+  col_data   = lapply(excl_cols, function(res) c(
     paste0(sprintf("%.4f", res$att), fmt_stars(res$t)),
     sprintf("(%.4f)", res$se),
     sprintf("%.3f", res$t),
@@ -1392,65 +1401,21 @@ exclusions_tex <- build_wide_tex_table(
 )
 write_tex_float(
   out_path      = here("output", "tables", "remarking", "att_remarking_exclusions.tex"),
-  caption_title = "Re-estimating the headline effect excluding NAP-support, readiness, and climate-fund activity",
+  caption_title = "Re-estimating the main-specification effect excluding NAP-support, readiness, and climate-fund activity",
   label         = "tab:remarking_exclusions",
   tabular_lines = exclusions_tex,
   notes_text    = paste0(
     as_in_main(c("estimator", "covariates", "control group", "inference", "significance stars")),
     "; sample as in Table~\\ref{tab:remarking_margins}. ",
     "Title/purpose/fund-flag definitions: see notes to ",
-    "Table~\\ref{tab:remarking_flag_shares_by_group}. ``Multilateral cell, excl.\\ ",
-    "fund-flagged'' recomputes log multilateral adaptation commitments without the ",
-    "fund-flagged activities. ",
+    "Table~\\ref{tab:remarking_flag_shares_by_group}. ``(broad)'' columns use broader title and ",
+    "purpose flags: title matches ``national adaptation plan''/``NAP''/``readiness''/``NAP-''/",
+    "``adaptation plan''/``planning'' (bare); purpose $\\in\\{41010,15110,43010\\}$. ",
+    "``Multilateral cell, excl.\\ fund-flagged'' recomputes log multilateral adaptation ",
+    "commitments without the fund-flagged activities. ",
     neg_cells_note(did_panel_126, "commit_multi_excl_fund", "the multilateral cell excl.\\ fund-flagged"),
     "Flag coverage: by year, Panel~A of Table~\\ref{tab:remarking_flag_shares_by_group}; ",
-    "by treatment group, its Panel~B", ginv_note_res(exclusion_results, names(exclusion_results))
-  ),
-  source_text = "OECD CRS activity-level microdata (Rio adaptation marker 1 or 2); UNFCCC NAP Central"
-)
-
-## --- Table 3b (diagnostic): broad vs. narrow title/purpose regex -------------
-exclusions_compare_labels <- c(
-  "Excl. title-flagged [broad]", "Excl. title-flagged [narrow]",
-  "Excl. purpose-flagged [broad]", "Excl. purpose-flagged [narrow]",
-  "Excl. all three [broad]", "Excl. all three [narrow]"
-)
-exclusions_compare_results <- list(
-  exclusion_old_results[["Excl. title-flagged"]],   exclusion_results[["Excl. title-flagged"]],
-  exclusion_old_results[["Excl. purpose-flagged"]], exclusion_results[["Excl. purpose-flagged"]],
-  exclusion_old_results[["Excl. all three"]],       exclusion_results[["Excl. all three"]]
-)
-
-exclusions_compare_tex <- build_wide_tex_table(
-  row_labels = row_labels_est[row_labels_est != "Share of pre-treat.\\ marked commitments (\\%)"],
-  col_labels = exclusions_compare_labels,
-  col_data   = lapply(exclusions_compare_results, function(res) c(
-    paste0(sprintf("%.4f", res$att), fmt_stars(res$t)),
-    sprintf("(%.4f)", res$se),
-    sprintf("%.3f", res$t),
-    if (is.na(res$mean_pre)) "---" else sprintf("%.2f", res$mean_pre),
-    format(res$n_obs, big.mark = ","),
-    as.character(res$n_country),
-    fmt_req(res$pretrend_stat, "pre-trend statistic"),
-    fmt_req(res$pretrend_pval, "pre-trend p-value"),
-    fmt_req(res$did_wpval, "did Wpval")
-  )),
-  tex_label = "tab:remarking_exclusions_regex_comparison"
-)
-write_tex_float(
-  out_path      = here("output", "tables", "remarking", "att_remarking_exclusions_regex_comparison.tex"),
-  caption_title = "Sensitivity of the exclusion ATTs to the title and purpose flag definitions",
-  label         = "tab:remarking_exclusions_regex_comparison",
-  tabular_lines = exclusions_compare_tex,
-  notes_text    = paste0(
-    as_in_main(c("estimator", "covariates", "control group", "inference", "significance stars")),
-    "; sample as in Table~\\ref{tab:remarking_exclusions}. ",
-    "``[broad]'' = broad flag definitions: title matches ``national adaptation plan''/``NAP''/",
-    "``readiness''/``NAP-''/``adaptation plan''/``planning'' (bare); purpose ",
-    "$\\in\\{41010,15110,43010\\}$. ``[narrow]'' = the definitions of ",
-    "Table~\\ref{tab:remarking_exclusions}, whose estimates it reproduces. ",
-    "Fund-flagged cells omitted (the fund flag is the same under both definitions)",
-    ginv_note_res(exclusions_compare_results, exclusions_compare_labels)
+    "by treatment group, its Panel~B", ginv_note_res(excl_cols, names(excl_cols))
   ),
   source_text = "OECD CRS activity-level microdata (Rio adaptation marker 1 or 2); UNFCCC NAP Central"
 )

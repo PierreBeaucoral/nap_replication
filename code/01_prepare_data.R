@@ -2,7 +2,7 @@
 # 01_prepare_data.R
 # Author : Pierre Beaucoral
 # Date   : 2026-06-10
-# Purpose: All data construction (plus three scope tables):
+# Purpose: All data construction (plus two scope tables):
 #            CRS → adaptation panel → NAP merge;
 #            WDI/WGI merge, IMF adjustments, C/V orientation, derived vars
 #              → simple_panel_wgi.csv;
@@ -35,8 +35,8 @@
 #                                     control specifications use EM-DAT
 #                                     (data/raw/emdat/emdat.csv), built by
 #                                     14_hazard_napa.R itself, not by this file.
-#   output/tables/scope/flow_type_shares.tex, regional_exclusion.tex,
-#   sample_funnel.tex                — scope statements (§22)
+#   output/tables/scope/flow_type_shares.tex, sample_funnel.tex
+#                                    — scope statements (§22)
 ##############################################################################
 
 ##############################################################################
@@ -1336,21 +1336,8 @@ message(sprintf(
   nrow(regional_excl_tab), regional_total_share
 ))
 
-regional_lines <- c(
-  "\\begin{tabular}{llrr}",
-  "\\toprule",
-  "Recipient code & Recipient name & Commitments (USD M) & Share (\\%) \\\\",
-  "\\midrule",
-  paste0(regional_excl_tab$RecipientCode, " & ", esc_tex(regional_excl_tab$RecipientName), " & ",
-         fmt2(regional_excl_tab$commitments), " & ", fmt2(regional_excl_tab$share_pct), " \\\\"),
-  "\\midrule",
-  paste0("\\multicolumn{2}{l}{Total excluded} & ", fmt2(sum(regional_excl_tab$commitments)),
-         " & ", fmt2(regional_total_share), " \\\\"),
-  "\\bottomrule",
-  "\\end{tabular}"
-)
-writeLines(regional_lines, here("output", "tables", "scope", "regional_exclusion.tex"))
-message("Wrote: output/tables/scope/regional_exclusion.tex")
+message("Excluded regional/unspecified recipient codes (USD M, share of the pre-exclusion total):")
+message(paste(capture.output(print(as.data.frame(regional_excl_tab), row.names = FALSE)), collapse = "\n"))
 
 ## --- Recipient code 860 (FSM) in the panel ----------------------------------
 fsm_commit <- sum(rio_scope_window$USD_Commitment_Defl[rio_scope_window$RecipientCode == 860],
@@ -1372,31 +1359,36 @@ message(sprintf(
 ## --- Sample funnel (documents the full construction
 ## chain from raw adaptation-marked CRS rows to the final estimation panel).
 n_regional_codes_used <- n_distinct(regional_excl_tab$RecipientCode)
+# Largest excluded code, stated in the funnel (CRS code 9998).
+bilat_unspec <- regional_excl_tab[regional_excl_tab$RecipientCode == 9998, ]
+stopifnot(nrow(bilat_unspec) == 1L, bilat_unspec$RecipientName == "Bilateral, unspecified")
+# Mapping the remaining recipient names to ISO3 codes drops no country and no
+# commitment, so it is checked here rather than shown as a funnel row.
+n_countries_named <- n_distinct(rio_scope_window$RecipientName[!rio_scope_window$RecipientCode %in% regionalflows])
+stopifnot(n_adaptation_aid_countries == n_countries_named)
 funnel <- data.frame(
   stage = c(
     "Raw adaptation-marked commitments (Rio marker 1 or 2), 2009--2024, all recipient codes",
     paste0("After dropping regional and unspecified recipient codes (",
            n_regional_codes_used, " codes with nonzero commitments, of ",
-           length(regionalflows), " excluded codes)"),
-    paste0("After mapping recipients to ISO3 country codes (Kosovo and the ",
-           "Federated States of Micronesia matched by hand)"),
+           length(regionalflows), " excluded codes; of which Bilateral, unspecified: USD ",
+           fmt2(bilat_unspec$commitments), " M, ", sprintf("%.1f", bilat_unspec$share_pct),
+           "\\% of the raw total)"),
     paste0("Recipient-year panel after dropping years with missing controls ",
            "(government effectiveness, population)")
   ),
   commitments_usd_m = c(
     total_pre_exclusion,
     total_pre_exclusion - sum(regional_excl_tab$commitments),
-    NA_real_,  # commitments unaffected by ISO3 mapping once regional codes are already dropped
     sum(aggregated$commitments, na.rm = TRUE)
   ),
   n_countries = c(
     NA_integer_,
-    n_distinct(rio_scope_window$RecipientName[!rio_scope_window$RecipientCode %in% regionalflows]),
-    n_adaptation_aid_countries,
+    n_countries_named,
     n_distinct(aggregated$recipient_iso)
   )
 )
-message("\n--- Sample funnel (regional exclusion -> ISO3 mapping -> listwise deletion) ---")
+message("\n--- Sample funnel (regional exclusion -> listwise deletion) ---")
 message(paste(capture.output(print(funnel, row.names = FALSE)), collapse = "\n"))
 
 funnel_lines <- c(
@@ -1507,4 +1499,3 @@ message("  data/processed/donor_totals.csv")
 message("  data/processed/donor_recipient_year_adaptation.csv")
 message("  data/processed/emergency_response_panel.csv")
 message("  output/tables/scope/flow_type_shares.tex")
-message("  output/tables/scope/regional_exclusion.tex")

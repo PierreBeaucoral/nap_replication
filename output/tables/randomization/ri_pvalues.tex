@@ -18,12 +18,18 @@ Assignment, stratified (WB region) & 0.3036 & 0.070 & 0.037 & 2000 & 0 & 0.1690 
 Timing (within adopters) & 0.3356 & 0.096 & 0.095 & 2000 & 0 & 0.1436 & [-0.1469, 0.3992] \\
 Assignment (across countries) & 0.3356 & 0.033 & 0.008 & 2000 & 0 & 0.1535 & [-0.3351, 0.2736] \\
 Assignment, stratified (WB region) & 0.3356 & 0.033 & 0.011 & 2000 & 0 & 0.1569 & [-0.3286, 0.2896] \\
+\\[0.25em]
+\multicolumn{8}{l}{\textit{Panel C: Within-country share (pp)}} \\
+\midrule
+Timing (within adopters) & 2.6507 & 0.048 & 0.048 & 2000 & 0 & 0.9293 & [-0.7192, 2.8774] \\
+Assignment (across countries) & 2.6507 & 0.080 & 0.028 & 2000 & 0 & 1.5147 & [-3.2298, 2.7085] \\
+Assignment, stratified (WB region) & 2.6507 & 0.091 & 0.035 & 2000 & 0 & 1.5881 & [-3.1562, 2.9292] \\
 \bottomrule
 \end{tabular}
 }
 \par\vspace{4pt}
 \begin{minipage}{\linewidth}\footnotesize
-Notes: Fisher RI (sharp null), headline specification, 2000 draws/design. \textit{Timing} permutes adoption year among 40 treated countries; \textit{Assignment} redraws which 40 of 126 are treated; \textit{Stratified} draws within World Bank region strata. $N$ valid: draws with at least two treated cohorts after the $<$5 thin-cohort rule (the rule dropped 0 draws; it never binds under permutation). $N$ fallback: draws where the doubly robust estimator failed and outcome regression was used. $p$-value: two-sided $=$ share of $|ATT_{perm}| \geq |ATT_{obs}|$; one-sided $=$ share of $ATT_{perm} \geq ATT_{obs}$, over valid draws, observed excluded. SD/95\% range describe the permutation distribution.\par
+Notes: Fisher RI (sharp null), main specification, 2000 draws/design. \textit{Timing} permutes adoption year among 40 treated countries; \textit{Assignment} redraws which 40 of 126 are treated; \textit{Stratified} draws within World Bank region strata. Panel~C: the within-country share of Table~\ref{tab:within_share_wide} ($100 \times E/S$), same draws. $N$ valid: draws with at least two treated cohorts after the $<$5 thin-cohort rule (the rule dropped 0 draws; it never binds under permutation). $N$ fallback: draws where the DR estimator failed and OR was used. $p$-value: two-sided $=$ share of $|ATT_{perm}| \geq |ATT_{obs}|$; one-sided $=$ share of $ATT_{perm} \geq ATT_{obs}$, over valid draws, observed excluded. SD/95\% range describe the permutation distribution. Mean of the timing-permutation distribution, with its 95\% range: log adaptation commitments 0.1794 [-0.0646, 0.4315]; global share (pp) 0.1590 [-0.1469, 0.3992]; within-country share (pp) 1.1930 [-0.7192, 2.8774].\par
 Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central; World Bank WGI/WDI.
 \end{minipage}
 \end{table}

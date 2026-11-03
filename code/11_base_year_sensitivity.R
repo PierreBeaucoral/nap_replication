@@ -17,7 +17,6 @@
 #   output/tables/base_year/base_year_sensitivity.tex    (tab:base_year_sensitivity)
 #   output/tables/base_year/base_year_sensitivity_logit.tex (tab:base_year_logit)
 #   output/tables/base_year/att_premean_baseline.tex     (tab:premean_baseline)
-#   output/figures/base_year/fig_pretrend_cells_by_cohort.png
 #   output/figures/base_year/fig_es_full_window.png
 #   (copied to paper/Tables/base_year/ and paper/Figures/base_year/ when a
 #    paper/ folder exists)
@@ -78,6 +77,7 @@ source(here("code", "functions", "make_country_id.R"))    # make_country_id()
 source(here("code", "functions", "crs_positive.R"))       # crs_positive()
 source(here("code", "functions", "sup_t_crit.R"))         # sup_t_crit()
 source(here("code", "functions", "table_notes.R"))       # shared table-note wording, wpval_reconciliation()
+source(here("code", "functions", "within_share.R"))      # within_share()
 
 set.seed(20240601)  # global seed -- local set.seed(1242) calls precede each att_gt() fit
 
@@ -225,11 +225,11 @@ message("Thin cohorts dropped (< ", thin_threshold, " treated units): ",
 main_panel <- did_panel_full %>% filter(!(cohort_year %in% thin_cohorts))
 # The same sample with the within-country adaptation share of
 # 07_principal_and_share.R (level, pp, and logit; undefined when the recipient
-# has no reported commitments that year), used only by Panel C of the base-year table and by
-# tab:base_year_logit.
+# has no reported commitments that year), used by Panel C of the base-year table,
+# tab:base_year_logit and the within-share row of tab:pretrend_tests_full.
 main_panel_w <- main_panel %>%
   mutate(
-    share_within = if_else(crs_positive(commitments_all), 100 * commitments / commitments_all, NA_real_),
+    share_within = within_share(commitments, commitments_all),
     logit_within = if_else(crs_positive(commitments_all),
                            log((commitments + 0.5) / (commitments_all - commitments + 0.5)),
                            NA_real_)
@@ -306,7 +306,8 @@ stars_from_t <- function(tstat) {
 
 # ==============================================================================
 # SECTION 4. Table 1 (tab:pretrend_tests_full) -- analytical fits, main spec,
-# all 5 outcomes. Three tests per outcome:
+# all 5 outcomes. Three tests per outcome are computed and logged; the table
+# reports (b), on the main and the 2010-start panels:
 #   (a) joint Wald on aggregated pre-treatment leads, min_e = -5, max_e = Inf
 #       (e = -1 drops out automatically: universal base gives it se = 0)
 #   (b) joint Wald on the full pre-treatment window, min_e = -Inf, max_e = Inf
@@ -365,7 +366,15 @@ for (i in seq_along(outcomes)) {
   aI_cache[[oc$var]]  <- aI
   table1_rows[[i]] <- pretrend_row(oc, fit$gt_analytical, fit$pretrend, aI)
 }
-table1 <- bind_rows(table1_rows)
+# Within-country share row (main panel): the fit 07 stores (tab:within_share_wide).
+oc_w <- list(var = "share_within", label = "Within-country share (pp)")
+fit_w_pt <- readRDS(here("output", "fits", "within_share_dr_bs.rds"))
+stopifnot(identical(fit_w_pt$outcome, "share_within"),
+          identical(fit_w_pt$ids, sort(unique(main_panel_w$country_id))))
+aI_w_pt <- aggte(fit_w_pt$gt_analytical, type = "dynamic", na.rm = TRUE, min_e = -Inf, max_e = Inf)
+table1 <- bind_rows(append(table1_rows,
+                           list(pretrend_row(oc_w, fit_w_pt$gt_analytical, fit_w_pt$pretrend, aI_w_pt)),
+                           after = 2L))
 
 # Panel B, panel starting in 2010 (the sample of Table tab:combined_wide_2010):
 # the same three tests without the 2009 cells. Analytical fits, same settings.
@@ -381,7 +390,13 @@ for (i in seq_along(outcomes)) {
   aI   <- aggte(gt10, type = "dynamic", na.rm = TRUE, min_e = -Inf, max_e = Inf)
   table1_2010_rows[[i]] <- pretrend_row(oc, gt10, compute_pretrend_test(a5, gt10), aI)
 }
-table1_2010 <- bind_rows(table1_2010_rows)
+message("  Fitting analytical CS(2021), 2010-start panel, for the within-country share ...")
+panel_2010_w <- main_panel_w %>% filter(year >= 2010L)
+gt10_w <- fit_gt(panel_2010_w, "share_within", bstrap = FALSE)
+table1_2010 <- bind_rows(append(table1_2010_rows, list(pretrend_row(
+  oc_w, gt10_w,
+  compute_pretrend_test(aggte(gt10_w, type = "dynamic", na.rm = TRUE, min_e = -5, max_e = Inf), gt10_w),
+  aggte(gt10_w, type = "dynamic", na.rm = TRUE, min_e = -Inf, max_e = Inf))), after = 2L))
 
 message(sprintf("Table 1 fits done in %.1f min.",
                 as.numeric(difftime(Sys.time(), t0_tab1, units = "mins"))))
@@ -394,50 +409,48 @@ message(sprintf("Full-window pre-trend test, log_commits, 2010-start panel: chi2
                 lc1_10$df_full, lc1_10$chi2_full, lc1_10$p_full))
 
 # --- Build tab:pretrend_tests_full --------------------------------------------
-tab1_header <- c(
-  "\\begin{tabular}{lccccccccc}",
-  "\\toprule",
-  " & \\multicolumn{3}{c}{Leads $\\geq -5$} & \\multicolumn{3}{c}{Full window} & \\multicolumn{3}{c}{did built-in pre-test} \\\\",
-  "\\cmidrule(lr){2-4} \\cmidrule(lr){5-7} \\cmidrule(lr){8-10}",
-  "Outcome & $\\chi^2$ & df & $p$ & $\\chi^2$ & df & $p$ & $W$ & df & $p$ \\\\",
-  "\\midrule"
-)
-fmt_tab1_row <- function(r) paste0(
-  r$outcome, " & ",
-  fmt_num(r$chi2_5, 3),    " & ", r$df_5,    " & ", fmt_num(r$p_5, 3),    " & ",
-  fmt_num(r$chi2_full, 3), " & ", r$df_full, " & ", fmt_num(r$p_full, 3), " & ",
-  fmt_num(r$W_did, 3),     " & ", r$df_did,  " & ", fmt_num(r$p_did, 3),  " \\\\"
-)
-tab1_rows_tex <- vapply(seq_len(nrow(table1)),
-                        function(i) fmt_tab1_row(table1[i, ]), character(1L))
-tab1_rows_2010 <- vapply(seq_len(nrow(table1_2010)),
-                         function(i) fmt_tab1_row(table1_2010[i, ]), character(1L))
+# Only the full-window test is tabulated: the four-lead test is reported in
+# Table 2 (2009-2024 panel) and tab:robust_summary (2010-2024 panel); did's
+# built-in pre-test is summarized in the note. All stay in the stage log above.
+stopifnot(identical(table1$var, table1_2010$var))
+p_did_max <- max(c(table1$p_did, table1_2010$p_did))
 yr_rng <- function(p) sprintf("%d--%d", min(p$year), max(p$year))
-tabular_lines_1 <- c(tab1_header,
-                     sprintf("\\multicolumn{10}{l}{\\textit{Panel A: panel %s (headline sample)}} \\\\",
-                             yr_rng(main_panel)),
-                     tab1_rows_tex,
-                     "\\midrule",
-                     sprintf("\\multicolumn{10}{l}{\\textit{Panel B: panel %s}} \\\\",
-                             yr_rng(panel_2010)),
-                     tab1_rows_2010,
-                     "\\bottomrule", "\\end{tabular}")
+tab1_rows_tex <- vapply(seq_len(nrow(table1)), function(i) paste0(
+  table1$outcome[i], " & ",
+  fmt_num(table1$chi2_full[i], 3), " & ", table1$df_full[i], " & ",
+  fmt_num(table1$p_full[i], 3), " & ",
+  fmt_num(table1_2010$chi2_full[i], 3), " & ", table1_2010$df_full[i], " & ",
+  fmt_num(table1_2010$p_full[i], 3), " \\\\"), character(1L))
+tabular_lines_1 <- c(
+  "\\begin{tabular}{lcccccc}",
+  "\\toprule",
+  sprintf(" & \\multicolumn{3}{c}{Panel %s (main)} & \\multicolumn{3}{c}{Panel %s} \\\\",
+          yr_rng(main_panel), yr_rng(panel_2010)),
+  "\\cmidrule(lr){2-4} \\cmidrule(lr){5-7}",
+  "Outcome & $\\chi^2$ & df & $p$ & $\\chi^2$ & df & $p$ \\\\",
+  "\\midrule",
+  tab1_rows_tex,
+  "\\bottomrule", "\\end{tabular}")
 
 write_tex_float(
   out_path      = file.path(dir_tabs_by, "pretrend_tests_full.tex"),
-  caption_title = "Pre-trend tests: aggregated leads, full window, and did's built-in test",
+  caption_title = "Pre-trend tests over the full pre-treatment window",
   label         = "tab:pretrend_tests_full",
   tabular_lines = tabular_lines_1,
   notes_text    = paste0(
-    as_in_main(c("estimator", "covariates", "control group",
-                 "pre-trend tests")), " (universal base period, ",
-    "cohorts $\\geq 5$); analytical (non-bootstrap) fit throughout. ",
-    "``Leads $\\geq -5$'' uses Table~\\ref{tab:combined_wide_main}'s window, ``full window'' ",
-    "every available pre-period; restriction counts are the df columns. \\texttt{did} pre-test ",
-    "$p$ pools each cohort's pre-treatment $ATT(g,t)$ cells against its own base year and ",
-    "excludes the zero-variance base-year cell. Panel~B repeats the three tests on the panel ",
-    "starting in ", min(panel_2010$year), ", ",
-    "which has no ", min(main_panel$year), " cells"),
+    as_in_main(c("estimator", "covariates", "control group")),
+    " (universal base period, cohorts $\\geq 5$); analytical (non-bootstrap) fit. ",
+    "Joint Wald test on the aggregated pre-treatment event-time coefficients, as in ",
+    "Table~\\ref{tab:combined_wide_main}, but over every available pre-period instead of ",
+    sprintf("$%d \\leq e \\leq %d$", MAIN_PRETREND_WINDOW[["min_e"]], MAIN_PRETREND_WINDOW[["max_e"]]),
+    "; df is the number of restrictions. The right panel starts in ",
+    min(panel_2010$year), " and has no ", min(main_panel$year), " cells. ",
+    "Within-country share: $100 \\times E/S$, as in Table~\\ref{tab:within_share_wide}. ",
+    "The four-lead test is in Table~\\ref{tab:combined_wide_main} (", yr_rng(main_panel),
+    ") and Table~\\ref{tab:robust_summary} (", yr_rng(panel_2010), "). ",
+    if (p_did_max < 0.001)
+      "\\texttt{did}'s built-in pre-test rejects for every outcome on both panels ($p<0.001$)" else
+      sprintf("\\texttt{did}'s built-in pre-test: largest $p$ across outcomes and panels %.3f", p_did_max)),
   source_text   = SOURCE_MAIN
 )
 
@@ -491,78 +504,17 @@ tabular_lines_2 <- c(tab2_header, tab2_rows_tex, "\\bottomrule", "\\end{tabular}
 
 write_tex_float(
   out_path      = file.path(dir_tabs_by, "pretrend_cells_2021.tex"),
-  caption_title = "Pre-treatment ATT(g,t) cells by adoption cohort: log(Adaptation commitments)",
+  caption_title = "Pre-treatment ATT(g,t) cells of the four adoption cohorts (2021--2024), log(adaptation commitments)",
   label         = "tab:pretrend_cells_2021",
   tabular_lines = tabular_lines_2,
   notes_text    = paste0(
-    "Analytical (non-bootstrap) doubly-robust CS(2021) fit, headline specification, ",
-    "universal base period. Entries are $ATT(g,t)$ for cohort $g$'s pre-treatment period ",
+    "Main specification (CS\\,(2021) DR), analytical (non-bootstrap) fit, universal base ",
+    "period. Columns: adoption cohorts $g$. Entries are $ATT(g,t)$ for cohort $g$'s pre-treatment period ",
     "$t < g$; ``0 (base)'' marks the base year $t = g-1$ (zero by construction); cells with ",
     "$t \\geq g$ are outside the pre-trend window and suppressed (---). SE in parentheses. ",
     STAR_NOTE),
   source_text   = SOURCE_MAIN
 )
-
-# ==============================================================================
-# SECTION 6. Figure 1 (fig_pretrend_cells_by_cohort.png) -- four-panel figure
-# (one per cohort) of pre- and post-period ATT(g,t) with simultaneous (sup-t)
-# 95% bands over calendar year, base year marked. One band family per cohort
-# panel: crit from sup_t_crit() on that cohort's plotted ATT(g,t) influence
-# functions (columns of the analytical fit's inffunc), times the stored SEs. Style matches 03's combined ES/cohort figures:
-# serif theme, colour + shape (not colour alone), no in-figure titles.
-# ==============================================================================
-
-message("\n=== Figure 1: ATT(g,t) by cohort, pre- and post-period ===\n")
-
-cell_crit <- vapply(2021:2024, function(g) {
-  cols <- which(gt_lc$group == g & !is.na(gt_lc$se) & gt_lc$se > 0)
-  sup_t_crit(gt_lc$inffunc[, cols, drop = FALSE], gt_lc$se[cols])
-}, numeric(1L))
-names(cell_crit) <- 2021:2024
-message(sprintf("  fig_pretrend_cells_by_cohort sup-t crit: %s",
-                paste(sprintf("%s cohort %.4f", names(cell_crit), cell_crit), collapse = "; ")))
-fig_cells_df <- gtdf %>%
-  filter(group %in% 2021:2024, !is.na(se), se > 0) %>%
-  mutate(
-    cohort = factor(group, levels = 2021:2024,
-                    labels = paste0(2021:2024, " cohort")),
-    period = ifelse(t < group, "Pre-treatment", "Post-treatment"),
-    crit   = unname(cell_crit[as.character(group)]),
-    ci_lo  = att - crit * se,
-    ci_hi  = att + crit * se
-  )
-
-base_year_df <- data.frame(
-  group     = 2021:2024,
-  cohort    = factor(2021:2024, levels = 2021:2024,
-                     labels = paste0(2021:2024, " cohort")),
-  base_year = 2021:2024 - 1L
-)
-
-p_cells <- ggplot(fig_cells_df, aes(x = t, y = att, colour = period, shape = period)) +
-  geom_hline(yintercept = 0, colour = "grey50", linetype = "dashed") +
-  geom_vline(data = base_year_df, aes(xintercept = base_year),
-             colour = "grey30", linetype = "dotted", inherit.aes = FALSE) +
-  geom_pointrange(aes(ymin = ci_lo, ymax = ci_hi), size = 0.4, linewidth = 0.6) +
-  facet_wrap(~ cohort) +
-  scale_colour_manual(values = c("Pre-treatment" = "#2E86C1", "Post-treatment" = "#C0392B")) +
-  scale_shape_manual(values  = c("Pre-treatment" = 16, "Post-treatment" = 17)) +
-  # No title, subtitle, or caption -- those go in LaTeX \caption{}
-  labs(title = NULL, subtitle = NULL, caption = NULL,
-       x = "Calendar year", y = "ATT(g,t), log(Adaptation commitments)",
-       colour = NULL, shape = NULL) +
-  theme_minimal() +
-  theme(
-    text             = element_text(family = "serif", size = 12),
-    legend.position  = "bottom",
-    legend.text      = element_text(size = 10),
-    strip.text       = element_text(face = "bold"),
-    panel.grid.minor = element_blank()
-  )
-
-ggsave(file.path(dir_figs_by, "fig_pretrend_cells_by_cohort.png"),
-       p_cells, width = 12, height = 8, dpi = 300)
-message("Saved: ", file.path(dir_figs_by, "fig_pretrend_cells_by_cohort.png"))
 
 # ==============================================================================
 # SECTION 7. Figure 2 (fig_es_full_window.png) -- aggregated event study for
@@ -650,7 +602,9 @@ build_sensitivity_row <- function(label, data, yname, antic = 0L,
     se    <- stored$se
   } else {
     gt_an <- fit_gt(data, yname, bstrap = FALSE, antic = antic)
-    a5 <- aggte(gt_an, type = "dynamic", na.rm = TRUE, min_e = -5, max_e = Inf)
+    # Four leads before the base period g-1-antic, as in Table 2 and
+    # tab:att_anticipation: -5-antic <= e <= -2-antic.
+    a5 <- aggte(gt_an, type = "dynamic", na.rm = TRUE, min_e = -5 - antic, max_e = Inf)
     aI <- aggte(gt_an, type = "dynamic", na.rm = TRUE, min_e = -Inf, max_e = Inf)
 
     gt_bs <- fit_gt(data, yname, bstrap = TRUE, antic = antic, biters = 999L)
@@ -682,7 +636,7 @@ build_sensitivity_row <- function(label, data, yname, antic = 0L,
 }
 
 sens_specs <- list(
-  list(label = "Main spec",                          filt = "none",  antic = 0L, use_cache = TRUE),
+  list(label = "Main specification",                 filt = "none",  antic = 0L, use_cache = TRUE),
   list(label = "Drop 2021 cohort",                    filt = "c2021", antic = 0L, use_cache = FALSE),
   list(label = "Drop 2022 cohort",                    filt = "c2022", antic = 0L, use_cache = FALSE),
   list(label = "Drop 2023 cohort",                    filt = "c2023", antic = 0L, use_cache = FALSE),
@@ -730,7 +684,7 @@ message(sprintf("Base-year sensitivity fits done in %.1f min.",
 lc4 <- sens_all[sens_all$outcome == "log_commits", ]
 get_row <- function(df, lbl) df[df$spec == lbl, ]
 
-r_main     <- get_row(lc4, "Main spec")
+r_main     <- get_row(lc4, "Main specification")
 r_drop21   <- get_row(lc4, "Drop 2021 cohort")
 r_antic1   <- get_row(lc4, "Anticipation = 1 (base $g-2$)")
 r_antic2   <- get_row(lc4, "Anticipation = 2 (base $g-3$)")
@@ -779,25 +733,11 @@ for (r in seq_len(nrow(within_all)))
                   within_all$t_stat[r], within_all$n_treated[r], within_all$wald5_p[r],
                   within_all$df5[r], within_all$waldfull_p[r]))
 
-# Lead window of the leads >= -5 test under anticipation, for the note: with
-# anticipation, e = -1 - antic is the base period and the later leads are
-# treated, so fewer leads remain than in Table tab:att_anticipation, whose
-# window starts at e = -5 - antic.
-num_word <- function(n) { stopifnot(n >= 1L, n <= 6L); c("one", "two", "three", "four", "five", "six")[n] }
-# Computed per table from the rows that table shows (Panels A-C vs. the logit table).
-antic_sentence <- function(antic_all) vapply(c(1L, 2L), function(k) {
-  a <- antic_all[antic_all$antic == k, ]
-  stopifnot(nrow(a) > 0L, length(unique(a$lead5_min)) == 1L, length(unique(a$lead5_max)) == 1L)
-  n_lead <- unique(a$lead5_max) - unique(a$lead5_min) + 1L
-  dfs    <- sort(unique(a$df5))
-  sprintf("with %s year%s of anticipation it keeps %s leads ($%d \\leq e \\leq %d$; %s restriction%s), where Table~\\ref{tab:att_anticipation} keeps four ($%d \\leq e \\leq %d$)",
-          num_word(k), if (k == 1L) "" else "s", num_word(n_lead),
-          unique(a$lead5_min), unique(a$lead5_max),
-          paste(dfs, collapse = " or "), if (identical(dfs, 1L)) "" else "s",
-          -5L - k, -2L - k)
-}, character(1L))
-antic_txt       <- antic_sentence(bind_rows(sens_all, sw4))
-antic_txt_logit <- antic_sentence(sl4)
+# Every row's lead test uses four leads before its base period (Table 2's convention).
+all_rows_4 <- bind_rows(sens_all, within_all)
+stopifnot("A base-year row does not use four pre-trend leads" =
+            all(all_rows_4$lead5_max - all_rows_4$lead5_min + 1L == 4L),
+          all(all_rows_4$lead5_max == -2L - all_rows_4$antic))
 
 # --- Build tab:base_year_sensitivity ------------------------------------------
 build_panel_lines <- function(rows_df) {
@@ -818,7 +758,7 @@ build_panel_lines <- function(rows_df) {
 tabular_lines_4 <- c(
   "\\begin{tabular}{lcccccc}",
   "\\toprule",
-  "Specification & ATT & SE & $t$ & $N$ treated & Wald $p$ (leads $\\geq -5$) & Wald $p$ (full window) \\\\",
+  "Specification & ATT & SE & $t$ & $N$ treated & Wald $p$ (4 leads) & Wald $p$ (full window) \\\\",
   "\\midrule",
   "\\multicolumn{7}{l}{\\textit{Panel A: log(Adaptation commitments)}} \\\\",
   "\\midrule",
@@ -837,20 +777,20 @@ tabular_lines_4 <- c(
 
 write_tex_float(
   out_path      = file.path(dir_tabs_by, "base_year_sensitivity.tex"),
-  caption_title = "Sensitivity of the headline estimate to the 2021 cohort's base year",
+  caption_title = "Sensitivity of the main-specification estimate to the 2021 cohort's base year",
   label         = "tab:base_year_sensitivity",
   tabular_lines = tabular_lines_4,
   notes_text    = paste0(
     "Cohorts $\\geq 5$. ", as_in_main(c("estimator", "covariates", "control group", "inference",
                                           "significance stars")), "; Wald $p$ from ",
-    "the analytical fit's dynamic aggregation (as in the pre-trend table). ``Anticipation $=1$'' ",
-    "(``$=2$'') resets the base period to $g-2$ ($g-3$): one year of anticipation moves the ",
-    "2021 cohort's base year to 2019. The leads-$\\geq -5$ test uses the leads left after the ",
-    "base period: ", antic_txt[1L], "; ", antic_txt[2L], ". This is why its $p$ differs from ",
-    "that table's. Panel C: within-country adaptation share of ",
-    "Table~\\ref{tab:within_share_wide}, $100 \\times E/S$ in pp, with $E$ the recipient's ",
-    "adaptation-marked and $S$ its total commitments; its main-spec row is the estimate of that ",
-    "table; the logit of the same share is in Table~\\ref{tab:base_year_logit}"),
+    "the analytical fit's dynamic aggregation, over the four leads before the base period, as ",
+    "in Table~\\ref{tab:att_anticipation}, or over the full pre-treatment window. ",
+    "``Anticipation $=1$'' (``$=2$'') resets the base period to $g-2$ ($g-3$): one year of ",
+    "anticipation moves the 2021 cohort's base year to 2019. Panel C: within-country ",
+    "adaptation share of Table~\\ref{tab:within_share_wide}, $100 \\times E/S$ in pp, with $E$ ",
+    "the recipient's adaptation-marked and $S$ its total commitments; its main-specification ",
+    "row is the estimate of that table; the logit of the same share is in ",
+    "Table~\\ref{tab:base_year_logit}"),
   source_text   = SOURCE_MAIN
 )
 
@@ -865,21 +805,15 @@ write_tex_float(
   tabular_lines = c(
     "\\begin{tabular}{lcccccc}",
     "\\toprule",
-    "Specification & ATT & SE & $t$ & $N$ treated & Wald $p$ (leads $\\geq -5$) & Wald $p$ (full window) \\\\",
+    "Specification & ATT & SE & $t$ & $N$ treated & Wald $p$ (4 leads) & Wald $p$ (full window) \\\\",
     "\\midrule",
     build_panel_lines(sl4),
     "\\bottomrule",
     "\\end{tabular}"),
   notes_text    = paste0(
-    "Outcome: logit of the within-country adaptation share of ",
-    "Table~\\ref{tab:within_share_wide}, $\\log[(E+0.5)/(S-E+0.5)]$, with $E$ the recipient's ",
-    "adaptation-marked and $S$ its total commitments; the main-spec row is the estimate of that ",
-    "table. Specifications and columns as in Table~\\ref{tab:base_year_sensitivity}. ",
-    "Cohorts $\\geq 5$. ", as_in_main(c("estimator", "covariates", "control group", "inference",
-                                          "significance stars")), "; Wald $p$ from ",
-    "the analytical fit's dynamic aggregation (as in the pre-trend table). ``Anticipation $=1$'' ",
-    "(``$=2$'') resets the base period to $g-2$ ($g-3$). The leads-$\\geq -5$ test uses the ",
-    "leads left after the base period: ", antic_txt_logit[1L], "; ", antic_txt_logit[2L]),
+    "Columns and tests as in Table~\\ref{tab:base_year_sensitivity}. Outcome: logit of the ",
+    "within-country adaptation share of Table~\\ref{tab:within_share_wide}, ",
+    "$\\log[(E+0.5)/(S-E+0.5)]$; the main-specification row is the logit estimate of that table"),
   source_text   = SOURCE_MAIN
 )
 

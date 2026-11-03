@@ -7,13 +7,13 @@
 #          Falls back to a minimal raw-CRS read ONLY when
 #          data/processed/donor_totals.csv is absent (i.e. 01_prepare_data.R
 #          was not run first).
-#          Tables: stats_des, balance_adopters; 4 descriptive figures.
+#          Tables: stats_des, balance_adopters; 3 descriptive figures.
 #
 # Inputs (primary — written by 01_prepare_data.R):
 #          data/processed/adaptationNAP.csv
 #          data/processed/adaptationNAP_donortype_wgi.csv
 #          data/processed/donor_totals.csv    (for top_donors figure)
-#          data/processed/simple_panel_wgi.csv (for balance_adopters.tex, §8)
+#          data/processed/simple_panel_wgi.csv (for balance_adopters.tex, §7)
 # Inputs (fallback only, if processed intermediates missing):
 #          data/raw/CRS/CRS <year> Data.txt  (minimal 2–3 column read)
 #
@@ -23,7 +23,6 @@
 #   output/figures/top_donors.png
 #   output/figures/recipient_map.png
 #   output/figures/nap_status_map.png
-#   output/figures/cumulative_nap_adoption.png
 ##############################################################################
 
 ##############################################################################
@@ -217,9 +216,9 @@ colnames(latex_table) <- c(
   "Total Commitments (USD Bn)",
   "Total Disbursements (USD Bn)",
   "Number of Recipients",
-  "Mean Commitments (USD Bn)",
-  "Median Commitments (USD Bn)",
-  "SD Commitments (USD Bn)"
+  "Commitments per cell: mean (USD Bn)",
+  "Commitments per cell: median (USD Bn)",
+  "Commitments per cell: SD (USD Bn)"
 )
 
 stats_des_path <- here("output", "tables", "stats_des.tex")
@@ -243,9 +242,10 @@ write_tex_float(
     "Adaptation-related finance identified by the Rio adaptation markers ",
     "(principal or significant), OECD CRS, constant USD. Totals sum all ",
     "flows per year; recipients counts distinct countries with ",
-    "adaptation-marked flows; mean, median, SD computed across ",
-    "recipient--donor-type cells per year. The 2009 row reflects the ",
-    "partial first year of marker reporting"
+    "adaptation-marked flows. A cell is one recipient $\\times$ donor-type pair ",
+    "with nonzero adaptation-marked commitments or disbursements in the year; the ",
+    "per-cell mean, median and SD are taken across these cells, so the mean is not ",
+    "total commitments divided by the number of recipients"
   ),
   source_text   = "OECD CRS"
 )
@@ -411,55 +411,7 @@ ggsave(here("output", "figures", "nap_status_map.png"),
 message("Wrote: output/figures/nap_status_map.png")
 
 ##############################################################################
-# §7. FIGURE — cumulative_nap_adoption.png
-# Exhibit: paper/Figures/cumulative_nap_adoption.png
-# No in-figure title/subtitle/caption (they go in the LaTeX caption).
-##############################################################################
-
-nap_timeline <- adaptation_aid %>%
-  filter(!is.na(date_posted)) %>%
-  distinct(RecipientName, date_posted) %>%
-  arrange(date_posted) %>%
-  mutate(
-    adoption_order = row_number(),
-    year           = year(date_posted),
-    month          = month(date_posted),
-    date           = as.Date(date_posted)
-  )
-
-cumulative_adoption <- nap_timeline %>%
-  arrange(date) %>%
-  mutate(
-    cumulative_count = row_number(),
-    year_month       = floor_date(date, "month")
-  )
-
-p_cumulative <- ggplot(cumulative_adoption, aes(x = date, y = cumulative_count)) +
-  geom_step(color = "#2E86C1", linewidth = 1) +
-  geom_point(size = 2, color = "#2E86C1") +
-  # No title, subtitle, or caption — those go in LaTeX \caption{}
-  labs(title = NULL, subtitle = NULL, caption = NULL,
-       x = "Year", y = "Number of Countries with NAP") +
-  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
-  scale_y_continuous(
-    breaks = seq(0, max(cumulative_adoption$cumulative_count), by = 5)
-  ) +
-  theme_minimal() +
-  theme(
-    text            = element_text(family = "serif", size = 12),
-    axis.title      = element_text(size = 12, face = "bold"),
-    axis.text       = element_text(size = 10),
-    panel.grid.minor = element_blank(),
-    panel.grid.major = element_line(color = "gray90"),
-    plot.margin     = margin(1, 1, 1, 1, "cm")
-  )
-
-ggsave(here("output", "figures", "cumulative_nap_adoption.png"),
-       p_cumulative, width = 10, height = 6, dpi = 300)
-message("Wrote: output/figures/cumulative_nap_adoption.png")
-
-##############################################################################
-# §8. BALANCE TABLE: adopters vs never-adopters, pre-adoption period
+# §7. BALANCE TABLE: adopters vs never-adopters, pre-adoption period
 # Documents pre-adoption comparability of the treatment and comparison groups
 # (app:descriptives).
 # The pre-period window is derived from the panel itself (14_hazard_napa.R
@@ -636,4 +588,4 @@ write_tex_float(
 
 message("\n=== 02_descriptive_stats.R COMPLETE ===")
 message("Tables: stats_des.tex, balance_adopters.tex")
-message("Figures: top_donors.png, recipient_map.png, nap_status_map.png, cumulative_nap_adoption.png")
+message("Figures: top_donors.png, recipient_map.png, nap_status_map.png")

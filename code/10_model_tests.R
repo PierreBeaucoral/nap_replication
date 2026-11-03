@@ -560,7 +560,7 @@ notes_lemma2 <- paste0(
   "$\\omega_i$ = pre-treatment (", min(PRE_YEARS), "--", max(PRE_YEARS),
   ") mean share of total commitments across the ", nrow(size_measures),
   "-country panel; median/terciles from the ", n_est_sample,
-  "-country estimation sample (see text for the Lemma~\\ref{lem:envelope_elast} prediction). Panel~A: CS\\,(2021) ",
+  "-country estimation sample; by Lemma~\\ref{lem:envelope_elast} the envelope elasticity $\\eta(1-\\omega_i)$ falls with $\\omega_i$. Panel~A: CS\\,(2021) ",
   em_a, ", not-yet-treated controls, cohorts $<$ ", thin_threshold,
   " dropped; difference row SE $=\\sqrt{se_a^2+se_b^2}$ (disjoint, country-clustered), ",
   "$z$ vs.\\ standard normal, two-sided $p$. Panel~B: same specification",
@@ -572,7 +572,7 @@ source_lemma2 <- SOURCE_MAIN
 
 write_tex_float(
   out_path      = file.path(dir_tabs, "lemma2_size.tex"),
-  caption_title = "Envelope response by recipient size (test of Lemma 2)",
+  caption_title = "Envelope response by recipient size",
   label         = "tab:lemma2_size",
   tabular_lines = lemma2_tabular,
   notes_text    = notes_lemma2,
@@ -661,7 +661,7 @@ alpha_rows <- c(
   paste0("Max country mean of $s_{it}$ after adoption, all adopters & ",
         sprintf("%.4f", dist_post$max_mean_all), " \\\\"),
   "\\midrule",
-  "\\multicolumn{2}{l}{\\textit{ATT: log(Total commitments) --- main spec}} \\\\",
+  "\\multicolumn{2}{l}{\\textit{ATT: log(Total commitments) --- main specification}} \\\\",
   paste0("ATT & ", sprintf("%.4f", fit_env$att), " \\\\"),
   paste0("SE & ", sprintf("(%.4f)", fit_env$se), " \\\\"),
   paste0("$t$-statistic & ", fmt3(t_env), " \\\\"),
@@ -669,7 +669,7 @@ alpha_rows <- c(
   paste0("Pre-trend $\\chi^2$ & ", fmt3(pt_env$stat), " \\\\"),
   paste0("Pre-trend $p$ & ", fmt_p(pt_env$pval), " \\\\"),
   "\\midrule",
-  "\\multicolumn{2}{l}{\\textit{ATT: log(Non-adaptation commitments) --- main spec (crowd-out check)}} \\\\",
+  "\\multicolumn{2}{l}{\\textit{ATT: log(Non-adaptation commitments) --- main specification (crowd-out check)}} \\\\",
   paste0("ATT & ", sprintf("%.4f", fit_nona$att), " \\\\"),
   paste0("SE & ", sprintf("(%.4f)", fit_nona$se), " \\\\"),
   paste0("$t$-statistic & ", fmt3(t_nona), " \\\\"),
@@ -692,7 +692,6 @@ alpha_tabular <- c(
 )
 
 # The note's claims are derived from the numbers behind the table.
-s_max    <- max(dist_pre$max, dist_g1$max)
 n_ge_one <- dist_pre$n_ge_half + dist_g1$n_ge_half
 # The note refers to Table 2 for estimator, covariates, control group and
 # inference, so the total-commitments fit must share the headline spec.
@@ -704,14 +703,17 @@ if (!identical(fit_env$spec[spec_keys], read_headline_fit("adaptation")$spec[spe
                                read_headline_fit("adaptation")$spec[spec_keys])], collapse = ", "))
 notes_alpha <- paste0(
   "$\\bar s_i = $ adaptation-marked commitments / total commitments of the recipient, proxy for $\\alpha_i$ via ",
-  "$s_i^*=q_i/(1+q_i)$ (Lemma~\\ref{lem:monotone_s}); $\\alpha_i \\geq 0.5 \\iff s_i^* \\geq 0.5$. ",
+  "$s_i^*=q_i/(1+q_i)$ with $q_i:=[\\alpha_i/(1-\\alpha_i)]^{\\sigma_c}$ (equation~\\eqref{eq:sCES}), ",
+  "increasing in $\\alpha_i$ (Lemma~\\ref{lem:monotone_s}); $\\alpha_i \\geq 0.5 \\iff s_i^* \\geq 0.5$. ",
   if (n_ge_one == 0L)
-    paste0("Pre-treatment $\\bar s_i$ is below 0.5 for every recipient (max ", sprintf("%.3f", s_max),
-           "), so under gross substitutes the model predicts ATT $\\leq 0$ (sign chain: see text, ",
+    paste0("Pre-treatment $\\bar s_i$ is below 0.5 for every recipient (max ",
+           sprintf("%.3f", dist_pre$max), " for the ", min(PRE_YEARS), "--", max(PRE_YEARS),
+           " mean; ", sprintf("%.3f", dist_g1$max), " at $g-1$ for adopters), so under gross ",
+           "substitutes the model predicts ATT $\\leq 0$ (",
            "Lemma~\\ref{lem:envelope_elast}). ")
   else
-    paste0("Pre-treatment $\\bar s_i$ reaches 0.5 for some recipients (max ", sprintf("%.3f", s_max),
-           "; see the counts above and the text, Lemma~\\ref{lem:envelope_elast}). "),
+    paste0("Pre-treatment $\\bar s_i$ reaches 0.5 for some recipients (see the counts above; ",
+           "Lemma~\\ref{lem:envelope_elast}). "),
   "One-sided test of the null that the ATT is at most zero against the alternative ATT $>0$. ",
   as_in_main(c("estimator", "covariates", "control group", "inference", "pre-trend test")), ". ",
   pretrend_window_note(min(pt_env$leads), max(pt_env$leads), pt_env$df),
@@ -724,7 +726,7 @@ source_alpha <- SOURCE_MAIN
 
 write_tex_float(
   out_path      = file.path(dir_tabs, "alpha_half.tex"),
-  caption_title = "Recipient adaptation share and the sign of the envelope response (test of the $\\mathrm{sign}(\\alpha_i-1/2)$ condition)",
+  caption_title = "Recipient adaptation share and the sign of the envelope response (check of the condition $\\alpha_i \\leq 1/2$)",
   label         = "tab:alpha_half",
   tabular_lines = alpha_tabular,
   notes_text    = notes_alpha,

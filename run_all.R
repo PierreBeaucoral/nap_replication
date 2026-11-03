@@ -29,7 +29,7 @@
 #
 # PIPELINE (each stage runs in a fresh R process, in this order)
 #   01_prepare_data.R              raw CRS/NAP/WDI/WGI -> data/processed/,
-#                                  plus the three scope tables (from-raw mode only)
+#                                  plus the two scope tables (from-raw mode only)
 #   02_descriptive_stats.R         descriptive tables and figures
 #   03_main_results.R              main Callaway-Sant'Anna results; stores the
 #                                  headline fits in output/fits/ for later stages
@@ -40,8 +40,9 @@
 #                                  dCDH, Goodman-Bacon
 #   05_heterogeneity.R             heterogeneity (donor type, LDC, governance,
 #                                  income) and difference tests
-#   13_cohort_anticipation.R       cohort battery, anticipation, event date,
-#                                  placebo ladder, conditioning sets
+#   13_cohort_anticipation.R       cohort checks, anticipation, event date,
+#                                  placebo ladder, conditioning sets, and the
+#                                  robustness summary table
 #   14_hazard_napa.R               EM-DAT hazard controls and NAP-timing checks,
 #                                  prior-NAPA split, NAPA falsification check
 #   08_randomization_inference.R   Fisher randomization inference

@@ -265,16 +265,19 @@ thin_cohorts   <- cohort_sizes$cohort_year[cohort_sizes$n_treated < thin_thresho
 n_adopters <- sum(cohort_sizes$n_treated)
 n_never    <- did_panel %>% filter(cohort_year == 0) %>% distinct(recipient_name) %>% nrow()
 coh_tab    <- cohort_sizes %>%
-  mutate(in_main = ifelse(n_treated >= thin_threshold, "Yes", "No"))
+  mutate(in_main    = ifelse(n_treated >= thin_threshold, "Yes", "No"),
+         cumulative = cumsum(n_treated))  # cohort_sizes is sorted by cohort_year
+stopifnot(!is.unsorted(coh_tab$cohort_year), tail(coh_tab$cumulative, 1L) == n_adopters)
 yr_span <- function(y) paste(range(y), collapse = "--")  # e.g. "2021--2024"
 nap_cohort_tabular <- c(
-  "\\begin{tabular}{lcc}",
+  "\\begin{tabular}{lccc}",
   "\\toprule",
-  "Adoption year & Number of adopters & Included in main specification \\\\",
+  "Adoption year & Number of adopters & Cumulative adopters & Included in main specification \\\\",
   "\\midrule",
-  paste0(coh_tab$cohort_year, " & ", coh_tab$n_treated, " & ", coh_tab$in_main, " \\\\"),
+  paste0(coh_tab$cohort_year, " & ", coh_tab$n_treated, " & ", coh_tab$cumulative, " & ",
+         coh_tab$in_main, " \\\\"),
   "\\midrule",
-  paste0("Total adopters & ", n_adopters, " & \\\\"),
+  paste0("Total adopters & ", n_adopters, " & & \\\\"),
   "\\bottomrule",
   "\\end{tabular}"
 )
@@ -287,7 +290,9 @@ write_tex_float(
     "The table reports the number of countries first submitting a National ",
     "Adaptation Plan in each adoption year, among the ", n_adopters,
     " adopters in the estimation sample; a further ", n_never,
-    " never-adopting countries serve as controls. The main specification ",
+    " never-adopting countries serve as controls. Cumulative adopters: ",
+    "estimation-sample countries whose first submission falls in or before that ",
+    "year. The main specification ",
     "retains adoption cohorts with at least ", thin_threshold,
     " treated units (", yr_span(coh_tab$cohort_year[coh_tab$in_main == "Yes"]),
     "); the retained-cohorts robustness specification ",

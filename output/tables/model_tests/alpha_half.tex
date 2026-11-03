@@ -1,6 +1,6 @@
 \begin{table}[H]
 \centering
-\caption{Recipient adaptation share and the sign of the envelope response (test of the $\mathrm{sign}(\alpha_i-1/2)$ condition)}
+\caption{Recipient adaptation share and the sign of the envelope response (check of the condition $\alpha_i \leq 1/2$)}
 \label{tab:alpha_half}
 \adjustbox{max width=\textwidth}{%
 \begin{tabular}{lc}
@@ -24,7 +24,7 @@ $N$ country-years with $s_{it} \geq 0.5$ after adoption, 2021--2024 cohorts & 0 
 $N$ country-years with $s_{it} \geq 0.5$ after adoption, all adopters ($N=57$) & 3 \\
 Max country mean of $s_{it}$ after adoption, all adopters & 0.2959 \\
 \midrule
-\multicolumn{2}{l}{\textit{ATT: log(Total commitments) --- main spec}} \\
+\multicolumn{2}{l}{\textit{ATT: log(Total commitments) --- main specification}} \\
 ATT & 0.0720 \\
 SE & (0.0648) \\
 $t$-statistic & 1.111 \\
@@ -32,7 +32,7 @@ One-sided $p$ (alternative: ATT $>0$) & 0.133 \\
 Pre-trend $\chi^2$ & 11.690 \\
 Pre-trend $p$ & 0.020 \\
 \midrule
-\multicolumn{2}{l}{\textit{ATT: log(Non-adaptation commitments) --- main spec (crowd-out check)}} \\
+\multicolumn{2}{l}{\textit{ATT: log(Non-adaptation commitments) --- main specification (crowd-out check)}} \\
 ATT & 0.0400 \\
 SE & (0.0653) \\
 $t$-statistic & 0.613 \\
@@ -46,7 +46,7 @@ Observations / Countries & 1,930 / 126 \\
 }
 \par\vspace{4pt}
 \begin{minipage}{\linewidth}\footnotesize
-Notes: $\bar s_i = $ adaptation-marked commitments / total commitments of the recipient, proxy for $\alpha_i$ via $s_i^*=q_i/(1+q_i)$ (Lemma~\ref{lem:monotone_s}); $\alpha_i \geq 0.5 \iff s_i^* \geq 0.5$. Pre-treatment $\bar s_i$ is below 0.5 for every recipient (max 0.411), so under gross substitutes the model predicts ATT $\leq 0$ (sign chain: see text, Lemma~\ref{lem:envelope_elast}). One-sided test of the null that the ATT is at most zero against the alternative ATT $>0$. Estimator, covariates, control group, inference and pre-trend test as in Table~\ref{tab:combined_wide_main}.\par
+Notes: $\bar s_i = $ adaptation-marked commitments / total commitments of the recipient, proxy for $\alpha_i$ via $s_i^*=q_i/(1+q_i)$ with $q_i:=[\alpha_i/(1-\alpha_i)]^{\sigma_c}$ (equation~\eqref{eq:sCES}), increasing in $\alpha_i$ (Lemma~\ref{lem:monotone_s}); $\alpha_i \geq 0.5 \iff s_i^* \geq 0.5$. Pre-treatment $\bar s_i$ is below 0.5 for every recipient (max 0.280 for the 2009--2012 mean; 0.411 at $g-1$ for adopters), so under gross substitutes the model predicts ATT $\leq 0$ (Lemma~\ref{lem:envelope_elast}). One-sided test of the null that the ATT is at most zero against the alternative ATT $>0$. Estimator, covariates, control group, inference and pre-trend test as in Table~\ref{tab:combined_wide_main}.\par
 Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
 \end{minipage}
 \end{table}

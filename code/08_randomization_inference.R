@@ -41,10 +41,9 @@
 #          output/fits/headline_{adaptation,share}_dr_bs.rds (03),
 #          output/fits/within_share_dr_bs.rds (07)
 # Outputs:
-#   output/tables/randomization/ri_pvalues.tex   (tab:ri_pvalues)
+#   output/tables/randomization/ri_pvalues.tex   (tab:ri_pvalues; Panel C: within-country share)
 #   output/tables/randomization/ri_draws.csv     (raw permutation draws; also
 #                                                the cache read on later runs)
-#   output/tables/randomization/ri_pvalues_within.tex   (tab:ri_pvalues_within)
 #   output/tables/randomization/ri_draws_within.csv     (within-share draws/cache)
 #   output/figures/randomization/fig_ri_distributions.png  (three outcomes x
 #                                                timing and assignment designs)
@@ -880,15 +879,29 @@ fmt_row <- function(row) {
   )
 }
 
-# One block per outcome (Panel A, B, ...), built with lapply() and bound once.
-panel_blocks <- lapply(seq_along(outcome_vars), function(k) {
-  oc      <- outcome_vars[k]
-  oc_rows <- summary_df[summary_df$outcome == oc, ]
+# Within-country share: the same draws and designs (Panel C of tab:ri_pvalues).
+message("\n=== Within-country share RI ===\n")
+summary_w <- ri_summary(designs_w, "share_within", att_obs_w)
+null_all <- rbind(summary_df, summary_w)
+for (i in seq_len(nrow(null_all)))
+  message(sprintf("  Null distribution %-12s | %-34s | mean = %.4f | 95%% range [%.4f, %.4f]",
+                  null_all$outcome[i], null_all$design[i], null_all$mean_perm[i],
+                  null_all$q_lo[i], null_all$q_hi[i]))
+tim <- null_all[null_all$design == design_labels[["timing"]], ]
+tim_lab <- c(log_commits = "log adaptation commitments", share_adapt = "global share (pp)",
+             share_within = "within-country share (pp)")
+
+# One block per outcome (Panel A, B, C), built with lapply() and bound once.
+panel_outcomes <- c(outcome_vars, "share_within")
+panel_labels   <- c(outcome_labels, share_within = "Within-country share (pp)")
+panel_blocks <- lapply(seq_along(panel_outcomes), function(k) {
+  oc      <- panel_outcomes[k]
+  oc_rows <- null_all[null_all$outcome == oc, ]
   c(sprintf("\\multicolumn{8}{l}{\\textit{Panel %s: %s}} \\\\",
-            LETTERS[k], outcome_labels[oc]),
+            LETTERS[k], panel_labels[oc]),
     "\\midrule",
     vapply(seq_len(nrow(oc_rows)), function(i) fmt_row(oc_rows[i, ]), character(1L)),
-    if (k < length(outcome_vars)) "\\\\[0.25em]")
+    if (k < length(panel_outcomes)) "\\\\[0.25em]")
 })
 tab_lines <- c(
   "\\begin{tabular}{lccccccc}",
@@ -899,16 +912,22 @@ tab_lines <- c(
   "\\bottomrule", "\\end{tabular}"
 )
 
-n_skip_note <- unique(summary_df$n_skipped)
+n_skip_note <- unique(null_all$n_skipped)
 notes_txt <- paste0(
-  "Fisher RI (sharp null), headline specification, ", N_DRAWS, " draws/design. ",
+  "Fisher RI (sharp null), main specification, ", N_DRAWS, " draws/design. ",
   "\\textit{Timing} permutes adoption year among ", n_treated, " treated countries; ",
   "\\textit{Assignment} redraws which ", n_treated, " of ", n_countries, " are treated; ",
-  "\\textit{Stratified} draws within World Bank region strata. $N$ valid: draws with at least two ",
-  "treated cohorts after the $<$", thin_threshold, " thin-cohort rule (the rule dropped ",
-  paste(n_skip_note, collapse = "/"), " draws; it never binds under permutation). $N$ fallback: draws where the doubly robust estimator failed and outcome regression was used. $p$-value: two-sided $=$ share of $|ATT_{perm}| \\geq |ATT_{obs}|$; ",
+  "\\textit{Stratified} draws within World Bank region strata. Panel~C: the within-country ",
+  "share of Table~\\ref{tab:within_share_wide} ($100 \\times E/S$), same draws. $N$ valid: draws ",
+  "with at least two treated cohorts after the $<$", thin_threshold, " thin-cohort rule (the rule ",
+  "dropped ", paste(n_skip_note, collapse = "/"), " draws; it never binds under permutation). ",
+  "$N$ fallback: draws where the DR estimator failed and OR was used. $p$-value: two-sided $=$ ",
+  "share of $|ATT_{perm}| \\geq |ATT_{obs}|$; ",
   "one-sided $=$ share of $ATT_{perm} \\geq ATT_{obs}$, over valid draws, observed excluded. ",
-  "SD/95\\% range describe the permutation distribution"
+  "SD/95\\% range describe the permutation distribution. Mean of the timing-permutation ",
+  "distribution, with its 95\\% range: ",
+  paste(sprintf("%s %.4f [%.4f, %.4f]", tim_lab[tim$outcome], tim$mean_perm, tim$q_lo, tim$q_hi),
+        collapse = "; ")
 )
 source_txt <- "OECD CRS (Rio adaptation markers); UNFCCC NAP Central; World Bank WGI/WDI"
 
@@ -922,49 +941,10 @@ write_tex_float(
 )
 
 # ==============================================================================
-# SECTION 10. Within-country share: table tab:ri_pvalues_within (the
-# two-outcome table above unchanged)
-# ==============================================================================
-
-message("\n=== Within-country share RI ===\n")
-summary_w <- ri_summary(designs_w, "share_within", att_obs_w)
-null_all <- rbind(summary_df, summary_w)
-for (i in seq_len(nrow(null_all)))
-  message(sprintf("  Null distribution %-12s | %-34s | mean = %.4f | 95%% range [%.4f, %.4f]",
-                  null_all$outcome[i], null_all$design[i], null_all$mean_perm[i],
-                  null_all$q_lo[i], null_all$q_hi[i]))
-tim <- null_all[null_all$design == design_labels[["timing"]], ]
-tim_lab <- c(log_commits = "log adaptation commitments", share_adapt = "global share (pp)",
-             share_within = "within-country share (pp)")
-within_lines <- c(
-  "\\begin{tabular}{lccccccc}",
-  "\\toprule",
-  "Design & ATT (obs.) & $p$ (two-sided) & $p$ (one-sided, $\\geq$) & $N$ valid & $N$ fallback & SD (perm.) & 95\\% range (perm.) \\\\",
-  "\\midrule",
-  vapply(seq_len(nrow(summary_w)), function(i) fmt_row(summary_w[i, ]), character(1L)),
-  "\\bottomrule", "\\end{tabular}"
-)
-write_tex_float(
-  out_path      = here("output", "tables", "randomization", "ri_pvalues_within.tex"),
-  caption_title = "Randomization inference for the within-country adaptation share",
-  label         = "tab:ri_pvalues_within",
-  tabular_lines = within_lines,
-  notes_text    = paste0(
-    "Outcome: within-country adaptation share ($100 \\times E/S$, Table~\\ref{tab:within_share_wide}); ",
-    "observed ATT and its SE from that table's fit. Designs, ", N_DRAWS, " draws per design, ",
-    "permuted assignments (the same draws as Table~\\ref{tab:ri_pvalues}), estimator, ",
-    "fallback rule and $p$-values as in Table~\\ref{tab:ri_pvalues}. Mean of the ",
-    "timing-permutation distribution, with its 95\\% range, for the three outcomes: ",
-    paste(sprintf("%s %.4f [%.4f, %.4f]", tim_lab[tim$outcome], tim$mean_perm, tim$q_lo, tim$q_hi),
-          collapse = "; ")),
-  source_text   = source_txt
-)
-
-# ==============================================================================
 # SECTION 10b. Figure fig_ri_distributions.png -- permutation histograms for
 # the three primary outcomes under the timing and assignment designs, with the
 # two-sided p-value in each panel. The stratified design, close to the
-# unstratified one, is reported in tab:ri_pvalues and tab:ri_pvalues_within.
+# unstratified one, is reported in tab:ri_pvalues.
 # ==============================================================================
 
 message("\n=== Building RI distribution figure ===\n")

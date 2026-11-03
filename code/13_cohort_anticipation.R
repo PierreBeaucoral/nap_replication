@@ -1,13 +1,13 @@
 # ==============================================================================
 # 13_cohort_anticipation.R
-# Cohort-robustness battery, anticipation / event-date / placebo ladder
-#, and conditioning-set sensitivity.
+# Cohort-robustness checks, anticipation / event-date / placebo ladder,
+# conditioning-set sensitivity, and the consolidated robustness table.
 # Paper: Beaucoral, Goujon and Marchand (2026) — appendix to §5 (robustness)
 #
 # Four blocks of checks:
-#   A   Cohort-robustness battery: leave-one-cohort-out over every estimation
-#       cohort; drop 2024 as a cohort and as a calendar year; balanced event
-#       windows (aggte balance_e = 1, 2); the 2x2 {main, retained} x {dr, reg} grid
+#   A   Cohort robustness: drop 2024 as a cohort and as a calendar year;
+#       balanced event windows (aggte balance_e = 1, 2); the 2x2
+#       {main, retained} x {dr, reg} grid
 #       with a common SE method; and which cohorts contribute to each event
 #       time.
 #   B   Anticipation (1 and 2 years), an alternative event date built from the
@@ -19,24 +19,30 @@
 #       for each specification (stage log).
 #   D   Timing (Section 13): an adopters-only design (never-treated dropped,
 #       not-yet-treated controls) on the level, the global share and the
-#       within-country share; submission months by cohort.
+#       within-country share. Submission months by cohort are the lower panel
+#       of the re-dating cross-tabulation (B).
+#   E   tab:robust_summary: the robustness rows estimated in 04 (read from
+#       output/fits/robust_rows_04.rds) and here (drop 2024, balanced event
+#       windows, baseline outcome level), on log adaptation commitments, the
+#       global share and the within-country share.
 #
 # Inputs :
 #   data/processed/simple_panel_wgi.csv
 #   output/fits/headline_{adaptation,total,nonadaptation}_dr_bs.rds
 #                                               (written by 03_main_results.R)
 #   output/fits/placebo_m2_reg_bs.rds           (written by 04_robustness.R)
+#   output/fits/robust_rows_04.rds              (written by 04_robustness.R)
 #   data/raw/shared_nap_data/nap_information.csv (submission dates; also carried
 #                                                 in the processed panel)
 # Outputs:
 #   output/tables/cohort_battery/att_2x2.tex
 #   output/tables/cohort_battery/cohort_contributions.tex
-#   output/tables/cohort_battery/att_cohort_battery.tex   (combined summary)
 #   output/tables/anticipation/att_anticipation.tex
 #   output/tables/anticipation/att_eventdate.tex
+#   output/tables/anticipation/cohort_redating_crosstab.tex (with submission months)
 #   output/tables/anticipation/att_placebo_ladder.tex
 #   output/tables/timing/att_adopters_only.tex           (Section 13a)
-#   output/tables/timing/cohort_submission_months.tex    (Section 13b)
+#   output/tables/robustness/robust_summary.tex          (tab:robust_summary, Section 14)
 #
 # Also reads output/fits/headline_share_dr_bs.rds (03) and
 # output/fits/within_share_dr_bs.rds (07) for the adopters-only comparison.
@@ -89,6 +95,7 @@ source(here("code", "functions", "mde.R"))                # mde()
 source(here("code", "functions", "make_country_id.R"))    # make_country_id()
 source(here("code", "functions", "crs_positive.R"))       # crs_positive()
 source(here("code", "functions", "table_notes.R"))       # shared table-note wording, wpval_reconciliation()
+source(here("code", "functions", "within_share.R"))      # within_share()
 
 set.seed(20240601)  # global seed — local set.seed(1242) calls follow each estimator
 
@@ -106,10 +113,12 @@ dir.create(dir_tabs_cb, recursive = TRUE, showWarnings = FALSE)
 dir.create(dir_tabs_an, recursive = TRUE, showWarnings = FALSE)
 dir_tabs_tm <- here("output", "tables", "timing")
 dir.create(dir_tabs_tm, recursive = TRUE, showWarnings = FALSE)
+dir_tabs_rs <- here("output", "tables", "robustness")
+dir.create(dir_tabs_rs, recursive = TRUE, showWarnings = FALSE)
 # A failed run must not leave the previous run's exhibits in place: they are
 # deleted before anything is estimated, and an estimation failure stops the
 # stage (the one documented exception is the forked 2x2 cell below).
-unlink(list.files(c(dir_tabs_cb, dir_tabs_an, dir_tabs_tm), pattern = "\\.(tex|png|pdf)$",
+unlink(list.files(c(dir_tabs_cb, dir_tabs_an, dir_tabs_tm, dir_tabs_rs), pattern = "\\.(tex|png|pdf)$",
                   full.names = TRUE))
 
 #' Small counts as words, for table notes
@@ -222,7 +231,8 @@ if (!"share_adapt" %in% names(did_panel)) {
   did_panel <- left_join(did_panel, share_lookup, by = c("recipient_name", "year"))
 }
 
-did_panel_full <- did_panel
+did_panel_full <- did_panel %>%
+  mutate(share_within = within_share(commitments, commitments_all))
 
 #' Cohort sizes (treated recipients per adoption year).
 cohort_sizes_of <- function(panel) {
@@ -535,49 +545,6 @@ assert_main_window <- function(rows, table) {
   invisible(TRUE)
 }
 
-# Pre-sized accumulator: 4 LOCO + 1 drop-2024 + 3 balanced + 4 grid
-# cells + 2 anticipation + 3 event-date + 3 placebo rungs + 1 conditioning = 21.
-# add_to_battery() fills the first empty slot and grows only if that estimate is
-# ever exceeded, so the common path never reallocates.
-battery_summary <- vector("list", 21L)
-
-#' Append a record to the combined battery summary.
-#'
-#' Returns the extended list rather than assigning into the enclosing
-#' environment: `<<-` is prohibited by this project's R standards.
-#'
-#' @param acc current list of records
-#' @param block block heading for the combined table
-#' @param label specification label
-#' @param res result list from run_spec() (may be NULL)
-#' @return the extended list
-add_to_battery <- function(acc, block, label, res) {
-  slot <- which(vapply(acc, is.null, logical(1L)))
-  idx  <- if (length(slot) > 0L) slot[[1L]] else length(acc) + 1L
-  acc[[idx]] <- list(block = block, label = label, res = res)
-  acc
-}
-
-# ==============================================================================
-# SECTION 3. A.1 — leave-one-cohort-out (LOCO)
-# Each estimation cohort in turn is removed from the treated group (its
-# recipients leave the sample entirely; controls are untouched). With four
-# cohorts of 8-11 recipients each, this is the sharpest available test of
-# whether one adoption wave drives the headline result.
-# ==============================================================================
-
-message("\n=== A.1: leave-one-cohort-out ===\n")
-
-for (g in kept_cohorts) {
-  panel_g <- did_panel_main %>% filter(cohort_year != g)
-  n_drop  <- n_distinct(did_panel_main$country_id[did_panel_main$cohort_year == g])
-  message(sprintf("-- dropping cohort %d (%d treated recipients)", g, n_drop))
-  res <- run_spec(panel_g, yname = "log_commits")
-  lbl <- sprintf("Drop cohort %d (%d recipients)", g, n_drop)
-  battery_summary <- add_to_battery(battery_summary, "Leave-one-cohort-out", lbl, res)
-  if (!is.null(res))
-    message(sprintf("   ATT = %.4f (SE %.4f, t %.3f)", res$att, res$se, res$t))
-}
 
 # ==============================================================================
 # SECTION 4. A.2 — dropping 2024 as a cohort and as a calendar year
@@ -595,9 +562,6 @@ panel_no2024_year <- did_panel_main %>%
   filter(year < 2024, cohort_year != 2024)
 res_no2024_year   <- run_spec(panel_no2024_year, yname = "log_commits")
 
-# Dropping only the 2024 cohort is the leave-one-cohort-out row above.
-battery_summary <- add_to_battery(battery_summary, "Drop 2024",
-                                  "Drop the 2024 cohort and calendar year 2024", res_no2024_year)
 
 # ==============================================================================
 # SECTION 5. A.3 — balanced event windows (balance_e = 1, 2)
@@ -609,45 +573,16 @@ battery_summary <- add_to_battery(battery_summary, "Drop 2024",
 
 message("\n=== A.3: balanced event windows ===\n")
 
-balance_grid <- c(NA_integer_, 1L, 2L)
-balance_lbl  <- function(be) if (is.na(be)) "Unbalanced (baseline aggregation)" else
-  sprintf("%d post-adoption year%s", be, if (be == 1L) "" else "s")
+# balance_e = 1, 2 on log adaptation commitments (rows of tab:robust_summary;
+# the share outcomes are added at the end of the script). The object of
+# interest is the DYNAMIC average, which is what balance_e modifies.
+balance_grid <- c(1L, 2L)
+res_balance <- setNames(vector("list", length(balance_grid)), balance_grid)
 for (be in balance_grid) {
-  lbl <- balance_lbl(be)
-  message("-- ", lbl)
-  # The unbalanced row is the STORED dynamic aggregation of the headline fit,
-  # not a re-estimate: re-running it would draw a fresh multiplier bootstrap
-  # and print a second standard error for a specification the paper already
-  # reports. Only the balanced windows, which the stored object does not
-  # contain, are estimated here.
-  res <- if (is.na(be)) NULL else
-    run_spec(did_panel_main, yname = "log_commits", balance_e = be)
-  if (!is.na(be) && (is.null(res) || is.null(res$agg_d)))
-    stop("Balanced-window estimation failed: ", lbl)
-  agg_bal <- if (is.na(be)) fit_head$agg_dynamic else
-    if (!is.null(res)) res$agg_d else NULL
-  # For balanced windows the object of interest is the DYNAMIC average, which
-  # is what balance_e modifies; the simple ATT is unaffected by balance_e.
-  dyn_att <- if (!is.null(agg_bal)) agg_bal$overall.att else NA_real_
-  dyn_se  <- if (!is.null(agg_bal)) agg_bal$overall.se  else NA_real_
-  dyn_t   <- if (!is.na(dyn_att) && !is.na(dyn_se) && dyn_se > 0) dyn_att / dyn_se else NA_real_
-  if (!is.na(dyn_att))
-    message(sprintf("   dynamic ATT = %.4f (SE %.4f)%s", dyn_att, dyn_se,
-                    if (is.na(be)) "  [read from the stored headline fit]" else ""))
-  # The summary reports the dynamic average (under balance_e for the balanced
-  # rows; the stored headline dynamic aggregation for the unbalanced row), not
-  # the simple ATT.
-  res_bal <- if (is.na(be)) list(
-    n_treated = n_distinct(did_panel_main$country_id[did_panel_main$cohort_year > 0]),
-    n_obs     = fit_head$n_obs) else res
-  res_bal$att <- dyn_att; res_bal$se <- dyn_se; res_bal$t <- dyn_t
-  p_bal <- if (is.na(dyn_t)) NA_real_ else 2 * pnorm(-abs(dyn_t))
-  res_bal$stars <- if (is.na(p_bal)) "" else if (p_bal < 0.01) "***" else if (p_bal < 0.05) "**" else if (p_bal < 0.10) "*" else ""
-  battery_summary <- add_to_battery(
-    battery_summary, "Balanced event window",
-    if (is.na(be)) "Unbalanced, all post-adoption years (dynamic average)" else
-      paste0(lbl, " (dynamic average)"),
-    res_bal)
+  res_balance[[as.character(be)]] <- run_spec(did_panel_main, yname = "log_commits", balance_e = be)
+  message(sprintf("-- %d post-adoption year(s): dynamic ATT = %.4f (SE %.4f)", be,
+                  res_balance[[as.character(be)]]$agg_d$overall.att,
+                  res_balance[[as.character(be)]]$agg_d$overall.se))
 }
 
 # ==============================================================================
@@ -686,7 +621,7 @@ for (oc in grid_outcomes) {
   for (gp in grid_panels) {
     for (em in c("dr", "reg")) {
       lbl <- sprintf("%s: %s, %s", oc$tag, gp$label,
-                     c(dr = "doubly robust", reg = "outcome regression")[[em]])
+                     c(dr = "DR", reg = "OR")[[em]])
       message(sprintf("-- %s x %s x %s", oc$var, gp$key, em))
       risky <- identical(gp$key, "retained") && identical(em, "dr")
       res <- if (identical(gp$key, "main") && identical(em, "dr")) {
@@ -706,9 +641,6 @@ for (oc in grid_outcomes) {
       i_grid <- i_grid + 1L
       grid_rows[[i_grid]] <- spec_row(lbl, res, allow_null = risky)
       grid_res[[i_grid]]  <- list(label = lbl, res = res)
-      if (identical(oc$var, "log_commits"))
-        battery_summary <- add_to_battery(battery_summary, "Cohort rule $\\times$ estimator",
-                                          sub("^Adaptation: ", "", lbl), res)
       if (!is.null(res))
         message(sprintf("   ATT = %.4f (SE %.4f, t %.3f) | N = %d | treated = %d",
                         res$att, res$se, res$t, res$n_obs, res$n_treated))
@@ -717,16 +649,16 @@ for (oc in grid_outcomes) {
 }
 dr_dropped <- unique(unlist(dr_dropped_by))
 grid_notes_extra <- vapply(names(risky_fail)[risky_fail], function(tag)
-  paste0("The doubly-robust estimator could not be evaluated on the retained-cohort ",
+  paste0("The DR estimator could not be evaluated on the retained-cohort ",
          "panel for ", tag, " (it crashes on 2-unit cohorts); that ",
          "cell is reported as unavailable."), character(1L))
 dr_dropped_txt <- if (length(dr_dropped) == 0L) "" else {
   sizes <- did_panel_full %>% filter(cohort_year %in% dr_dropped) %>%
     distinct(country_id, cohort_year) %>% count(cohort_year)
-  paste0("In the doubly-robust cells with all cohorts retained, the ",
+  paste0("In the DR cells with all cohorts retained, the ",
          paste(sprintf("%d cohort (%d recipients)", sizes$cohort_year, sizes$n), collapse = " and "),
-         " have no estimable post-treatment cell and drop out of the aggregate; regression ",
-         "adjustment estimates them. ``Treated'' counts the recipients in the estimation panel.")
+         " have no estimable post-treatment cell and drop out of the aggregate; OR ",
+         "estimates them. ``Treated'' counts the recipients in the estimation panel.")
 }
 
 assert_main_window(grid_res, "tab:att_2x2")
@@ -779,12 +711,12 @@ message(paste(capture.output(print(contrib_tab, row.names = FALSE)), collapse = 
 
 write_tex_float(
   file.path(dir_tabs_cb, "cohort_contributions.tex"),
-  "Cohorts contributing to each event time in the headline event study",
+  "Cohorts contributing to each event time in the main event study",
   "tab:cohort_contributions",
   tabular_of(contrib_tab, "tab:cohort_contributions"),
   paste0("Composition of the dynamic aggregation used by Figure~\\ref{fig:did_combined_es} ",
          "and the HonestDiD analysis. A cohort contributes to event time $e$ when its ",
-         "$ATT(g, g+e)$ cell is estimable in the headline estimates (non-missing, ",
+         "$ATT(g, g+e)$ cell is estimable in the main-specification estimates (non-missing, ",
          "$se > 0$); $e = -1$ is the base period and contributes none. Counts are treated ",
          "recipients of the contributing cohorts"),
   SRC_NOTE)
@@ -841,7 +773,6 @@ for (k in antic_grid) {
     antic_dyn[[lbl]]  <- if (!is.null(res)) res$agg_d else NULL
     antic_e0[[lbl]]   <- if (!is.null(res)) res$agg_e0 else NULL
     antic_leads[[lbl]] <- if (!is.null(res)) res$pre_leads else integer(0)
-    battery_summary <- add_to_battery(battery_summary, "Anticipation", lbl, res)
     if (!is.null(res))
       message(sprintf(paste0("   pooled ATT = %.4f (SE %.4f, t %.3f) | ",
                              "e >= 0 average = %.4f (SE %.4f) | pre-trend df = %d"),
@@ -917,14 +848,14 @@ write_tex_float(
   c(tabular_of(antic_tab, "tab:att_anticipation"),
     "\\par\\vspace{6pt}",
     tabular_of(dyn_tab, "tab:att_anticipation_dyn")),
-  paste0("Upper panel: pooled ATT and the $e \\geq 0$ average (see main text). Lower panel: ",
+  paste0("Upper panel: pooled ATT and the $e \\geq 0$ average, the equal-weight mean of the dynamic ATTs at $e \\geq 0$. Lower panel: ",
          "dynamic ATTs by event time, SE in parentheses. Allowing ",
          paste(vapply(antic_grid[antic_grid > 0L], num_word, character(1L)), collapse = " (or "),
          strrep(")", sum(antic_grid > 0L) - 1L), " years of anticipation shifts the base period to ",
          paste(sprintf("$g-%d$", antic_grid[antic_grid > 0L] + 1L), collapse = " ("),
          strrep(")", sum(antic_grid > 0L) - 1L), ". $^{\\dagger}$ marks event times treated as ",
          "post-treatment under that row's anticipation, not as leads. The anticipation-0 row is the ",
-         "headline estimate (Table~\\ref{tab:combined_wide_main}). ", antic_const_note,
+         "main specification (Table~\\ref{tab:combined_wide_main}). ", antic_const_note,
          SPEC_NOTE_PREAMBLE, " Pre-trend $\\chi^2$ / $p$: joint Wald test on the aggregated ",
          "pre-treatment event-time coefficients in each row's \\emph{Pre-trend leads} window, ",
          "from the analytical (non-bootstrap) fit of the same specification. ", STAR_NOTE),
@@ -1108,9 +1039,9 @@ if (!cohort_month_ok) {
     message("   (a2) dr unavailable on the retained re-dated panel — using reg.")
     res_month_a2 <- run_spec(panel_a, yname = "log_commits", est_method = "reg")
     em_a2 <- "reg"
-    a2_label_suffix <- " (outcome regression)"
-    a2_note <- paste0("Row (a2) uses outcome regression (multiplier-bootstrap SE): the doubly ",
-                      "robust fit could not be produced on this panel.")
+    a2_label_suffix <- " (OR)"
+    a2_note <- paste0("Row (a2) uses OR (multiplier-bootstrap SE): the DR ",
+                      "fit could not be produced on this panel.")
   }
   rep_a2 <- cohort_cell_report(res_month_a2$gt, panel_a)
   if (!is.null(rep_a2)) { message("  (a2) estimable cells per cohort:")
@@ -1162,15 +1093,6 @@ if (!cohort_month_ok) {
                     res_month_b$n_treated,
                     sum(rep_b$treated_in_panel[rep_b$contributes])))
 
-  battery_summary <- add_to_battery(battery_summary, "Event date",
-                                    "Re-dated within the main treated set",
-                                    res_month_a1)
-  battery_summary <- add_to_battery(battery_summary, "Event date",
-                                    paste0("Re-dated, all cohorts retained", a2_label_suffix),
-                                    res_month_a2)
-  battery_summary <- add_to_battery(battery_summary, "Event date",
-                                    "Re-dated, full adopter sample",
-                                    res_month_b)
 
   # ---- (c) original x re-dated cross-tabulation exhibit ----------------------
   ct <- redate_map %>%
@@ -1181,7 +1103,7 @@ if (!cohort_month_ok) {
   orig_levels <- sort(unique(ct$cohort_year))
 
   ct_mat <- matrix("0", nrow = length(orig_levels), ncol = length(g_labs) + 2L)
-  colnames(ct_mat) <- c(g_labs, "Total", "In main spec")
+  colnames(ct_mat) <- c(g_labs, "Total", "In main specification")
   for (i in seq_along(orig_levels)) {
     sub <- ct[ct$cohort_year == orig_levels[i], , drop = FALSE]
     for (j in seq_along(g_labs)) {
@@ -1198,17 +1120,60 @@ if (!cohort_month_ok) {
   rownames(ct_tab) <- NULL
   message(paste(capture.output(print(ct_tab, row.names = FALSE)), collapse = "\n"))
 
+  # ---- (d) submission months by cohort (lower panel of the same exhibit) -----
+  sub_dates <- did_panel_main %>%
+    filter(cohort_year > 0) %>%
+    distinct(recipient_name, cohort_year, date_posted_2) %>%
+    mutate(date = as.Date(date_posted_2), month = as.integer(format(date, "%m")))
+  stopifnot(!anyNA(sub_dates$date), !anyDuplicated(sub_dates$recipient_name),
+            all(as.integer(format(sub_dates$date, "%Y")) == sub_dates$cohort_year))
+  cohorts_tm <- sort(unique(sub_dates$cohort_year))
+  month_rows <- vapply(cohorts_tm, function(g) {
+    m <- as.integer(table(factor(sub_dates$month[sub_dates$cohort_year == g], levels = 1:12)))
+    paste0(g, " & ", sum(m), " & ", paste(m, collapse = " & "), " & ", sum(m[10:12]), " \\\\")
+  }, character(1L))
+  # COP26 window (31 Oct - 13 Nov 2021) as given in the revision plan; no other
+  # conference dates are hard-coded.
+  cop26 <- as.Date(c("2021-10-31", "2021-11-13"))
+  c21 <- sub_dates %>% filter(cohort_year == 2021) %>% arrange(date, recipient_name)
+  in_cop26 <- c21$recipient_name[c21$date >= cop26[1L] & c21$date <= cop26[2L]]
+  fmt_day <- function(d) paste(as.integer(format(d, "%d")), month.abb[as.integer(format(d, "%m"))])
+  message(sprintf("  2021 cohort (%d): %s", nrow(c21),
+                  paste(sprintf("%s %s", c21$recipient_name, format(c21$date)), collapse = "; ")))
+  message(sprintf("  2021 cohort posted Oct-Dec 2021: %d; during COP26 (31 Oct-13 Nov): %d (%s)",
+                  sum(c21$month >= 10L), length(in_cop26), paste(in_cop26, collapse = ", ")))
+  months_lines <- c(
+    "\\begin{tabular}{lcccccccccccccc}",
+    "\\toprule",
+    paste0("Cohort & $N$ & ", paste(month.abb, collapse = " & "), " & Oct--Dec \\\\"),
+    "\\midrule",
+    month_rows,
+    "\\bottomrule", "\\end{tabular}"
+  )
+
   write_tex_float(
     file.path(dir_tabs_an, "cohort_redating_crosstab.tex"),
-    "Re-dating by submission month: original against re-dated adoption cohort",
+    "Re-dating by submission month: re-dated adoption cohorts and posting months",
     "tab:cohort_redating",
-    tabular_of(ct_tab, "tab:cohort_redating"),
-    paste0("Treated recipients per (original cohort, re-dated cohort) cell. Re-dated cohort ",
+    c(tabular_of(ct_tab, "tab:cohort_redating"),
+      "\\par\\vspace{6pt}",
+      months_lines),
+    paste0("Upper panel: treated recipients per (original cohort, re-dated cohort) cell. ",
+           "Re-dated cohort ",
            "$=$ submission year $+1$ if posted after June. ``Beyond panel'': re-dated cohort ",
            "falls in ", last_year + 1L, ", outside the window; dropped, not recoded as ",
-           "controls (see main text). ``In main spec'': whether the original cohort meets ",
+           "controls. ``In main specification'': whether the original cohort meets ",
            "the $\\geq ", THIN_THRESHOLD, "$ rule. ", n_adopters_all,
-           " adopters with a recorded date shown; ", n_moved, " change cohort"),
+           " adopters with a recorded date shown; ", n_moved, " change cohort. ",
+           "Lower panel: main-sample adopters (", nrow(sub_dates), " recipients) by the ",
+           "calendar month in which UNFCCC NAP Central posted their NAP, the event date of ",
+           "the main specification (adoption year) and of the re-dating. ",
+           "In the 2021 cohort, ", sum(c21$month >= 10L), " of ", nrow(c21),
+           " NAPs were posted in October--December 2021 and ", length(in_cop26),
+           " during COP26 (31 October--13 November 2021", if (length(in_cop26) > 0L)
+             paste0(": ", paste(in_cop26, collapse = ", ")) else "", "). ",
+           "2021 cohort posting dates (2021): ",
+           paste(sprintf("%s (%s)", c21$recipient_name, fmt_day(c21$date)), collapse = ", ")),
     SRC_NOTE)
 }
 
@@ -1325,7 +1290,7 @@ build_placebo_panel <- function(panel_full, k) {
 # Pre-sized: rung -2 (read from the stored fit) plus -3, -4, -5.
 placebo_rows <- vector("list", 4L)
 
-# Rung -2 is the published placebo (Table tab:placebo). It is READ from the
+# Rung -2 is the placebo of Figure fig:placebo (04). It is READ from the
 # stored fit rather than re-estimated, so the ladder cannot print a second
 # standard error for a specification the paper already reports.
 path_plac2 <- file.path(FITS_DIR, "placebo_m2_reg_bs.rds")
@@ -1333,7 +1298,7 @@ if (file.exists(path_plac2)) {
   fit_p2 <- readRDS(path_plac2)
   t_p2 <- fit_p2$att / fit_p2$se
   placebo_rows[[1L]] <- data.frame(
-    Placebo        = "$-2$ years (published, Table~\\ref{tab:placebo})",
+    Placebo        = "$-2$ years",
     ATT            = paste0(sprintf("%.4f", fit_p2$att), fmt_stars(t_p2)),
     SE             = sprintf("(%.4f)", fit_p2$se),
     `$t$`          = sprintf("%.3f", t_p2),
@@ -1378,8 +1343,6 @@ for (k in 3:5) {
   if (!is.null(res))
     message(sprintf("   ATT = %.4f (SE %.4f, t %.3f) | MDE = %.4f",
                     res$att, res$se, res$t, mde(res$se)))
-  battery_summary <- add_to_battery(battery_summary, "Placebo ladder",
-                                    sprintf("Placebo -%d years", k), res)
 }
 
 write_tex_float(
@@ -1392,7 +1355,7 @@ write_tex_float(
          "cohorts from 2015; cohorts under ", THIN_THRESHOLD, " treated dropped. Estimator: ",
          "CS\\,(2021) OR (DR unstable on these panels), never-treated controls, multiplier-",
          "bootstrap SE (", BITERS, " reps, seed 1242). MDE $= ", sprintf("%.4f", mde(1)), " \\times$ SE (80\\% power, ",
-         "two-sided 5\\%). The $-2$ row is the estimate of Table~\\ref{tab:placebo}. ", STAR_NOTE),
+         "two-sided 5\\%). The $-2$ row is the placebo plotted in Figure~\\ref{fig:placebo}. ", STAR_NOTE),
   SRC_NOTE)
 
 # ==============================================================================
@@ -1439,8 +1402,6 @@ res_base <- run_spec(did_panel_base, yname = "log_commits",
 if (!is.null(res_base))
   message(sprintf("  Baseline-level control: ATT = %.4f (SE %.4f, t %.3f) | N = %d",
                   res_base$att, res_base$se, res_base$t, res_base$n_obs))
-battery_summary <- add_to_battery(battery_summary, "Conditioning set",
-                                  "Add baseline (2009--2012) outcome level", res_base)
 
 # --- Common support ----------------------------------------------------------
 cs_cross <- did_panel_main %>%
@@ -1539,74 +1500,6 @@ for (r in seq_len(nrow(lw_tab13)))
                   lw_tab13$`Recipients (used)`[r]))
 
 # ==============================================================================
-# SECTION 12. Combined cohort-battery summary exhibit
-# One table the reader can scan: every perturbation of the cohort structure,
-# the estimator and the conditioning set, against the headline.
-# ==============================================================================
-
-message("\n=== Combined battery summary ===\n")
-
-battery_summary <- Filter(Negate(is.null), battery_summary)
-bat_rows <- lapply(battery_summary, function(b) {
-  r <- b$res
-  data.frame(
-    Block         = b$block,
-    Specification = b$label,
-    ATT           = if (is.null(r)) "---" else paste0(sprintf("%.4f", r$att), r$stars),
-    SE            = if (is.null(r)) "---" else sprintf("(%.4f)", r$se),
-    `$t$`         = if (is.null(r)) "---" else sprintf("%.3f", r$t),
-    # A placebo row estimates a fictitious effect, not the headline under a
-    # perturbation, so a difference from the headline is not meaningful there.
-    `$\\Delta$ vs headline` = if (is.null(r) || identical(b$block, "Placebo ladder")) "---" else
-      sprintf("%+.4f", r$att - fit_head$att),
-    `Treated`     = if (is.null(r)) "---" else as.character(r$n_treated),
-    `$N$`         = if (is.null(r)) "---" else format(r$n_obs, big.mark = ","),
-    check.names = FALSE, stringsAsFactors = FALSE)
-})
-
-bat_tab <- bind_rows(
-  data.frame(
-    Block = "Headline", Specification = "Headline estimate (Table~\\ref{tab:combined_wide_main})",
-    ATT = paste0(sprintf("%.4f", fit_head$att),
-                 fmt_stars(fit_head$att / fit_head$se)),
-    SE = sprintf("(%.4f)", fit_head$se),
-    `$t$` = sprintf("%.3f", fit_head$att / fit_head$se),
-    `$\\Delta$ vs headline` = "---",
-    Treated = as.character(n_distinct(did_panel_main$country_id[
-      did_panel_main$cohort_year > 0])),
-    `$N$` = format(fit_head$n_obs, big.mark = ","),
-    check.names = FALSE, stringsAsFactors = FALSE),
-  bind_rows(bat_rows))
-
-# Rows the battery reports differently from the headline estimator: a
-# doubly-robust 2x2 cell that crashed ("---") and an (a2) outcome-regression
-# fallback, each disclosed in the note as in its own table.
-bat_extra <- c(unname(grid_notes_extra), a2_note)
-
-for (r in seq_len(nrow(bat_tab)))
-  message(sprintf("  %-28s %-46s ATT = %9s  SE = %9s",
-                  bat_tab$Block[r], bat_tab$Specification[r],
-                  bat_tab$ATT[r], bat_tab$SE[r]))
-
-write_tex_float(
-  file.path(dir_tabs_cb, "att_cohort_battery.tex"),
-  "Cohort, timing and conditioning battery: every perturbation against the headline",
-  "tab:att_cohort_battery",
-  tabular_of(bat_tab, "tab:att_cohort_battery"),
-  paste0("Outcome: log(adaptation commitments). Each row changes one thing from the headline ",
-         "spec (Specification column). The 2$\\times$2, anticipation, event-date and placebo ",
-         "blocks are detailed in Tables~\\ref{tab:att_2x2}, \\ref{tab:att_anticipation}, ",
-         "\\ref{tab:att_eventdate} and \\ref{tab:att_placebo_ladder}; the leave-one-cohort-out, ",
-         "2024, balanced-window and conditioning blocks are reported here only. ",
-         "``$\\Delta$ vs headline'' $=$ difference from the ",
-         "headline ATT of ", sprintf("%.4f", fit_head$att),
-         "; descriptive, not a test; not shown for the placebo rows, which estimate a ",
-         "fictitious effect. ",
-         if (length(bat_extra) == 0L) "" else paste0(paste(bat_extra, collapse = " "), " "),
-         SPEC_NOTE_PREAMBLE, " ", STAR_NOTE, " (normal approximation)"),
-  SRC_NOTE)
-
-# ==============================================================================
 # SECTION 13. Timing investigation
 # (a) Adopters-only design: the 40 main-sample adopters only, never-treated
 #     recipients dropped, not-yet-treated controls; otherwise the headline
@@ -1690,7 +1583,7 @@ for (v in names(adopt_fits)) for (em in c("reg", "dr")) {
                         collapse = "; ")))
 }
 
-em_lab <- c(reg = "Outcome regression", dr = "Doubly robust")
+em_lab <- c(reg = "OR", dr = "DR")
 adopt_rows <- unlist(lapply(seq_along(adopt_outcomes), function(k) {
   oc <- adopt_outcomes[[k]]
   ems <- c(em_rule, setdiff(c("reg", "dr"), em_rule))
@@ -1728,9 +1621,9 @@ write_tex_float(
          "calendar years after ", f0$years[2L], ", so the estimated cohorts are ",
          paste(f0$groups, collapse = ", "), " (``Treated'' units) and the post-treatment ",
          "event times are $e=", min(post_e), ",\\dots,", max(post_e), "$. ",
-         "Estimator: the first row of each outcome uses ", tolower(em_lab[[em_rule]]),
-         ", which our rule selects (doubly robust only with at least 40 treated units); the ",
-         "second row reports ", tolower(em_lab[[setdiff(c("reg", "dr"), em_rule)]]),
+         "Estimator: the first row of each outcome uses ", em_lab[[em_rule]],
+         ", which our rule selects (DR only with at least 40 treated units); the ",
+         "second row reports ", em_lab[[setdiff(c("reg", "dr"), em_rule)]],
          " for comparison. ATT/SE: multiplier bootstrap (", BITERS, " reps, clustered by recipient, ",
          "seed 1242). ", as_in_main("pre-trend test"), ". ",
          pretrend_window_note(min(pt_leads), max(pt_leads), f0$pt$df),
@@ -1739,50 +1632,164 @@ write_tex_float(
          if (any(grepl("\\*", adopt_rows))) paste0(". ", STAR_NOTE) else ""),
   SRC_NOTE)
 
-# --- (b) Submission months by cohort -----------------------------------------
-sub_dates <- did_panel_main %>%
-  filter(cohort_year > 0) %>%
-  distinct(recipient_name, cohort_year, date_posted_2) %>%
-  mutate(date = as.Date(date_posted_2), month = as.integer(format(date, "%m")))
-stopifnot(!anyNA(sub_dates$date), !anyDuplicated(sub_dates$recipient_name),
-          all(as.integer(format(sub_dates$date, "%Y")) == sub_dates$cohort_year))
-cohorts_tm <- sort(unique(sub_dates$cohort_year))
-month_rows <- vapply(cohorts_tm, function(g) {
-  m <- as.integer(table(factor(sub_dates$month[sub_dates$cohort_year == g], levels = 1:12)))
-  paste0(g, " & ", sum(m), " & ", paste(m, collapse = " & "), " & ", sum(m[10:12]), " \\\\")
-}, character(1L))
-# COP26 window (31 Oct - 13 Nov 2021) as given in the revision plan; no other
-# conference dates are hard-coded.
-cop26 <- as.Date(c("2021-10-31", "2021-11-13"))
-c21 <- sub_dates %>% filter(cohort_year == 2021) %>% arrange(date, recipient_name)
-in_cop26 <- c21$recipient_name[c21$date >= cop26[1L] & c21$date <= cop26[2L]]
-fmt_day <- function(d) paste(as.integer(format(d, "%d")), month.abb[as.integer(format(d, "%m"))])
-message(sprintf("  2021 cohort (%d): %s", nrow(c21),
-                paste(sprintf("%s %s", c21$recipient_name, format(c21$date)), collapse = "; ")))
-message(sprintf("  2021 cohort posted Oct-Dec 2021: %d; during COP26 (31 Oct-13 Nov): %d (%s)",
-                sum(c21$month >= 10L), length(in_cop26), paste(in_cop26, collapse = ", ")))
-months_lines <- c(
-  "\\begin{tabular}{lcccccccccccccc}",
+
+# ==============================================================================
+# SECTION 14. tab:robust_summary -- one table for the sample, conditioning,
+# estimator and outcome-unit checks, on log adaptation commitments, the global
+# share and the within-country share (Panel A), and on log total and
+# non-adaptation commitments where they are estimated (Panel B).
+# Rows estimated in 04 are read from output/fits/robust_rows_04.rds (cells as
+# formatted there); the main row is read from the fits 03 and 07 store; the
+# drop-2024, balanced-window and baseline-level rows are estimated here. These
+# fits run last in the script, so they move no draw of an earlier exhibit.
+# ==============================================================================
+
+message("\n=== Section 14: tab:robust_summary ===\n")
+
+path_rr <- file.path(FITS_DIR, "robust_rows_04.rds")
+if (!file.exists(path_rr))
+  stop("Robustness rows not found: ", path_rr, " (written by 04_robustness.R; run_all.R runs 04 before 13).")
+rr04 <- readRDS(path_rr)
+
+rs_vars_a <- c("log_commits", "share_adapt", "share_within")
+rs_vars_b <- c("lcommitments_all", "lcommitments_nonadapt")
+
+#' One table cell from an estimate, its SE and a pre-trend p (NA -> "---")
+rs_cell <- function(att, se, p = NA_real_) {
+  list(att_fmt = paste0(sprintf("%.4f", att), fmt_stars(att / se)),
+       se_fmt = sprintf("(%.4f)", se),
+       p_fmt = if (is.na(p)) "---" else sprintf("%.3f", p), att = att, se = se)
+}
+#' Cell from a run_spec() result: simple ATT, or the dynamic average for the
+#' balanced-window rows (whose pre-trend test is the main fit's: "---")
+rs_cell_res <- function(res, dynamic = FALSE) {
+  if (dynamic) rs_cell(res$agg_d$overall.att, res$agg_d$overall.se)
+  else rs_cell(res$att, res$se, res$pretrend$pval)
+}
+
+# Main specification: the stored fits behind Table 2 and tab:within_share_wide.
+fit_within_main <- readRDS(file.path(FITS_DIR, "within_share_dr_bs.rds"))
+main_fits <- list(log_commits = fit_head, share_adapt = read_headline_fit("share"),
+                  share_within = fit_within_main,
+                  lcommitments_all = read_headline_fit("total"),
+                  lcommitments_nonadapt = read_headline_fit("nonadaptation"))
+rs_main <- lapply(main_fits, function(f) rs_cell(f$att, f$se, f$pretrend$pval))
+# Unbalanced dynamic average (all post-adoption years, equal weights over
+# e >= 0) of the same stored fits: the reference of the balanced-window rows.
+rs_unbal <- lapply(main_fits[rs_vars_a], function(f)
+  rs_cell(f$agg_dynamic$overall.att, f$agg_dynamic$overall.se))
+stopifnot("Unbalanced dynamic average differs from tab:att_anticipation's ATT, e >= 0" =
+            identical(sprintf("%.4f (%.4f)", rs_unbal$log_commits$att, rs_unbal$log_commits$se),
+                      sprintf("%.4f (%.4f)", agg_e0_base$overall.att, agg_e0_base$overall.se)))
+
+# Rows estimated here, for the two share outcomes (log adaptation: above).
+rs_drop24 <- list(log_commits = rs_cell_res(res_no2024_year))
+rs_bal    <- lapply(res_balance, function(r) list(log_commits = rs_cell_res(r, dynamic = TRUE)))
+rs_base   <- list(log_commits = rs_cell_res(res_base))
+for (y in c("share_adapt", "share_within")) {
+  message("-- ", y, ": drop 2024, balanced windows, baseline level")
+  rs_drop24[[y]] <- rs_cell_res(run_spec(panel_no2024_year, yname = y))
+  for (be in names(res_balance))
+    rs_bal[[be]][[y]] <- rs_cell_res(run_spec(did_panel_main, yname = y, balance_e = as.integer(be)),
+                                     dynamic = TRUE)
+  base_y <- did_panel_full %>%
+    filter(year %in% BASE_YEARS) %>%
+    group_by(country_id) %>%
+    summarise(base_outcome = mean(.data[[y]], na.rm = TRUE), .groups = "drop") %>%
+    mutate(base_outcome = if_else(is.finite(base_outcome), base_outcome, NA_real_))
+  rs_base[[y]] <- rs_cell_res(run_spec(did_panel_main %>% left_join(base_y, by = "country_id"),
+                                       yname = y,
+                                       xformla = ~ ge_est + log_population + base_outcome))
+}
+
+n_bal <- unname(rr04$balanced_n[["recipients"]])
+rs_rows <- list(
+  list(label = "Main specification (Table~\\ref{tab:combined_wide_main})", cells = rs_main),
+  list(label = "Balanced panel, covariates at $g-1$",  cells = rr04$balanced),
+  list(label = "Panel from 2010",                        cells = rr04$panel2010),
+  list(label = "Excluding India",                        cells = rr04$noindia),
+  list(label = "Not-yet-treated control group",          cells = rr04$notyettreated),
+  list(label = "Baseline (2009--2012) outcome level as covariate", cells = rs_base),
+  list(label = "de Chaisemartin--D'Haultf{\\oe}uille estimator", cells = rr04$dcdh),
+  list(label = "Outcome in raw USD, $\\log(1+x)$",         cells = rr04$rawusd),
+  list(label = "PPML in levels",                           cells = rr04$ppml),
+  list(label = "Drop the 2024 cohort and calendar year 2024", cells = rs_drop24),
+  list(label = "Unbalanced, all post-adoption years (dynamic average)", cells = rs_unbal),
+  list(label = "Balanced event window, 1 post-adoption year",  cells = rs_bal[["1"]]),
+  list(label = "Balanced event window, 2 post-adoption years", cells = rs_bal[["2"]])
+)
+# Every row carries log adaptation commitments; the two log-outcome cells
+# that are not meaningful for a share are "---".
+stopifnot(all(vapply(rs_rows, function(r) !is.null(r$cells$log_commits), logical(1L))))
+
+#' Two table lines (estimates and pre-trend p; SEs) for one row
+#'
+#' @param r row: list(label, cells)
+#' @param vars outcomes, one ATT/p column pair each ("---" if the cell is absent)
+#' @param pad empty cells appended (Panel B fills the 7-column tabular)
+rs_lines <- function(r, vars, pad = 0L) {
+  est <- unlist(lapply(vars, function(v) {
+    ce <- r$cells[[v]]; if (is.null(ce)) c("---", "---") else c(ce$att_fmt, ce$p_fmt) }))
+  ses <- unlist(lapply(vars, function(v) {
+    ce <- r$cells[[v]]; c(if (is.null(ce)) "" else ce$se_fmt, "") }))
+  fill <- rep("", pad)
+  paste0(c(paste(c(r$label, est, fill), collapse = " & "),
+           paste(c("", ses, fill), collapse = " & ")), " \\\\")
+}
+rows_b <- Filter(function(r) !is.null(r$cells$lcommitments_all), rs_rows)
+col_head <- function(labs) paste0(" & ", paste(sprintf("\\multicolumn{2}{c}{%s}", labs),
+                                               collapse = " & "))
+rs_tabular <- c(
+  "\\begin{tabular}{lcccccc}",
   "\\toprule",
-  paste0("Cohort & $N$ & ", paste(month.abb, collapse = " & "), " & Oct--Dec \\\\"),
+  "\\multicolumn{7}{l}{\\textit{Panel A: adaptation outcomes}} \\\\",
+  paste0(col_head(c("log(Adaptation commitments)", "Adaptation share (\\% of global)",
+                    "Within-country share (pp)")), " \\\\"),
+  "\\cmidrule(lr){2-3} \\cmidrule(lr){4-5} \\cmidrule(lr){6-7}",
+  "Specification & ATT & Pre-trend $p$ & ATT & Pre-trend $p$ & ATT & Pre-trend $p$ \\\\",
   "\\midrule",
-  month_rows,
+  unlist(lapply(rs_rows, rs_lines, vars = rs_vars_a)),
+  "\\midrule",
+  "\\multicolumn{7}{l}{\\textit{Panel B: envelope outcomes}} \\\\",
+  paste0(col_head(c("log(Total commitments)", "log(Non-adaptation commitments)")), " & & \\\\"),
+  "\\cmidrule(lr){2-3} \\cmidrule(lr){4-5}",
+  "Specification & ATT & Pre-trend $p$ & ATT & Pre-trend $p$ & & \\\\",
+  "\\midrule",
+  unlist(lapply(rows_b, rs_lines, vars = rs_vars_b, pad = 2L)),
   "\\bottomrule", "\\end{tabular}"
 )
+
+for (r in rs_rows)
+  message(sprintf("  %-55s %s", r$label, paste(vapply(names(r$cells), function(v)
+    sprintf("%s %s %s p=%s", v, r$cells[[v]]$att_fmt, r$cells[[v]]$se_fmt, r$cells[[v]]$p_fmt),
+    character(1L)), collapse = " | ")))
+
 write_tex_float(
-  file.path(dir_tabs_tm, "cohort_submission_months.tex"),
-  "NAP submission months by adoption cohort",
-  "tab:cohort_submission_months",
-  months_lines,
-  paste0("Main-sample adopters (", nrow(sub_dates), " recipients) by the calendar month in ",
-         "which UNFCCC NAP Central posted their NAP; the posting date is the event date of ",
-         "the main specification (adoption year) and of the month-based re-dating. ",
-         "In the 2021 cohort, ", sum(c21$month >= 10L), " of ", nrow(c21),
-         " NAPs were posted in October--December 2021 and ", length(in_cop26),
-         " during COP26 (31 October--13 November 2021", if (length(in_cop26) > 0L)
-           paste0(": ", paste(in_cop26, collapse = ", ")) else "", "). ",
-         "2021 cohort posting dates (2021): ",
-         paste(sprintf("%s (%s)", c21$recipient_name, fmt_day(c21$date)), collapse = ", ")),
-  "UNFCCC NAP Central (posting dates)")
+  file.path(dir_tabs_rs, "robust_summary.tex"),
+  "Robustness of the main estimates: sample, comparison group, conditioning, estimator and outcome units",
+  "tab:robust_summary",
+  rs_tabular,
+  paste0(
+    as_in_main(c("estimator", "covariates", "control group", "inference",
+                 "pre-trend test", "significance stars")),
+    "; SE in parentheses below each ATT. Each row changes one element of the main ",
+    "specification: balanced panel, the ", n_bal, " recipients observed in every year, so ",
+    "covariates enter at $g-1$; panel from 2010, 2009 dropped; excluding India, a ",
+    "never-treated recipient; not-yet-treated control group; baseline outcome level, the ",
+    "recipient's ", min(BASE_YEARS), "--", max(BASE_YEARS), " mean of the outcome added to the ",
+    "covariates; de Chaisemartin--D'Haultf{\\oe}uille (2026) estimator, average total effect ",
+    "(Table~\\ref{tab:dcdh}); raw USD, outcome $\\log(1+\\text{commitments in USD})$ and PPML, ",
+    "Sun--Abraham Poisson in levels (both Table~\\ref{tab:units_zeros}); drop 2024, the 2024 ",
+    "cohort and calendar year 2024; unbalanced dynamic average, the equal-weight mean of the ",
+    "main fit's dynamic ATTs over all post-adoption years (as in Table~\\ref{tab:att_anticipation}); ",
+    "balanced event window, the same average restricted to the cohorts observed for at least ",
+    "one (two) post-adoption years, to be compared with the unbalanced dynamic average, not ",
+    "with the main simple ATT. Within-country share: ",
+    "$100 \\times E/S$, as in Table~\\ref{tab:within_share_wide}. ``---'' in an ATT cell: ",
+    "not meaningful (a share has no raw-USD or levels version); in a pre-trend cell: no ",
+    "comparable four-lead test (de Chaisemartin--D'Haultf{\\oe}uille and PPML), or the ",
+    "test of the main fit (the three dynamic-average rows, which re-aggregate it). Panel B: rows ",
+    "in which total and non-adaptation commitments are estimated"),
+  SRC_NOTE)
 
 message("\n=== 13_cohort_anticipation.R: complete ===\n")

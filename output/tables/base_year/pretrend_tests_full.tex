@@ -1,33 +1,26 @@
 \begin{table}[H]
 \centering
-\caption{Pre-trend tests: aggregated leads, full window, and did's built-in test}
+\caption{Pre-trend tests over the full pre-treatment window}
 \label{tab:pretrend_tests_full}
 \adjustbox{max width=\textwidth}{%
-\begin{tabular}{lccccccccc}
+\begin{tabular}{lcccccc}
 \toprule
- & \multicolumn{3}{c}{Leads $\geq -5$} & \multicolumn{3}{c}{Full window} & \multicolumn{3}{c}{did built-in pre-test} \\
-\cmidrule(lr){2-4} \cmidrule(lr){5-7} \cmidrule(lr){8-10}
-Outcome & $\chi^2$ & df & $p$ & $\chi^2$ & df & $p$ & $W$ & df & $p$ \\
+ & \multicolumn{3}{c}{Panel 2009--2024 (main)} & \multicolumn{3}{c}{Panel 2010--2024} \\
+\cmidrule(lr){2-4} \cmidrule(lr){5-7}
+Outcome & $\chi^2$ & df & $p$ & $\chi^2$ & df & $p$ \\
 \midrule
-\multicolumn{10}{l}{\textit{Panel A: panel 2009--2024 (headline sample)}} \\
-log(Adaptation commitments) & 1.803 & 4 & 0.772 & 25.827 & 14 & 0.027 & 563.117 & 50 & 0.000 \\
-Adaptation share (\% of global) & 2.631 & 4 & 0.621 & 20.569 & 14 & 0.113 & 347.407 & 50 & 0.000 \\
-log(Total commitments) & 11.690 & 4 & 0.020 & 22.921 & 14 & 0.062 & 294.368 & 50 & 0.000 \\
-log(Non-adaptation commitments) & 10.104 & 4 & 0.039 & 19.037 & 14 & 0.164 & 296.618 & 50 & 0.000 \\
-log(Adaptation disbursements) & 4.005 & 4 & 0.405 & 23.382 & 14 & 0.054 & 575.188 & 50 & 0.000 \\
-\midrule
-\multicolumn{10}{l}{\textit{Panel B: panel 2010--2024}} \\
-log(Adaptation commitments) & 1.803 & 4 & 0.772 & 27.968 & 13 & 0.009 & 400.115 & 46 & 0.000 \\
-Adaptation share (\% of global) & 2.631 & 4 & 0.621 & 21.008 & 13 & 0.073 & 247.886 & 46 & 0.000 \\
-log(Total commitments) & 11.690 & 4 & 0.020 & 23.910 & 13 & 0.032 & 288.740 & 46 & 0.000 \\
-log(Non-adaptation commitments) & 10.104 & 4 & 0.039 & 20.480 & 13 & 0.084 & 267.157 & 46 & 0.000 \\
-log(Adaptation disbursements) & 4.005 & 4 & 0.405 & 20.296 & 13 & 0.088 & 451.210 & 46 & 0.000 \\
+log(Adaptation commitments) & 25.827 & 14 & 0.027 & 27.968 & 13 & 0.009 \\
+Adaptation share (\% of global) & 20.569 & 14 & 0.113 & 21.008 & 13 & 0.073 \\
+Within-country share (pp) & 10.574 & 14 & 0.719 & 19.612 & 13 & 0.105 \\
+log(Total commitments) & 22.921 & 14 & 0.062 & 23.910 & 13 & 0.032 \\
+log(Non-adaptation commitments) & 19.037 & 14 & 0.164 & 20.480 & 13 & 0.084 \\
+log(Adaptation disbursements) & 23.382 & 14 & 0.054 & 20.296 & 13 & 0.088 \\
 \bottomrule
 \end{tabular}
 }
 \par\vspace{4pt}
 \begin{minipage}{\linewidth}\footnotesize
-Notes: Estimator, covariates, control group and pre-trend tests as in Table~\ref{tab:combined_wide_main} (universal base period, cohorts $\geq 5$); analytical (non-bootstrap) fit throughout. ``Leads $\geq -5$'' uses Table~\ref{tab:combined_wide_main}'s window, ``full window'' every available pre-period; restriction counts are the df columns. \texttt{did} pre-test $p$ pools each cohort's pre-treatment $ATT(g,t)$ cells against its own base year and excludes the zero-variance base-year cell. Panel~B repeats the three tests on the panel starting in 2010, which has no 2009 cells.\par
+Notes: Estimator, covariates and control group as in Table~\ref{tab:combined_wide_main} (universal base period, cohorts $\geq 5$); analytical (non-bootstrap) fit. Joint Wald test on the aggregated pre-treatment event-time coefficients, as in Table~\ref{tab:combined_wide_main}, but over every available pre-period instead of $-5 \leq e \leq -2$; df is the number of restrictions. The right panel starts in 2010 and has no 2009 cells. Within-country share: $100 \times E/S$, as in Table~\ref{tab:within_share_wide}. The four-lead test is in Table~\ref{tab:combined_wide_main} (2009--2024) and Table~\ref{tab:robust_summary} (2010--2024). \texttt{did}'s built-in pre-test rejects for every outcome on both panels ($p<0.001$).\par
 Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
 \end{minipage}
 \end{table}

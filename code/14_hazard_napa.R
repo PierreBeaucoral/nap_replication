@@ -80,7 +80,7 @@ if (utils::packageVersion("did") < "2.5.0") {
 set.seed(20240601)
 
 DID_VERSION  <- as.character(utils::packageVersion("did"))
-EMDAT_VINTAGE <- "EM-DAT v2026-09-11 (CRED/UCLouvain public custom request, downloaded 2026-09-15)"
+EMDAT_VINTAGE <- "EM-DAT v2026-09-11"
 
 ##############################################################################
 # §0b. OUTPUT DIRECTORIES
@@ -869,12 +869,12 @@ if (!emdat_available) {
   }
 
   hazard_rows <- list(
-    list(label = "Headline (full main panel)",    set = "--", fit = fit_headline_ref, diff = NULL),
+    list(label = "Main specification (full panel)", set = "--", fit = fit_headline_ref, diff = NULL),
     list(label = "Baseline, hazard sample (no hazard control)", set = "--",
         fit = fit_baseline, diff = diff_ref_baseline),
     list(label = "(a) Affected, $t-1$",          set = "Climate-related",
         fit = fit_a_affected, diff = diff_a_affected),
-    list(label = if (fit_a_damage$est_method == "reg") "(a) Damage, $t-1$ (reg)" else
+    list(label = if (fit_a_damage$est_method == "reg") "(a) Damage, $t-1$ (OR)" else
                    "(a) Damage, $t-1$",          set = "Climate-related",
         fit = fit_a_damage, diff = diff_a_damage),
     list(label = "(b) Residualized outcome",     set = "Climate-related",
@@ -925,12 +925,12 @@ if (!emdat_available) {
       as_in_main(c("estimator", "baseline covariates", "control group", "inference",
                    "significance stars"), capitalize = FALSE),
       if (fit_a_damage$est_method == "reg") paste0(
-        "; the damage row (reg) uses outcome regression: the doubly robust fit on that sample ",
+        "; the damage row uses OR: the DR fit on that sample ",
         "leaves post-treatment cells for only ", fit_a_damage_dr$n_treated,
-        " treated units (doubly robust is used only with $\\geq 40$; its estimate is ",
+        " treated units (DR is used only with $\\geq 40$; its estimate is ",
         sprintf("%.4f", fit_a_damage_dr$agg_s$overall.att), ", SE ",
         sprintf("%.4f", fit_a_damage_dr$agg_s$overall.se), ")") else "",
-      ". Row 1: the headline estimate. Row 2: hazard sample (missing EM-DAT ",
+      ". Row 1: the main specification. Row 2: hazard sample (missing EM-DAT ",
       "lag dropped). $\\Delta$ vs.\\ reference $=$ reference ATT $-$ row ATT; the reference is ",
       "Row 1 for Row 2 and Row 2 for Rows 3--", length(hazard_rows), ". Hazards: climate-related events unless noted (last row: all natural ",
       "hazards). (a) adds the one-year-lagged hazard measure to the covariates (each ",
@@ -1106,11 +1106,6 @@ run_orthogonality_battery <- function(lag1_var, lag2_var, out_path, caption_titl
       sprintf("%.1f", 100 * mean(two_lag$nap_submit)), "\\% per country-year (",
       sum(two_lag$nap_submit), " events, ", n_countries_two_lag, " countries). ", n_dropped,
       " rows lacking a valid two-year lag dropped. Full cohort set (not $\\geq 5$)",
-      if (is.null(m_cloglog))
-        paste0(". A two-lag complementary log-log hazard model with the same fixed ",
-               "effects is not estimable (",
-               if (grepl("singleton", cloglog_error_msg)) "fixed-effects singleton" else
-                 "estimation error", ") and is not reported") else "",
       if (nzchar(extra_note)) paste0(". ", extra_note) else "",
       ". ", STAR_NOTE
     ),
@@ -1207,13 +1202,11 @@ message(sprintf("NAPA submissions span %d-%d (%d NAPAs).",
                 min(napa_list$napa_year), max(napa_list$napa_year), n_napa))
 
 # Provenance string reused in every NAPA table note.
+# (Transcription and verification provenance: data/raw/napa/README.md and the
+# replication README, not the table notes.)
 napa_source_note <- paste0(
-  "UNFCCC `NAPAs received' page (", n_napa, " NAPAs, latest South Sudan, Feb.\\ 2017), ",
-  "transcribed by the authors 2026-09-15, cross-checked ", n_napa, "/", n_napa,
-  " against the archived page PDF (shipped with the replication package)")
-# Short label for Source: fields (the full provenance sentence belongs in
-# Notes only; repeating it in Source would be redundant).
-napa_source_short <- "UNFCCC `NAPAs received' list (transcribed by the authors, verified -- see Notes)"
+  "UNFCCC `NAPAs received' page (", n_napa, " NAPAs, latest South Sudan, Feb.\\ 2017)")
+napa_source_short <- "UNFCCC `NAPAs received' list"
 
 write.csv(napa_list, here("data", "processed", "napa_list.csv"), row.names = FALSE)
 message("Wrote: data/processed/napa_list.csv  (", n_napa, " countries; source = ",
@@ -1363,10 +1356,10 @@ message(sprintf("Difference (prior NAPA - no prior NAPA) = %.4f, SE = %.4f, p = 
 
 napa_em_used  <- unique(c(fit_prior_yes$est_method, fit_prior_no$est_method))
 napa_em_label <- if (identical(napa_em_used, "reg")) {
-  paste0("outcome-regression estimator (doubly robust is used only for cells with ",
+  paste0("OR (DR is used only for cells with ",
          "$\\geq 40$ treated units; both cells have fewer)")
-} else if (identical(napa_em_used, "dr")) "doubly robust" else
-  "doubly robust in cells with $\\geq 40$ treated units, outcome regression otherwise"
+} else if (identical(napa_em_used, "dr")) "DR" else
+  "DR in cells with $\\geq 40$ treated units, OR otherwise"
 napa_split_lines <- c(
   "\\begin{tabular}{lccccc}",
   "\\toprule",
@@ -1608,7 +1601,7 @@ if (n_late_napa < 5L) {
     "\\toprule",
     "Falsification treatment & ATT & SE & 95\\% CI & $p$-value & $N$ cohorts \\\\",
     "\\midrule",
-    paste0("NAPA submission ($G_i$ = NAPA-submission year) & ", fmt4(placebo_att), stars_of(placebo_p),
+    paste0("NAPA submission ($G_i^{\\mathrm{NAPA}}$ = NAPA-submission year) & ", fmt4(placebo_att), stars_of(placebo_p),
            " & (", fmt4(placebo_se), ") & [", fmt4(ci_lo), ", ", fmt4(ci_hi), "] & ",
            fmt3(placebo_p), " & ", length(surviving_cohorts), " \\\\"),
     "\\bottomrule",
@@ -1623,8 +1616,8 @@ if (n_late_napa < 5L) {
       "CS\\,(2021), ", if (use_retained_fallback)
         "OR with analytical SE (the NAPA cohorts have fewer than 5 treated units each)"
       else "DR (multiplier-bootstrap SE, 999 reps, seed 1242)",
-      ", never-treated controls; low-power falsification, not a placebo (see main ",
-      "text for the point estimate, cohort composition, and MDE). $G_i$ = NAPA-submission ",
+      ", never-treated controls; low-power falsification, not a placebo. ",
+      "$G_i^{\\mathrm{NAPA}}$ = NAPA-submission ",
       "year; panel restricted to ", first_year, "--", placebo_cutoff_year,
       ", verified free of real-NAP treatment; out-of-window NAPAs are pseudo-never-treated. ",
       "NAPA list: ", napa_source_note, ".", " \\texttt{did} ", DID_VERSION

@@ -11,7 +11,6 @@
 #   output/tables/principal_share/within_share_wide.tex      (tab:within_share_wide)
 #   output/tables/principal_share/share_reconciliation.tex   (tab:share_reconciliation)
 #   output/figures/principal_share/fig_within_share_es.png
-#   output/figures/principal_share/fig_share_reconciliation.png
 #   output/fits/within_share_dr_bs.rds, within_logit_dr_bs.rds  (within-share
 #     fits, read by 04 HonestDiD, 08 RI and 11)
 #   (mirrored to paper/Tables/principal_share/, paper/Figures/principal_share/)
@@ -79,6 +78,8 @@ source(here("code", "functions", "simple_att_event_weights.R"))  # simple_att_ev
 source(here("code", "functions", "crs_positive.R"))       # crs_positive()
 source(here("code", "functions", "sup_t_crit.R"))         # sup_t_crit()
 source(here("code", "functions", "table_notes.R"))       # shared table-note wording, wpval_reconciliation()
+source(here("code", "functions", "within_share.R"))      # within_share()
+source(here("code", "functions", "es_plot_fig2.R"))      # es_plot_fig2()
 
 set.seed(20240601)  # global seed — local set.seed(1242) calls follow each estimator
 
@@ -297,7 +298,7 @@ message(sprintf(
 
 did_panel_full <- did_panel_full %>%
   mutate(
-    share_within = if_else(crs_positive(commitments_all), 100 * commitments / commitments_all, NA_real_),
+    share_within = within_share(commitments, commitments_all),
     logit_within = if_else(
       crs_positive(commitments_all),
       log((commitments + 0.5) / (commitments_all - commitments + 0.5)),
@@ -306,7 +307,7 @@ did_panel_full <- did_panel_full %>%
   )
 did_panel_tab_main <- did_panel_tab_main %>%
   mutate(
-    share_within = if_else(crs_positive(commitments_all), 100 * commitments / commitments_all, NA_real_),
+    share_within = within_share(commitments, commitments_all),
     logit_within = if_else(
       crs_positive(commitments_all),
       log((commitments + 0.5) / (commitments_all - commitments + 0.5)),
@@ -399,7 +400,7 @@ fit_main_spec <- function(did_panel_in, yname, est_method = "dr",
 # common row set used by every wide table below.
 # ------------------------------------------------------------------------
 summarize_fit <- function(fit, did_panel_in, raw_var, is_share = FALSE,
-                          estimator_label = "CS (2021), doubly-robust",
+                          estimator_label = "CS (2021) DR",
                           bootstrap_label = "Yes (multiplier, 999 reps)") {
 
   # A failed fit stops the run: no column is ever written as "---".
@@ -663,14 +664,14 @@ message(sprintf("  Difference (headline - principal) = %.4f, SE = %.4f, z = %.3f
                 diff_hp$diff, diff_hp$se, diff_hp$z, diff_hp$pval, diff_hp$method))
 
 extra_lines_r2 <- c(
-  sprintf("\\multicolumn{3}{l}{Difference (headline $-$ principal) = %.4f, SE = %.4f, $z$ = %.3f, $p$ = %.3f} \\\\",
+  sprintf("\\multicolumn{3}{l}{Difference (main $-$ principal) = %.4f, SE = %.4f, $z$ = %.3f, $p$ = %.3f} \\\\",
           diff_hp$diff, diff_hp$se, diff_hp$z, diff_hp$pval),
   sprintf("\\multicolumn{3}{l}{\\footnotesize Difference SE method: %s.} \\\\", diff_hp$method)
 )
 
 tab_lines_r2 <- build_wide_table(
   stats_list = list(stats_headline, stats_principal),
-  col_labels = c("Principal + significant (headline)", "Principal only"),
+  col_labels = c("Principal + significant (main specification)", "Principal only"),
   extra_row_lines = extra_lines_r2
 )
 
@@ -679,17 +680,17 @@ notes_r2 <- sub("[. ]+$", "", paste0(
     as_in_main(c("estimator", "covariates", "control group",
                  "inference", "pre-trend tests", "implied effects",
                  "significance stars")), ". ",
-    "``Headline'' = $\\log(1+\\text{adaptation-marked commitments})$, Rio marker $\\in\\{1,2\\}$; ",
+    "``Main specification'' = $\\log(1+\\text{adaptation-marked commitments})$, Rio marker $\\in\\{1,2\\}$ (all marked); ",
     "``Principal only'' = $\\log(1+\\text{principal-marked commitments})$, Rio marker $=2$ only. ",
     pretrend_note_cols(list(stats_headline, stats_principal),
-                       c("Principal + significant (headline)", "Principal only"))
+                       c("Principal + significant (main specification)", "Principal only"))
 ))
 source_r2 <- SOURCE_MAIN
 
 out_path_r2 <- here("output", "tables", "principal_share", "principal_wide.tex")
 write_tex_float(
   out_path_r2,
-  "Effect of NAP adoption on adaptation finance: headline vs.\\ principal-marker-only outcome",
+  "Effect of NAP adoption on adaptation finance: main specification vs.\\ principal-marker-only outcome",
   "tab:principal_wide", tab_lines_r2, notes_r2, source_r2
 )
 copy_to_paper(out_path_r2, "Tables")
@@ -715,16 +716,16 @@ message(sprintf("  lcommitments_principal (retained)  : ATT = %.4f  SE = %.4f",
 
 stats_headline_retained  <- summarize_fit(fit_headline_retained, did_panel_full,
                                           raw_var = "commitments",
-                                          estimator_label = "CS (2021), outcome regression",
+                                          estimator_label = "CS (2021) OR",
                                           bootstrap_label = "No (analytical SE)")
 stats_principal_retained <- summarize_fit(fit_principal_retained, did_panel_full,
                                           raw_var = "commitments_principal",
-                                          estimator_label = "CS (2021), outcome regression",
+                                          estimator_label = "CS (2021) OR",
                                           bootstrap_label = "No (analytical SE)")
 
 tab_lines_r2b <- build_wide_table(
   stats_list = list(stats_headline_retained, stats_principal_retained),
-  col_labels = c("Headline (retained cohorts)", "Principal only (retained cohorts)")
+  col_labels = c("Main specification (retained cohorts)", "Principal only (retained cohorts)")
 )
 
 # write_tex_float() adds the final period.
@@ -734,14 +735,14 @@ notes_r2b <- sub("[. ]+$", "", paste0(
     as_in_main(c("covariates", "control group",
                  "pre-trend tests", "implied effects", "significance stars")), ". ",
     pretrend_note_cols(list(stats_headline_retained, stats_principal_retained),
-                       c("Headline (retained cohorts)", "Principal only (retained cohorts)")),
+                       c("Main specification (retained cohorts)", "Principal only (retained cohorts)")),
     did_pretest_reason(list(stats_headline_retained, stats_principal_retained),
-                       c("headline", "principal only"))
+                       c("principal + significant", "principal only"))
 ))
 out_path_r2b <- here("output", "tables", "principal_share", "principal_retained.tex")
 write_tex_float(
   out_path_r2b,
-  "Retained-cohorts robustness: headline vs.\\ principal-marker-only outcome",
+  "Retained-cohorts robustness: principal + significant vs.\\ principal-marker-only outcome",
   "tab:principal_retained", tab_lines_r2b, notes_r2b, source_r2
 )
 copy_to_paper(out_path_r2b, "Tables")
@@ -848,18 +849,10 @@ for (nm in names(es_within))
 dyn_r4 <- bind_rows(dyn_share_within, dyn_logit_within) %>%
   mutate(outcome = factor(outcome, levels = c("Level (%)", "Logit")))
 
-p_r4 <- ggplot(dyn_r4, aes(x = event_time, y = ATT)) +
-  geom_hline(yintercept = 0, colour = "grey50", linetype = "dashed") +
-  geom_vline(xintercept = -0.5, colour = "grey30", linetype = "dotted") +
-  geom_ribbon(aes(ymin = Lower, ymax = Upper), alpha = 0.15, fill = "#2E86C1") +
-  geom_line(colour = "#2E86C1", linewidth = 0.8) +
-  geom_point(colour = "#2E86C1", shape = 16, size = 2.2) +
+# Interval convention of Figure 2 (03_main_results.R), via es_plot_fig2().
+p_r4 <- es_plot_fig2(dyn_r4) +
   facet_wrap(~ outcome, scales = "free_y") +
-  labs(title = NULL, subtitle = NULL, caption = NULL,
-      x = "Years relative to NAP adoption", y = "ATT estimate") +
-  theme_minimal() +
-  theme(text = element_text(family = "serif", size = 12),
-       strip.text = element_text(face = "bold"), panel.grid.minor = element_blank())
+  theme(strip.text = element_text(face = "bold"))
 
 fig_path_r4 <- here("output", "figures", "principal_share", "fig_within_share_es.png")
 ggsave(fig_path_r4, p_r4, width = 12, height = 6, dpi = 300)
@@ -957,22 +950,12 @@ recon_by_year <- adopters40_cf %>%
   left_join(adopters58_by_year, by = "year") %>%
   arrange(year)
 
-reallocation_correct <- sum(adopters40_cf$att_adj, na.rm = TRUE)
-reallocation_naive    <- n_distinct(adopters40_cf$recipient_name) * fit_share$agg_s$overall.att
-
+reallocation_total <- sum(adopters40_cf$att_adj, na.rm = TRUE)
 message(sprintf(
-  "  Naive arithmetic  : %d adopters x ATT %.4f pp = %.2f pp",
-  n_distinct(adopters40_cf$recipient_name), fit_share$agg_s$overall.att, reallocation_naive))
-message(sprintf(
-  "  Correct arithmetic: sum of event-time ATT over %d treated cells = %.2f pp",
-  n_treated_cells_r7, reallocation_correct))
-message(sprintf(paste0(
-  "  The naive figure treats the pooled (cell-averaged) simple ATT as if it applied once ",
-  "per COUNTRY; it is applied %d times (once per treated cell), and most adopters contribute ",
-  "more than one post-adoption year, so naive != correct whenever n_treated_cells != n_adopters."),
-  n_treated_cells_r7))
+  "  Sum of the event-time ATT over the %d treated cells = %.2f pp",
+  n_treated_cells_r7, reallocation_total))
 
-# The treated-cell-weighted "total reallocation" above (reallocation_correct)
+# The total reallocation above (reallocation_total)
 # sums att_adj over all n_treated_cells_r7 treated country-years pooled across
 # the whole 2021-2024 panel; it is a cumulative, multi-year quantity, not a
 # single-year magnitude, and is not bounded by 100 pp (a sum of per-cell
@@ -984,6 +967,13 @@ for (yr_i in seq_len(nrow(recon_by_year))) {
   message(sprintf("    %d: %.2f pp", recon_by_year$year[yr_i], recon_by_year$total_att_adj[yr_i]))
 }
 
+# The table starts in 2010, the first year of routine adaptation-marker
+# reporting (in 2009 only a handful of recipients record any marked
+# commitment, so the 2009 shares are not comparable). No ATT adjustment falls
+# before 2021, so dropping 2009 changes no reallocation figure.
+recon_by_year <- recon_by_year %>% filter(year >= 2010L)
+stopifnot(min(recon_by_year$year) == 2010L,
+          abs(sum(recon_by_year$total_att_adj) - reallocation_total) < 1e-9)
 obs_change_b <- recon_by_year$share_b_observed[recon_by_year$year == max(recon_by_year$year)] -
   recon_by_year$share_b_observed[recon_by_year$year == min(recon_by_year$year)]
 cf_change_c  <- recon_by_year$share_c_counterfactual[recon_by_year$year == max(recon_by_year$year)] -
@@ -1017,10 +1007,8 @@ raw_lines_r7 <- capture.output(
 )
 n_col_r7 <- ncol(recon_tab)  # footer rows span the whole table
 footer_r7 <- c(
-  sprintf("\\multicolumn{%d}{l}{Total reallocation, correct (treated-cell-weighted): %.2f pp over %d treated cells} \\\\",
-         n_col_r7, reallocation_correct, n_treated_cells_r7),
-  sprintf("\\multicolumn{%d}{l}{Total reallocation, naive ($n_{\\text{adopters}} \\times$ simple ATT): %d $\\times$ %.4f = %.2f pp} \\\\",
-         n_col_r7, n_distinct(adopters40_cf$recipient_name), fit_share$agg_s$overall.att, reallocation_naive),
+  sprintf("\\multicolumn{%d}{l}{Total ATT-implied reallocation, all treated country-years: %.2f pp over %d cells} \\\\",
+         n_col_r7, reallocation_total, n_treated_cells_r7),
   sprintf("\\multicolumn{%d}{l}{Observed change in the %d-adopter share, %d$\\to$%d: %.2f pp; implied counterfactual change: %.2f pp} \\\\",
          n_col_r7, n_main_lab, min(recon_by_year$year), max(recon_by_year$year), obs_change_b, cf_change_c)
 )
@@ -1032,11 +1020,10 @@ notes_r7 <- paste0(
   "Global-share denominator: total adaptation-marked commitments of the ",
   n_distinct(did_panel_full$recipient_name), "-recipient panel in each year (see ",
   "main-text footnote). Counterfactual column subtracts the main-specification ",
-  "event-time ATT, cell by cell, from each treated country's observed share. Naive ",
-  "$n\\times$ATT is not the correct arithmetic; the treated-cell-weighted total sums ",
-  "the event-time ATT over all ", n_treated_cells_r7,
-  " treated country-years (cumulative, not bounded by 100 pp). Last column: single-year ",
-  "sum of the ATT adjustments"
+  "event-time ATT, cell by cell, from each treated country's observed share. Last ",
+  "column: single-year sum of the ATT adjustments. The total sums the event-time ATT over ",
+  "all ", n_treated_cells_r7, " treated country-years; it is cumulative across years, not ",
+  "bounded by 100 pp"
 )
 source_r7 <- SOURCE_MAIN
 
@@ -1047,37 +1034,6 @@ write_tex_float(
   "tab:share_reconciliation", raw_lines_r7, notes_r7, source_r7
 )
 copy_to_paper(out_path_r7, "Tables")
-
-# --- fig_share_reconciliation.png -------------------------------------------
-# (built with dplyr::bind_rows() rather than tidyr::pivot_longer() to avoid an
-# extra dependency not already loaded by this script)
-recon_long <- bind_rows(
-  recon_by_year %>% transmute(year, value = share_a_observed, series = lab_a),
-  recon_by_year %>% transmute(year, value = share_b_observed, series = lab_b),
-  recon_by_year %>% transmute(year, value = share_c_counterfactual, series = lab_c)
-) %>%
-  mutate(series = factor(series, levels = c(lab_a, lab_b, lab_c)))
-
-p_r7 <- ggplot(recon_long, aes(x = year, y = value, colour = series, linetype = series, shape = series)) +
-  geom_line(linewidth = 0.9) +
-  geom_point(size = 2) +
-  scale_colour_manual(values = setNames(c("#2E86C1", "#27AE60", "#C0392B"), c(lab_a, lab_b, lab_c))) +
-  scale_linetype_manual(values = setNames(c("solid", "solid", "dashed"), c(lab_a, lab_b, lab_c))) +
-  scale_shape_manual(values = setNames(c(16, 17, 15), c(lab_a, lab_b, lab_c))) +
-  scale_x_continuous(breaks = min(recon_long$year):max(recon_long$year)) +
-  labs(title = NULL, subtitle = NULL, caption = NULL,
-      x = "Year", y = "Share of the global adaptation-commitment pool (%)",
-      colour = NULL, linetype = NULL, shape = NULL) +
-  theme_minimal() +
-  theme(text = element_text(family = "serif", size = 12),
-       axis.text.x = element_text(angle = 45, hjust = 1),
-       legend.position = "bottom", legend.text = element_text(size = 9),
-       panel.grid.minor = element_blank())
-
-fig_path_r7 <- here("output", "figures", "principal_share", "fig_share_reconciliation.png")
-ggsave(fig_path_r7, p_r7, width = 12, height = 7, dpi = 300)
-message("Saved: ", fig_path_r7)
-copy_to_paper(fig_path_r7, "Figures")
 
 message("\n=== Section 8 complete ===\n")
 

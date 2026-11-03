@@ -1,8 +1,9 @@
 # ==============================================================================
 # code/functions/make_wide_table.R
 # The single builder of the wide "simple ATT across outcomes" tables, sourced by
-# stages 03 (Table 2), 04 (retained cohorts, not-yet-treated, India, balanced
-# panel, 2010 panel) and 05 (donor type).
+# stages 03 (Table 2), 04 (retained cohorts; and, without writing a table, the
+# not-yet-treated, India, balanced-panel and 2010-panel rows of
+# tab:robust_summary) and 05 (donor type).
 #
 # Uses objects every calling stage defines at its top: BITERS,
 # compute_pretrend_test() (functions/pretrend_test.R), two_line_head()
@@ -34,6 +35,8 @@
 #' @param caption_spec specification text appended to the caption
 #' @param control_grp "nevertreated" or "notyettreated"
 #' @param out_filename file name of the table in dir_tabs
+#' @param write FALSE to estimate and return the statistics without writing a
+#'   table (stage 04 feeds tab:robust_summary this way)
 #' @param after_column optional function(oc, col) called once per outcome after
 #'   every reported quantity of that column has been computed (stage 03 stores
 #'   the headline fits with it). `col` holds the fits and aggregations of the
@@ -45,6 +48,7 @@ make_wide_table <- function(did_panel_in, retain_thin, outcomes,
                             dir_tabs, tex_label, caption_spec,
                             control_grp  = "nevertreated",
                             out_filename = "att_combined_wide.tex",
+                            write        = TRUE,
                             after_column = NULL) {
 
   stopifnot(control_grp %in% c("nevertreated", "notyettreated"),
@@ -218,6 +222,8 @@ make_wide_table <- function(did_panel_in, retain_thin, outcomes,
         panel = did_panel_in))
     }
   }
+
+  if (!write) return(invisible(table_stats))
 
   row_labels <- c(
     "ATT",

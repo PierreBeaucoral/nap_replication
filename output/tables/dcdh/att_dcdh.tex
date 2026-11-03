@@ -3,7 +3,7 @@
 \caption{Robustness: de Chaisemartin and D'Haultf{\oe}uille (2026) estimator}
 \label{tab:dcdh}
 % latex table generated in R 4.6.1 by xtable 1.8-8 package
-% Mon Nov  2 11:26:44 2026
+% Tue Nov  3 18:37:24 2026
 \begingroup\small
 \adjustbox{max width=\textwidth}{%
 \begin{tabular}{lcccc}
@@ -19,13 +19,15 @@ Av. total effect & 0.297 & (0.125) & [0.053, 0.542] & 473 \\
   Placebo $-2$ & 0.161 & (0.196) & [-0.223, 0.544] & 296 \\ 
   Placebo $-3$ & 0.408 & (0.216) & [-0.015, 0.832] & 187 \\ 
   \midrule Joint placebo test ($3$ placebos) & --- & --- & $p$ = 0.312 & --- \\ 
+  \midrule Av. total effect, global share (pp) & 0.335 & (0.143) & [0.055, 0.615] & 473 \\ 
+  Av. total effect, within-country share (pp) & 2.709 & (0.883) & [0.978, 4.441] & 473 \\ 
    \bottomrule
 \end{tabular}
 }
 \endgroup
 \par\vspace{4pt}
 \begin{minipage}{\linewidth}\footnotesize
-Notes: de Chaisemartin--D'Haultf{\oe}uille (2026) estimator, current-treatment dummy; never- and not-yet-treated controls; same controls as the CS main specification. Effect $+\ell$ is event time $e = \ell - 1$ of the Callaway--Sant'Anna event studies ($\ell = 1$ is the adoption year, $e = 0$), and Placebo $-\ell$ is $e = -1 - \ell$. Last row: package's own joint test that all 3 placebo estimates are zero ($p$-value in the CI column), accounting for the covariance across placebo horizons. The package (DIDmultiplegtDYN 2.3.3) reports only the $p$-value of this test, so the Estimate column is blank.\par
+Notes: de Chaisemartin--D'Haultf{\oe}uille (2026) estimator, current-treatment dummy; never- and not-yet-treated controls; same controls as the CS main specification. Effect $+\ell$ is event time $e = \ell - 1$ of the Callaway--Sant'Anna event studies ($\ell = 1$ is the adoption year, $e = 0$), and Placebo $-\ell$ is $e = -1 - \ell$. Outcome: log(adaptation commitments), except the last two rows, which apply the same specification to the global share and to the within-country share ($100 \times E/S$, Table~\ref{tab:within_share_wide}), both in pp. Joint placebo test: package's own joint test that all 3 placebo estimates are zero ($p$-value in the CI column), accounting for the covariance across placebo horizons. The package (DIDmultiplegtDYN 2.3.3) reports only the $p$-value of this test, so the Estimate column is blank.\par
 Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
 \end{minipage}
 \end{table}

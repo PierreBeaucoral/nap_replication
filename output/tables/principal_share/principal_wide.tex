@@ -1,14 +1,14 @@
 \begin{table}[H]
 \centering
-\caption{Effect of NAP adoption on adaptation finance: headline vs.\ principal-marker-only outcome}
+\caption{Effect of NAP adoption on adaptation finance: main specification vs.\ principal-marker-only outcome}
 \label{tab:principal_wide}
 % latex table generated in R 4.6.1 by xtable 1.8-8 package
-% Mon Nov  2 11:19:42 2026
+% Tue Nov  3 16:29:37 2026
 \begingroup\small
 \adjustbox{max width=\textwidth}{%
 \begin{tabular}{lcc}
   \toprule
-  & Principal + significant (headline) & Principal only \\ 
+  & Principal + significant (main specification) & Principal only \\ 
   \midrule
 ATT & 0.3036** & 0.2352 \\ 
   SE & (0.1256) & (0.2339) \\ 
@@ -22,11 +22,11 @@ ATT & 0.3036** & 0.2352 \\
   Pre-trend $\chi^2$ & 1.803 & 1.741 \\ 
   Pre-trend $p$ & 0.772 & 0.783 \\ 
   \texttt{did} pre-test $p$ & 0.000 & 0.000 \\ 
-  \midrule Estimator & CS (2021), doubly-robust & CS (2021), doubly-robust \\ 
+  \midrule Estimator & CS (2021) DR & CS (2021) DR \\ 
   Control group & Never-treated & Never-treated \\ 
   Bootstrap SE & Yes (multiplier, 999 reps) & Yes (multiplier, 999 reps) \\ 
 \midrule
-\multicolumn{3}{l}{Difference (headline $-$ principal) = 0.0684, SE = 0.2214, $z$ = 0.309, $p$ = 0.757} \\
+\multicolumn{3}{l}{Difference (main $-$ principal) = 0.0684, SE = 0.2214, $z$ = 0.309, $p$ = 0.757} \\
 \multicolumn{3}{l}{\footnotesize Difference SE method: aligned unit-level influence functions (n = 126).} \\
    \bottomrule
 \end{tabular}
@@ -34,7 +34,7 @@ ATT & 0.3036** & 0.2352 \\
 \endgroup
 \par\vspace{4pt}
 \begin{minipage}{\linewidth}\footnotesize
-Notes: Estimator, covariates, control group, inference, pre-trend tests, implied effects and significance stars as in Table~\ref{tab:combined_wide_main}. ``Headline'' = $\log(1+\text{adaptation-marked commitments})$, Rio marker $\in\{1,2\}$; ``Principal only'' = $\log(1+\text{principal-marked commitments})$, Rio marker $=2$ only.\par
+Notes: Estimator, covariates, control group, inference, pre-trend tests, implied effects and significance stars as in Table~\ref{tab:combined_wide_main}. ``Main specification'' = $\log(1+\text{adaptation-marked commitments})$, Rio marker $\in\{1,2\}$ (all marked); ``Principal only'' = $\log(1+\text{principal-marked commitments})$, Rio marker $=2$ only.\par
 Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
 \end{minipage}
 \end{table}

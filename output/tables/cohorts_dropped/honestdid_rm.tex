@@ -3,30 +3,30 @@
 \caption{HonestDiD robust 95\% CI under relative magnitude restriction (\citealt{rambachan_roth_2023})}
 \label{tab:honestdid}
 % latex table generated in R 4.6.1 by xtable 1.8-8 package
-% Mon Nov  2 11:26:02 2026
+% Tue Nov  3 18:37:16 2026
 \begingroup\small
 \adjustbox{max width=\textwidth}{%
-\begin{tabular}{llllll}
+\begin{tabular}{lllllll}
   \toprule
-$\bar{M}$ & log(Adapt.) & Share (pp) & log(Total) & log(Non-adapt.) & log(Disb.) \\ 
+$\bar{M}$ & log(Adapt.) & Global share (pp) & log(Total) & log(Non-adapt.) & log(Disb.) & Within share (pp) \\ 
   \midrule
-$\bar{M} = 0.00$ & [0.045, 0.562] & [0.028, 0.639] & [-0.057, 0.199] & [-0.090, 0.170] & [-0.088, 0.353] \\ 
-  $\bar{M} = 0.25$ & [-0.088, 0.690] & [-0.085, 0.784] & [-0.123, 0.281] & [-0.146, 0.239] & [-0.196, 0.510] \\ 
-  $\bar{M} = 0.50$ & [-0.312, 0.909] & [-0.305, 1.023] & [-0.221, 0.387] & [-0.234, 0.335] & [-0.375, 0.717] \\ 
-  $\bar{M} = 0.75$ & [-0.568, 1.164] & [-0.570, 1.294] & [-0.339, 0.509] & [-0.338, 0.442] & [-0.596, 0.951] \\ 
-  $\bar{M} = 1.00$ & [-0.834, 1.431] & [-0.847, 1.571] & [-0.464, 0.635] & [-0.450, 0.557] & [-0.825, 1.185] \\ 
-  $\bar{M} = 1.25$ & [-1.100, 1.697] & [-1.130, 1.855] & [-0.590, 0.762] & [-0.565, 0.675] & [-1.059, 1.423] \\ 
-  $\bar{M} = 1.50$ & [-1.372, 1.969] & [-1.414, 2.144] & [-0.720, 0.892] & [-0.683, 0.792] & [-1.297, 1.662] \\ 
-  $\bar{M} = 1.75$ & [-1.639, 2.236] & [-1.703, 2.428] & [-0.847, 1.021] & [-0.800, 0.910] & [-1.536, 1.904] \\ 
-  $\bar{M} = 2.00$ & [-1.911, 2.513] & [-1.987, 2.717] & [-0.979, 1.153] & [-0.921, 1.027] & [-1.778, 2.147] \\ 
-  Breakdown $\bar{M}$ & $0.25$ & $0.25$ & $0.00$ & $0.00$ & $0.00$ \\ 
+$\bar{M} = 0.00$ & [0.045, 0.562] & [0.028, 0.639] & [-0.057, 0.199] & [-0.090, 0.170] & [-0.088, 0.353] & [1.008, 4.290] \\ 
+  $\bar{M} = 0.25$ & [-0.088, 0.690] & [-0.085, 0.784] & [-0.123, 0.281] & [-0.146, 0.239] & [-0.196, 0.510] & [-0.222, 5.555] \\ 
+  $\bar{M} = 0.50$ & [-0.312, 0.909] & [-0.305, 1.023] & [-0.221, 0.387] & [-0.234, 0.335] & [-0.375, 0.717] & [-2.068, 7.435] \\ 
+  $\bar{M} = 0.75$ & [-0.568, 1.164] & [-0.570, 1.294] & [-0.339, 0.509] & [-0.338, 0.442] & [-0.596, 0.951] & [-4.154, 9.521] \\ 
+  $\bar{M} = 1.00$ & [-0.834, 1.431] & [-0.847, 1.571] & [-0.464, 0.635] & [-0.450, 0.557] & [-0.825, 1.185] & [-6.307, 11.640] \\ 
+  $\bar{M} = 1.25$ & [-1.100, 1.697] & [-1.130, 1.855] & [-0.590, 0.762] & [-0.565, 0.675] & [-1.059, 1.423] & [-8.461, 13.794] \\ 
+  $\bar{M} = 1.50$ & [-1.372, 1.969] & [-1.414, 2.144] & [-0.720, 0.892] & [-0.683, 0.792] & [-1.297, 1.662] & [-10.615, 15.948] \\ 
+  $\bar{M} = 1.75$ & [-1.639, 2.236] & [-1.703, 2.428] & [-0.847, 1.021] & [-0.800, 0.910] & [-1.536, 1.904] & [-12.768, 17.076] \\ 
+  $\bar{M} = 2.00$ & [-1.911, 2.513] & [-1.987, 2.717] & [-0.979, 1.153] & [-0.921, 1.027] & [-1.778, 2.147] & [-14.956, 17.076] \\ 
+  Breakdown $\bar{M}$ & $0.25$ & $0.25$ & $0.00$ & $0.00$ & $0.00$ & $0.25$ \\ 
    \bottomrule
 \end{tabular}
 }
 \endgroup
 \par\vspace{4pt}
 \begin{minipage}{\linewidth}\footnotesize
-Notes: Sensitivity of \citet{rambachan_roth_2023} on the headline estimate: estimator, covariates, control group and inference as in Table~\ref{tab:combined_wide_main}; event-study estimates and covariance of that headline estimate. Target: group-size-weighted average post-treatment effect ($e=0,\dots,3$), weights (0.3846, 0.3077, 0.2019, 0.1058), reproducing the simple ATT. $\Sigma$ rescaled to reported bootstrap SEs (max gap 21.2\% (Share (pp))). Pre-treatment window: 4 leads ($e=-5,\dots,-2$). ``Breakdown $\bar{M}$'' = smallest grid value where the robust CI contains zero.\par
+Notes: Sensitivity of \citet{rambachan_roth_2023} on the main specification: estimator, covariates, control group and inference as in Table~\ref{tab:combined_wide_main}; event-study estimates and covariance of that specification. Target: group-size-weighted average post-treatment effect ($e=0,\dots,3$), weights (0.3846, 0.3077, 0.2019, 0.1058), reproducing the simple ATT. $\Sigma$ rescaled to reported bootstrap SEs (max gap 21.2\% (Global share (pp))). Pre-treatment window: 4 leads ($e=-5,\dots,-2$). ``Breakdown $\bar{M}$'' = smallest grid value where the robust CI contains zero. Within share (pp): the within-country share of Table~\ref{tab:within_share_wide}, $100 \times E/S$; same target weights.\par
 Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
 \end{minipage}
 \end{table}

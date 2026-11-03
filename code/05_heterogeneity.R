@@ -11,10 +11,8 @@
 #
 # Outputs (all under output/):
 #   tables/heterogeneity/donor_type/att_combined_wide.tex   (§21)
-#   tables/heterogeneity/ldc/het_ldc_wide.tex              (§22)
-#   tables/heterogeneity/governance/het_gov_wide.tex       (§23)
-#   tables/heterogeneity/income_group/het_income_wide.tex  (§24)
-#   tables/heterogeneity/het_capacity.tex                  (§24b, compact H4 table)
+#   tables/heterogeneity/het_capacity.tex                  (§22-24b, H4 table: LDC,
+#                                                           governance, income group)
 #   figures/heterogeneity/fig_het_es_panel.png             (§24b, 2x2 of the four event studies)
 #   tables/heterogeneity/het_difference_tests.tex          (§25)
 # ==============================================================================
@@ -413,7 +411,7 @@ att_joint_wald_if <- function(theta, IFmat, ref_index) {
 }
 
 # ==============================================================================
-# SECTION 4. Helper: make_het_wide_table()
+# SECTION 4. Helper: fit_het_subgroups()
 # Shared across §22-24.
 # Estimator and inference labels are derived from the em_g/bstrap actually
 # used; every table note defines the significance stars.
@@ -425,9 +423,8 @@ att_joint_wald_if <- function(theta, IFmat, ref_index) {
 # difference tests re-use exactly the fits that feed the published tables.
 # ==============================================================================
 
-make_het_wide_table <- function(groups, outcome_var, raw_var,
-                                dir_tabs, tex_label, caption_txt,
-                                thin_cohorts_vec = thin_cohorts) {
+fit_het_subgroups <- function(groups, outcome_var, raw_var,
+                              thin_cohorts_vec = thin_cohorts) {
 
   `%||%` <- function(a, b) if (!is.null(a)) a else b
 
@@ -586,107 +583,7 @@ make_het_wide_table <- function(groups, outcome_var, raw_var,
   }
 
   if (all(vapply(col_stats, is.null, logical(1L))))
-    stop("No subgroup results: ", tex_label, " not written.")
-
-  # Estimator label from the em_g actually used per group.
-  unique_em <- unique(unlist(em_used))
-  estimator_label <- if (length(unique_em) == 1L) {
-    if (unique_em == "dr") "CS (2021) DR" else "CS (2021) regression adjustment"
-  } else {
-    "CS (2021) DR or regression adjustment (by subgroup N)"
-  }
-  # Derived from what was actually used, not hard-coded (every cell is
-  # bootstrapped, so this is TRUE for every cell; the check keeps the label
-  # honest if a cell ever is not).
-  bootstrap_label <- if (all(unlist(bs_used))) paste0("Yes (multiplier, ", BITERS, " reps)") else
-    "Mixed (see text)"
-
-  row_labels <- c(
-    "ATT", "SE", "$t$-statistic",
-    "Mean (pre-treat., USD M)",
-    "Implied effect (USD M, exp(ATT)$-$1 $\\times$ pre-treat.\\ mean)",
-    "Observations", "Countries", "N treated countries",
-    "Pre-trend $\\chi^2$", "Pre-trend $p$", "\\texttt{did} pre-test $p$",
-    "\\midrule Estimator", "Control group", "Bootstrap SE"
-  )
-
-  tab_wide <- data.frame(` ` = row_labels, check.names = FALSE, stringsAsFactors = FALSE)
-
-  for (lbl in names(col_stats)) {
-    s <- col_stats[[lbl]]
-    stopifnot(!is.null(s))
-    col <- c(
-      s$att_fmt, s$se_fmt, s$t_fmt,
-      s$mean_pre_fmt, s$implied_fmt,
-      s$n_obs, s$n_country, s$n_treated_fmt,
-      s$pt_stat, s$pt_pval, s$pt_wpval_did,
-      estimator_label, "Not-yet-treated", bootstrap_label
-    )
-    tab_wide[[esc_header(lbl)]] <- col
-  }
-
-  xtab <- xtable(tab_wide, label = tex_label)
-  n_grp <- length(col_stats)
-  align(xtab) <- paste0("ll", paste(rep("c", n_grp), collapse = ""))
-
-  raw_lines <- capture.output(
-    print(xtab, include.rownames = FALSE, booktabs = TRUE,
-          sanitize.text.function = identity, size = "\\small",
-          floating = FALSE)
-  )
-
-  # Per-column inputs for the pre-trend note:
-  # the lead window actually used, both p-values, the cell and cluster counts
-  # and did's own machine-derived reason -- per subgroup, not borrowed from the
-  # first column.
-  het_cells <- Filter(Negate(is.null), col_stats)
-  het_labels   <- names(het_cells)
-  het_leads    <- if (length(het_cells) == 0L) integer(0) else het_cells[[1L]]$pt_leads
-  # The note states one lead window for the table, so every subgroup must share it.
-  same_leads <- vapply(het_cells, function(s)
-    identical(sort(as.integer(s$pt_leads)), sort(as.integer(het_leads))), logical(1L))
-  if (!all(same_leads))
-    stop(tex_label, ": the pre-trend lead window differs across subgroups (",
-         paste(het_labels[!same_leads], collapse = ", "), " vs ", het_labels[[1L]],
-         "); the note states one window, so state it per subgroup.")
-  het_df_did   <- vapply(het_cells, function(s)
-    if (is.null(s$pt_df_did)) NA_integer_ else as.integer(s$pt_df_did), integer(1L))
-  het_nclust   <- vapply(het_cells, function(s) as.integer(s$n_country), integer(1L))
-  het_wpval    <- vapply(het_cells, function(s)
-    if (is.null(s$pt_wpval_num)) NA_real_ else s$pt_wpval_num, numeric(1L))
-  het_pwald    <- vapply(het_cells, function(s)
-    if (is.null(s$pt_pval_num)) NA_real_ else s$pt_pval_num, numeric(1L))
-  het_reason   <- vapply(het_cells, function(s)
-    if (is.null(s$pt_reason)) NA_character_ else s$pt_reason, character(1L))
-  het_ginv     <- vapply(het_cells, function(s) isTRUE(s$pt_ginv), logical(1L))
-  het_df       <- vapply(het_cells, function(s) as.integer(s$pt_df), integer(1L))
-
-  # Star definitions end the note.
-  notes_txt <- paste0(
-    caption_txt, " ",
-    as_in_main(c("covariates", "inference", "pre-trend tests", "implied effect",
-                 "significance stars")), ". ",
-    sub("\\. $", "",
-        wpval_reconciliation(pre_egt = het_leads, df_did = het_df_did,
-                             n_clusters = het_nclust, wpval_did = het_wpval,
-                             pval_wald = het_pwald, labels = het_labels,
-                             wpval_reason = het_reason, ginv_used = het_ginv,
-                             df = het_df))
-  )
-  source_txt <- SOURCE_MAIN
-
-  dir.create(dir_tabs, recursive = TRUE, showWarnings = FALSE)
-  # Strip "tab:" prefix from tex_label for the filename — the LaTeX
-  # \label{} keeps the full "tab:het_..." prefix, but filenames must not
-  # contain colons (breaks on Windows and confuses latexmk includes).
-  out_path <- file.path(dir_tabs, paste0(sub("^tab:", "", tex_label), ".tex"))
-
-  # Caption title is the brief part of caption_txt (before the method detail)
-  # For het tables we split at the first period; fallback to full text.
-  cap_short <- strsplit(caption_txt, "\\.")[[1]][1]
-  if (is.na(cap_short) || nchar(cap_short) == 0) cap_short <- caption_txt
-
-  write_tex_float(out_path, cap_short, tex_label, raw_lines, notes_txt, source_txt)
+    stop("No subgroup results for ", outcome_var)
 
   invisible(col_stats)
 }
@@ -786,8 +683,6 @@ message("\n=== Section 21 complete ===\n")
 
 message("\n=== Section 22: Heterogeneity — LDC vs. non-LDC ===\n")
 
-dir_tabs_h2 <- here("output", "tables",  "heterogeneity", "ldc")
-dir.create(dir_tabs_h2, recursive = TRUE, showWarnings = FALSE)
 
 # PRE-TREATMENT LDC VINTAGE.
 # The split is a proxy for baseline capacity, so it must be measured before any
@@ -859,18 +754,11 @@ ldc_groups <- list(
   list(label = "Non-LDC", panel = did_panel_full %>% filter(is_ldc == 0L))
 )
 
-# Wide table: Seed rule (reproduces the published SEs): set.seed(1242) inside make_het_wide_table
-het_stats_ldc <- make_het_wide_table(
+# Subgroup fits: Seed rule (reproduces the published SEs): set.seed(1242) inside fit_het_subgroups
+het_stats_ldc <- fit_het_subgroups(
   groups      = ldc_groups,
   outcome_var = "log_commits",
-  raw_var     = "commitments",
-  dir_tabs    = dir_tabs_h2,
-  tex_label   = "tab:het_ldc_wide",
-  caption_txt = sprintf(paste0(
-    "Heterogeneity by LDC status: ATT on log(adaptation commitments). CS ",
-    "(2021), not-yet-treated controls. LDC status: pre-treatment vintage, UN ",
-    "2013 list (%d economies); reclassifications vs.\\ 2024 in text."),
-    length(ldc_iso3_2013))
+  raw_var     = "commitments"
 )
 
 # Event-study curves (one panel of the 2x2 figure, §24b)
@@ -939,8 +827,6 @@ message("\n=== Section 22 complete ===\n")
 
 message("\n=== Section 23: Heterogeneity — High vs. low governance ===\n")
 
-dir_tabs_h3 <- here("output", "tables",  "heterogeneity", "governance")
-dir.create(dir_tabs_h3, recursive = TRUE, showWarnings = FALSE)
 
 ge_baseline <- did_panel_full %>%
   filter(cohort_year > 0) %>%
@@ -974,14 +860,11 @@ gov_groups <- list(
   list(label = "Low governance",  panel = did_panel_gov %>% filter(hi_gov == 0L))
 )
 
-# Wide table: Seed rule (reproduces the published SEs): set.seed(1242) inside make_het_wide_table
-het_stats_gov <- make_het_wide_table(
+# Subgroup fits: Seed rule (reproduces the published SEs): set.seed(1242) inside fit_het_subgroups
+het_stats_gov <- fit_het_subgroups(
   groups      = gov_groups,
   outcome_var = "log_commits",
-  raw_var     = "commitments",
-  dir_tabs    = dir_tabs_h3,
-  tex_label   = "tab:het_gov_wide",
-  caption_txt = paste0("Heterogeneity by governance level: ATT on log(adaptation commitments). CS (2021), not-yet-treated controls; median split of ", ge_window_txt, ".")
+  raw_var     = "commitments"
 )
 
 # Event-study curves (one panel of the 2x2 figure, §24b)
@@ -1056,8 +939,6 @@ message("\n=== Section 24: Heterogeneity — Income group ===\n")
 
 het_stats_income <- NULL   # filled only if the income split is estimable
 
-dir_tabs_h4 <- here("output", "tables",  "heterogeneity", "income_group")
-dir.create(dir_tabs_h4, recursive = TRUE, showWarnings = FALSE)
 
 # PRE-TREATMENT INCOME VINTAGE (FY2013 = July 2012 classification).
 # Income classification joined on ISO3 (recipient_iso <-> iso3c); a name-based
@@ -1253,17 +1134,11 @@ if (!is.null(income_lookup)) {
     logical(1L))]
 
   if (length(inc_groups) >= 2L) {
-    # Wide table: Seed rule (reproduces the published SEs): set.seed(1242) inside make_het_wide_table
-    het_stats_income <- make_het_wide_table(
+    # Subgroup fits: Seed rule (reproduces the published SEs): set.seed(1242) inside fit_het_subgroups
+    het_stats_income <- fit_het_subgroups(
       groups      = inc_groups,
       outcome_var = "log_commits",
-      raw_var     = "commitments",
-      dir_tabs    = dir_tabs_h4,
-      tex_label   = "tab:het_income_wide",
-      caption_txt = sprintf(paste0(
-        "Heterogeneity by World Bank income group: ATT on log(adaptation commitments). CS ",
-        "(2021), not-yet-treated controls. Income groups: %s, held fixed."),
-        income_vintage)
+      raw_var     = "commitments"
     )
 
     # Event-study curves (one panel of the 2x2 figure, §24b)
@@ -1333,10 +1208,9 @@ message("\n=== Section 24 complete ===\n")
 # ==============================================================================
 # SECTION 8a. §24b Compact capacity table and 2x2 event-study panel
 #
-# Layout only: nothing is re-estimated. het_capacity.tex re-uses the formatted
-# cells that make_het_wide_table() wrote into the three wide tables (ATT with
-# stars, SE, N treated, four-lead pre-trend p), so every value is identical to
-# Tables tab:het_gov_wide, tab:het_ldc_wide and tab:het_income_wide. The 2x2
+# Layout only: nothing is re-estimated. het_capacity.tex prints the formatted
+# cells that fit_het_subgroups() returned (ATT with stars, SE, countries, N
+# treated, pre-treatment mean, four-lead pre-trend p). The 2x2
 # figure re-uses the four plotted objects saved above (p_h1, p_h3, p_h2, p_h4),
 # with harmonised axis titles and text size only.
 # ==============================================================================
@@ -1366,18 +1240,19 @@ cap_ntr   <- vapply(cap_cells, function(s) as.integer(s$n_treated), integer(1L))
 
 cap_lines <- c(
   "\\begingroup\\small",
-  "\\begin{tabular}{lcccc}",
+  "\\begin{tabular}{lcccccc}",
   "\\toprule",
-  sprintf("Subgroup & ATT & SE & $N$ treated & Pre-trend $p$ (%d leads) \\\\", length(cap_leads[[1L]])),
+  sprintf(paste0("Subgroup & ATT & SE & Countries & $N$ treated & Pre-treatment mean (USD M) & ",
+                 "Pre-trend $p$ (%d leads) \\\\"), length(cap_leads[[1L]])),
   "\\midrule",
   unlist(lapply(seq_along(cap_panels), function(k) {
     pn <- cap_panels[[k]]
     c(if (k > 1L) "\\addlinespace" else character(0),
-      sprintf("\\multicolumn{5}{l}{\\textit{%s}} \\\\", pn$title),
+      sprintf("\\multicolumn{7}{l}{\\textit{%s}} \\\\", pn$title),
       vapply(pn$cells, function(cl) {
         st <- pn$stats[[cl]]
-        sprintf("\\quad %s & %s & %s & %s & %s \\\\", cl, st$att_fmt, st$se_fmt,
-                st$n_treated_fmt, st$pt_pval)
+        sprintf("\\quad %s & %s & %s & %s & %s & %s & %s \\\\", cl, st$att_fmt, st$se_fmt,
+                st$n_country, st$n_treated_fmt, st$mean_pre_fmt, st$pt_pval)
       }, character(1L)))
   })),
   "\\bottomrule",
@@ -1386,15 +1261,16 @@ cap_lines <- c(
 )
 
 cap_est_txt <- if (identical(cap_em, "reg")) {
-  sprintf(paste0("CS (2021) regression adjustment (doubly robust only for a subgroup with at ",
+  sprintf(paste0("CS (2021) OR (DR only for a subgroup with at ",
                  "least 40 treated recipients; none here, %d--%d per cell)"),
           min(cap_ntr), max(cap_ntr))
 } else {
-  "CS (2021), doubly robust for subgroups with at least 40 treated recipients, regression adjustment otherwise"
+  "CS (2021), DR for subgroups with at least 40 treated recipients, OR otherwise"
 }
 cap_notes <- paste0(
-  "ATT on log(adaptation commitments), estimated separately on each subgroup; full columns in ",
-  "Tables~\\ref{tab:het_gov_wide}, \\ref{tab:het_ldc_wide} and \\ref{tab:het_income_wide}. ",
+  "ATT on log(adaptation commitments), estimated separately on each subgroup. ",
+  "Countries: recipients in the subgroup's estimation panel; pre-treatment mean: mean ",
+  "adaptation commitments over the treated recipient-years before adoption, USD M. ",
   cap_est_txt, ", not-yet-treated controls, WGI GE + log population. ",
   "ATT/SE: multiplier-bootstrap (", BITERS, " reps, clustered by recipient, seed 1242). ",
   as_in_main(c("pre-trend test", "significance stars")), ". ",
@@ -1627,8 +1503,8 @@ if (!is.null(extra_rows) && nrow(extra_rows) == 0L) extra_rows <- NULL
 # just the subgroup ATTs.
 #
 # No re-estimation: the ATTs and SEs below are the ones returned by
-# make_het_wide_table(), i.e. exactly the fits behind Tables tab:het_ldc_wide,
-# tab:het_gov_wide and tab:het_income_wide (CS 2021, est_method "reg" unless a
+# fit_het_subgroups(), i.e. exactly the fits behind Table tab:het_capacity
+# (CS 2021, est_method "reg" unless a
 # subgroup has >= 40 treated units, multiplier-bootstrap SE clustered by
 # recipient, not-yet-treated controls, cohorts with < 5 treated units dropped,
 # xformla ~ ge_est + log_population, outcome log_commits).
@@ -1774,15 +1650,15 @@ if (!have_ldc || !have_gov || !have_inc) {
   # subgroup has >= 40 treated units, otherwise regression adjustment).
   n_tr_used <- vapply(used_stats, function(s) as.integer(s$n_treated), integer(1L))
   est_label_h5 <- if (all(n_tr_used < 40L)) {
-    "CS\\,(2021), reg.\\ adjustment"
+    "CS\\,(2021), OR"
   } else {
-    "CS\\,(2021), DR/reg.\\ (by subgroup $N$)"
+    "CS\\,(2021), DR/OR (by subgroup $N$)"
   }
 
   notes_h5 <- paste0(
     "Each row tests equality of two ATTs from the paired heterogeneity table ",
     "(not re-estimated). H4 rows: ", est_label_h5, " on log(adaptation commitments); H3 ",
-    "(donor-type) rows: headline specification (DR) on the donor-group commitments; ",
+    "(donor-type) rows: main specification (DR) on the donor-group commitments; ",
     "falsification row: adaptation minus mitigation. H4 differences = low- minus ",
     "high-capacity (positive: larger effect where capacity weaker). H4 rows (LDC/governance/income): SE $=\\sqrt{se_a^2+se_b^2}$ on ",
     "multiplier-bootstrap SEs (", BITERS, " reps, seed 1242), disjoint subsamples. ",
@@ -1890,8 +1766,10 @@ if (length(missing_zero_vars) > 0L) {
     "adaptation Rio marker. Sample: main estimation panel (cohorts $\\geq 5$, 2021--2024; ",
     format(nrow(did_panel_h1), big.mark = ","), " recipient-years, ",
     n_distinct(did_panel_h1$country_id), " recipients). Outcomes are $\\log(1+x)$ ",
-    "transforms, so a high zero share reflects the extensive margin. Pre-/post-adoption ",
-    "rows are not time-comparable; see text"
+    "transforms, so a high zero share reflects the extensive margin. Pre- and post-adoption ",
+    "rows cover different calendar years (post-adoption years all fall in 2021--2024), so ",
+    "their levels are not time-comparable: read the post-adoption row against the ",
+    "never-adopter row"
   )
 
   out_path_zero <- file.path(dir_tabs_h1, "zero_shares.tex")
