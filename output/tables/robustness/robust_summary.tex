@@ -5,11 +5,11 @@
 \adjustbox{max width=\textwidth}{%
 \begin{tabular}{lcccccc}
 \toprule
-\multicolumn{7}{l}{\textit{Panel A: adaptation outcomes}} \\
  & \multicolumn{2}{c}{log(Adaptation commitments)} & \multicolumn{2}{c}{Adaptation share (\% of global)} & \multicolumn{2}{c}{Within-country share (pp)} \\
 \cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-7}
 Specification & ATT & Pre-trend $p$ & ATT & Pre-trend $p$ & ATT & Pre-trend $p$ \\
 \midrule
+\multicolumn{7}{l}{\textit{Panel A: simple ATT}} \\
 Main specification (Table~\ref{tab:combined_wide_main}) & 0.3036** & 0.772 & 0.3356** & 0.621 & 2.6507*** & 0.568 \\
  & (0.1256) &  & (0.1388) &  & (0.8645) &  \\
 Balanced panel, covariates at $g-1$ & 0.3087** & 0.638 & 0.3285** & 0.680 & 2.6365*** & 0.551 \\
@@ -30,14 +30,16 @@ PPML in levels & 0.3644*** & --- & --- & --- & --- & --- \\
  & (0.1234) &  &  &  &  &  \\
 Drop the 2024 cohort and calendar year 2024 & 0.3411** & 0.704 & 0.4033 & 0.478 & 2.7065*** & 0.907 \\
  & (0.1344) &  & (0.2472) &  & (0.9430) &  \\
-Unbalanced, all post-adoption years (dynamic average) & 0.3064** & --- & 0.2799*** & --- & 3.0120*** & --- \\
+\midrule
+\multicolumn{7}{l}{\textit{Panel B: dynamic average over post-adoption years (equal weight on $e \geq 0$)}} \\
+All post-adoption years (reference) & 0.3064** & --- & 0.2799*** & --- & 3.0120*** & --- \\
  & (0.1300) &  & (0.1071) &  & (0.8592) &  \\
 Balanced event window, 1 post-adoption year & 0.2895* & --- & 0.3686 & --- & 1.8023* & --- \\
  & (0.1568) &  & (0.2315) &  & (0.9764) &  \\
 Balanced event window, 2 post-adoption years & 0.2594* & --- & 0.2179** & --- & 2.7752*** & --- \\
  & (0.1383) &  & (0.0885) &  & (1.0600) &  \\
 \midrule
-\multicolumn{7}{l}{\textit{Panel B: envelope outcomes}} \\
+\multicolumn{7}{l}{\textit{Panel C: envelope outcomes, simple ATT}} \\
  & \multicolumn{2}{c}{log(Total commitments)} & \multicolumn{2}{c}{log(Non-adaptation commitments)} & & \\
 \cmidrule(lr){2-3} \cmidrule(lr){4-5}
 Specification & ATT & Pre-trend $p$ & ATT & Pre-trend $p$ & & \\
@@ -57,7 +59,7 @@ Not-yet-treated control group & 0.0611 & 0.023 & 0.0294 & 0.046 &  &  \\
 }
 \par\vspace{4pt}
 \begin{minipage}{\linewidth}\footnotesize
-Notes: Estimator, covariates, control group, inference, pre-trend test and significance stars as in Table~\ref{tab:combined_wide_main}; SE in parentheses below each ATT. Each row changes one element of the main specification: balanced panel, the 117 recipients observed in every year, so covariates enter at $g-1$; panel from 2010, 2009 dropped; excluding India, a never-treated recipient; not-yet-treated control group; baseline outcome level, the recipient's 2009--2012 mean of the outcome added to the covariates; de Chaisemartin--D'Haultf{\oe}uille (2026) estimator, average total effect (Table~\ref{tab:dcdh}); raw USD, outcome $\log(1+\text{commitments in USD})$ and PPML, Sun--Abraham Poisson in levels (both Table~\ref{tab:units_zeros}); drop 2024, the 2024 cohort and calendar year 2024; unbalanced dynamic average, the equal-weight mean of the main fit's dynamic ATTs over all post-adoption years (as in Table~\ref{tab:att_anticipation}); balanced event window, the same average restricted to the cohorts observed for at least one (two) post-adoption years, to be compared with the unbalanced dynamic average, not with the main simple ATT. Within-country share: $100 \times E/S$, as in Table~\ref{tab:within_share_wide}. ``---'' in an ATT cell: not meaningful (a share has no raw-USD or levels version); in a pre-trend cell: no comparable four-lead test (de Chaisemartin--D'Haultf{\oe}uille and PPML), or the test of the main fit (the three dynamic-average rows, which re-aggregate it). Panel B: rows in which total and non-adaptation commitments are estimated.\par
+Notes: Estimator, covariates, control group, inference, pre-trend test and significance stars as in Table~\ref{tab:combined_wide_main}; SE in parentheses below each ATT. Panel A: simple ATT, the average of the post-adoption $ATT(g,t)$ cells weighted by cohort size, as in Table~\ref{tab:combined_wide_main} (the de Chaisemartin--D'Haultf{\oe}uille average total effect and the PPML aggregate weight treated cohort-years the same way). Each row after the first changes one element of the main specification: balanced panel, the 117 recipients observed in every year, so covariates enter at $g-1$; panel from 2010, 2009 dropped; excluding India, a never-treated recipient; not-yet-treated control group; baseline outcome level, the recipient's 2009--2012 mean of the outcome added to the covariates; de Chaisemartin--D'Haultf{\oe}uille (2026) estimator (Table~\ref{tab:dcdh}); raw USD, outcome $\log(1+\text{commitments in USD})$, and PPML, Sun--Abraham Poisson in levels (both Table~\ref{tab:units_zeros}); drop 2024, the 2024 cohort and calendar year 2024. Panel B: the equal-weight mean of the main fits' dynamic ATTs over post-adoption event times, over all post-adoption years (reference, as in Table~\ref{tab:att_anticipation}) and over the cohorts observed for at least one (two) post-adoption years; compare the balanced-window rows with the reference row, not with Panel A. Within-country share: $100 \times E/S$, as in Table~\ref{tab:within_share_wide}. ``---'' in an ATT cell: not meaningful (a share has no raw-USD or levels version); in a pre-trend cell: no comparable four-lead test (de Chaisemartin--D'Haultf{\oe}uille and PPML), or, in Panel B, the test of the main fit, which these rows re-aggregate. Panel C: the Panel A rows in which total and non-adaptation commitments are estimated.\par
 Source: OECD CRS (Rio adaptation markers); UNFCCC NAP Central.
 \end{minipage}
 \end{table}

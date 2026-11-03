@@ -1713,20 +1713,23 @@ rs_rows <- list(
   list(label = "de Chaisemartin--D'Haultf{\\oe}uille estimator", cells = rr04$dcdh),
   list(label = "Outcome in raw USD, $\\log(1+x)$",         cells = rr04$rawusd),
   list(label = "PPML in levels",                           cells = rr04$ppml),
-  list(label = "Drop the 2024 cohort and calendar year 2024", cells = rs_drop24),
-  list(label = "Unbalanced, all post-adoption years (dynamic average)", cells = rs_unbal),
+  list(label = "Drop the 2024 cohort and calendar year 2024", cells = rs_drop24)
+)
+# Panel B: equal-weight dynamic averages over e >= 0 of the main fits.
+rs_rows_dyn <- list(
+  list(label = "All post-adoption years (reference)",          cells = rs_unbal),
   list(label = "Balanced event window, 1 post-adoption year",  cells = rs_bal[["1"]]),
   list(label = "Balanced event window, 2 post-adoption years", cells = rs_bal[["2"]])
 )
 # Every row carries log adaptation commitments; the two log-outcome cells
 # that are not meaningful for a share are "---".
-stopifnot(all(vapply(rs_rows, function(r) !is.null(r$cells$log_commits), logical(1L))))
+stopifnot(all(vapply(c(rs_rows, rs_rows_dyn), function(r) !is.null(r$cells$log_commits), logical(1L))))
 
 #' Two table lines (estimates and pre-trend p; SEs) for one row
 #'
 #' @param r row: list(label, cells)
 #' @param vars outcomes, one ATT/p column pair each ("---" if the cell is absent)
-#' @param pad empty cells appended (Panel B fills the 7-column tabular)
+#' @param pad empty cells appended (Panel C fills the 7-column tabular)
 rs_lines <- function(r, vars, pad = 0L) {
   est <- unlist(lapply(vars, function(v) {
     ce <- r$cells[[v]]; if (is.null(ce)) c("---", "---") else c(ce$att_fmt, ce$p_fmt) }))
@@ -1742,15 +1745,19 @@ col_head <- function(labs) paste0(" & ", paste(sprintf("\\multicolumn{2}{c}{%s}"
 rs_tabular <- c(
   "\\begin{tabular}{lcccccc}",
   "\\toprule",
-  "\\multicolumn{7}{l}{\\textit{Panel A: adaptation outcomes}} \\\\",
   paste0(col_head(c("log(Adaptation commitments)", "Adaptation share (\\% of global)",
                     "Within-country share (pp)")), " \\\\"),
   "\\cmidrule(lr){2-3} \\cmidrule(lr){4-5} \\cmidrule(lr){6-7}",
   "Specification & ATT & Pre-trend $p$ & ATT & Pre-trend $p$ & ATT & Pre-trend $p$ \\\\",
   "\\midrule",
+  "\\multicolumn{7}{l}{\\textit{Panel A: simple ATT}} \\\\",
   unlist(lapply(rs_rows, rs_lines, vars = rs_vars_a)),
   "\\midrule",
-  "\\multicolumn{7}{l}{\\textit{Panel B: envelope outcomes}} \\\\",
+  paste0("\\multicolumn{7}{l}{\\textit{Panel B: dynamic average over post-adoption years ",
+         "(equal weight on $e \\geq 0$)}} \\\\"),
+  unlist(lapply(rs_rows_dyn, rs_lines, vars = rs_vars_a)),
+  "\\midrule",
+  "\\multicolumn{7}{l}{\\textit{Panel C: envelope outcomes, simple ATT}} \\\\",
   paste0(col_head(c("log(Total commitments)", "log(Non-adaptation commitments)")), " & & \\\\"),
   "\\cmidrule(lr){2-3} \\cmidrule(lr){4-5}",
   "Specification & ATT & Pre-trend $p$ & ATT & Pre-trend $p$ & & \\\\",
@@ -1759,7 +1766,7 @@ rs_tabular <- c(
   "\\bottomrule", "\\end{tabular}"
 )
 
-for (r in rs_rows)
+for (r in c(rs_rows, rs_rows_dyn))
   message(sprintf("  %-55s %s", r$label, paste(vapply(names(r$cells), function(v)
     sprintf("%s %s %s p=%s", v, r$cells[[v]]$att_fmt, r$cells[[v]]$se_fmt, r$cells[[v]]$p_fmt),
     character(1L)), collapse = " | ")))
@@ -1772,24 +1779,27 @@ write_tex_float(
   paste0(
     as_in_main(c("estimator", "covariates", "control group", "inference",
                  "pre-trend test", "significance stars")),
-    "; SE in parentheses below each ATT. Each row changes one element of the main ",
-    "specification: balanced panel, the ", n_bal, " recipients observed in every year, so ",
-    "covariates enter at $g-1$; panel from 2010, 2009 dropped; excluding India, a ",
-    "never-treated recipient; not-yet-treated control group; baseline outcome level, the ",
-    "recipient's ", min(BASE_YEARS), "--", max(BASE_YEARS), " mean of the outcome added to the ",
-    "covariates; de Chaisemartin--D'Haultf{\\oe}uille (2026) estimator, average total effect ",
-    "(Table~\\ref{tab:dcdh}); raw USD, outcome $\\log(1+\\text{commitments in USD})$ and PPML, ",
-    "Sun--Abraham Poisson in levels (both Table~\\ref{tab:units_zeros}); drop 2024, the 2024 ",
-    "cohort and calendar year 2024; unbalanced dynamic average, the equal-weight mean of the ",
-    "main fit's dynamic ATTs over all post-adoption years (as in Table~\\ref{tab:att_anticipation}); ",
-    "balanced event window, the same average restricted to the cohorts observed for at least ",
-    "one (two) post-adoption years, to be compared with the unbalanced dynamic average, not ",
-    "with the main simple ATT. Within-country share: ",
-    "$100 \\times E/S$, as in Table~\\ref{tab:within_share_wide}. ``---'' in an ATT cell: ",
-    "not meaningful (a share has no raw-USD or levels version); in a pre-trend cell: no ",
-    "comparable four-lead test (de Chaisemartin--D'Haultf{\\oe}uille and PPML), or the ",
-    "test of the main fit (the three dynamic-average rows, which re-aggregate it). Panel B: rows ",
-    "in which total and non-adaptation commitments are estimated"),
+    "; SE in parentheses below each ATT. Panel A: simple ATT, the average of the ",
+    "post-adoption $ATT(g,t)$ cells weighted by cohort size, as in ",
+    "Table~\\ref{tab:combined_wide_main} (the de Chaisemartin--D'Haultf{\\oe}uille average ",
+    "total effect and the PPML aggregate weight treated cohort-years the same way). Each row ",
+    "after the first changes one element of the main specification: balanced panel, the ",
+    n_bal, " recipients observed in every year, so covariates enter at $g-1$; panel from ",
+    "2010, 2009 dropped; excluding India, a never-treated recipient; not-yet-treated control ",
+    "group; baseline outcome level, the recipient's ", min(BASE_YEARS), "--", max(BASE_YEARS),
+    " mean of the outcome added to the covariates; de Chaisemartin--D'Haultf{\\oe}uille (2026) ",
+    "estimator (Table~\\ref{tab:dcdh}); raw USD, outcome $\\log(1+\\text{commitments in USD})$, ",
+    "and PPML, Sun--Abraham Poisson in levels (both Table~\\ref{tab:units_zeros}); drop 2024, ",
+    "the 2024 cohort and calendar year 2024. Panel B: the equal-weight mean of the main fits' ",
+    "dynamic ATTs over post-adoption event times, over all post-adoption years (reference, as ",
+    "in Table~\\ref{tab:att_anticipation}) and over the cohorts observed for at least one ",
+    "(two) post-adoption years; compare the balanced-window rows with the reference row, not ",
+    "with Panel A. Within-country share: $100 \\times E/S$, as in ",
+    "Table~\\ref{tab:within_share_wide}. ``---'' in an ATT cell: not meaningful (a share has no ",
+    "raw-USD or levels version); in a pre-trend cell: no comparable four-lead test ",
+    "(de Chaisemartin--D'Haultf{\\oe}uille and PPML), or, in Panel B, the test of the main ",
+    "fit, which these rows re-aggregate. Panel C: the Panel A rows in which total and ",
+    "non-adaptation commitments are estimated"),
   SRC_NOTE)
 
 message("\n=== 13_cohort_anticipation.R: complete ===\n")
